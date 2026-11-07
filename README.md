@@ -1,122 +1,105 @@
 # LIPPOLIS PT
 
-Applicazione Firebase con due ruoli interni:
+Applicazione per Personal Trainer e clienti con backend Supabase gratuito e frontend statico pubblicato su Firebase Hosting (piano Spark).
 
-- `coach` — Personal Trainer;
-- `athlete` — Cliente.
+## Architettura
 
-L’accesso non propone la scelta del ruolo e non contiene registrazione pubblica. Il PT crea i clienti dal pannello tramite una Cloud Function autenticata; la funzione usa Firebase Admin SDK, crea Auth e profilo Firestore con lo stesso UID e non cambia la sessione del PT.
+- Supabase Auth: accesso email/password e recupero password;
+- PostgreSQL: profili, schede, risultati, messaggi e revisioni;
+- Row Level Security: ogni cliente legge soltanto i propri dati; il PT legge i clienti assegnati;
+- Supabase Realtime: aggiornamenti di schede, progressi e messaggi;
+- Edge Function `admin-api`: creazione, sospensione, riattivazione, esportazione ed eliminazione account;
+- Firebase Hosting: contiene soltanto i file statici in `www/` e non richiede Blaze.
+
+La Secret key Supabase non deve mai essere inserita nel browser, nel repository o in `www/supabase-config.js`.
 
 ## Struttura
 
-- `www/index.html`: login, recupero password e primo accesso;
-- `www/athlete.html`: area atleta esistente, conservata e collegata a Firestore;
-- `www/coach.html`: elenco e dettaglio clienti, account, schede e risultati;
-- `www/src/`: autenticazione, sincronizzazione e logica delle due aree;
-- `functions/`: backend amministrativo con Admin SDK;
-- `firestore.rules`: isolamento clienti e protezione dei campi autorizzativi;
-- `firestore.indexes.json`: indici per clienti, bozze e messaggi;
-- `scripts/`: promozione controllata del primo PT e associazione di utenti preesistenti;
-- `test/`: test unitari e test con Emulator Suite.
+- `www/`: login e aree PT/atleta;
+- `www/src/supabase.mjs`: client pubblico e chiamate all’Edge Function;
+- `supabase/migrations/`: schema PostgreSQL, funzioni atomiche e policy RLS;
+- `supabase/functions/admin-api/`: backend privilegiato;
+- `supabase/functions/_shared/validation.mjs`: validazione condivisa e testata;
+- `supabase/seed-coach.example.sql`: creazione controllata del primo PT;
+- `test/`: test di validazione, migrazione e sicurezza statica.
 
-Non vengono versionati `node_modules`, cache Firebase, credenziali di servizio o password.
+## Configurazione Supabase
 
-## Modello dati
-
-```text
-profiles/{uid}
-  role: coach | athlete
-  status: active | suspended | deleting
-  trainerId: UID del PT                 # solo athlete
-  onboardingComplete: boolean
-  passwordBaselineAt: number            # solo controllo primo cambio password
-  program/current                       # scheda pubblicata
-  programVersions/{versionId}           # versioni sostituite
-  state/app                             # stato atleta con revisione ottimistica
-  messages/{messageId}                  # messaggi, diario, domande differite
-
-coaches/{coachUid}/drafts/{draftId}      # bozze private del PT
-adminOperations/{operationId}            # idempotenza/ripresa operazioni backend
-```
-
-La scheda pubblicata e i risultati restano distinti. Ogni allenamento concluso registra `programVersionId`; sostituire una scheda non modifica lo storico. La cache locale dell’area atleta è separata per UID e Firestore resta la fonte condivisa tra dispositivi.
-
-## Configurazione Firebase necessaria
-
-1. Crea/seleziona il progetto Firebase e registra un’app Web.
-2. Copia la configurazione pubblica in `www/firebase-config.js`. Non inserire service-account JSON o chiavi Admin nel frontend.
-3. Copia `functions/.env.example` in `functions/.env.PROJECT_ID` e inserisci nella variabile `IDENTITY_TOOLKIT_API_KEY` la stessa Web API key presente in `www/firebase-config.js`. La Functions la usa per verificare sul server il cambio della password iniziale.
-4. In **Authentication > Sign-in method**, abilita Email/Password.
-5. In **Authentication > Settings > User actions**, disabilita la creazione e l’eliminazione degli account da parte degli utenti finali. Firebase documenta questa opzione come protezione server-side (`auth/admin-restricted-operation`); la sola rimozione del form non è sufficiente.
-6. Autorizza i domini usati da Hosting e l’URL di ritorno delle email di verifica/password.
-7. Crea Firestore nella regione scelta e pubblica regole e indici.
-8. Pubblica le Functions in `europe-west1`.
+1. Crea un progetto gratuito su Supabase e scegli una regione europea.
+2. Apri **SQL Editor**, incolla ed esegui `supabase/migrations/202611070001_initial_schema.sql`.
+3. Apri **Project Settings > API** e copia in `www/supabase-config.js`:
+   - Project URL nel campo `url`;
+   - Publishable key nel campo `publishableKey`.
+4. In **Authentication > URL Configuration** imposta:
+   - Site URL: `https://lippolispt.web.app`;
+   - Redirect URLs: `https://lippolispt.web.app/**` e, se usato, `https://lippolispt.firebaseapp.com/**`.
+5. In **Authentication > Providers > Email** lascia attivo Email/Password. La registrazione pubblica deve restare disabilitata.
+6. Collega la cartella locale al progetto e pubblica la funzione:
 
 ```powershell
-npm install
-npm --prefix functions install
-npx firebase-tools login
-npx firebase-tools use PROJECT_ID
-npx firebase-tools deploy --only firestore:rules,firestore:indexes,functions,hosting
+npx supabase login
+npx supabase link --project-ref IL_PROJECT_REF
+npx supabase functions deploy admin-api
 ```
 
-Le Functions richiedono il piano **Blaze** e un account di fatturazione collegato. Non attivare fatturazione senza autorizzazione. Budget e avvisi di spesa non sono un tetto rigido. Finché Blaze non è autorizzato, tutto il flusso può essere collaudato negli emulatori, ma creazione/sospensione/eliminazione client non funzioneranno in produzione.
+Le variabili `SUPABASE_URL` e `SUPABASE_SECRET_KEYS` sono fornite automaticamente alla funzione ospitata. Non creare file con la Secret key.
 
 ## Primo Personal Trainer
 
-Il primo PT non viene mai assegnato al primo visitatore. Crealo in Firebase Authentication, verifica manualmente email e UID, poi usa Application Default Credentials:
+1. In **Supabase > Authentication > Users**, scegli **Add user > Create new user**.
+2. Inserisci email e password del PT e attiva **Auto Confirm User**.
+3. Apri `supabase/seed-coach.example.sql`, sostituisci `NOME_PT`, `COGNOME_PT` ed `EMAIL_PT_DA_SOSTITUIRE`.
+4. Esegui lo script nel SQL Editor.
+
+Il primo visitatore non viene mai promosso automaticamente a PT.
+
+## Primo accesso cliente
+
+1. Il PT crea il cliente dal proprio pannello e comunica email e password iniziale.
+2. L’account viene autorizzato dal PT e non può essere creato dal sito pubblico.
+3. Al primo accesso il cliente deve impostare una password personale di almeno 12 caratteri.
+4. Solo dopo il completamento dell’onboarding le policy consentono l’accesso ai dati atleta.
+
+La password iniziale non viene salvata nel database, nei log, nella cache o nelle esportazioni.
+
+## Pubblicazione del sito
+
+Firebase viene usato soltanto come hosting statico gratuito:
 
 ```powershell
-gcloud auth application-default login
-npm run firebase:promote-coach -- --project PROJECT_ID --uid UID_ESATTO --email EMAIL_ESATTA
+npm install
+npx firebase-tools login
+npm run deploy:hosting
 ```
 
-Lo script interrompe l’operazione se UID ed email non corrispondono o l’email non è verificata.
-
-Per associare un cliente preesistente:
-
-```powershell
-npm run firebase:link-client -- --project PROJECT_ID --trainer UID_PT --athlete UID_CLIENTE
-```
-
-## Primo accesso del cliente
-
-1. Il PT crea il cliente e comunica manualmente email e password iniziale.
-2. Il cliente accede, verifica l’email e imposta una password personale di almeno 12 caratteri.
-3. `completeOnboarding` controlla sul server `emailVerified` e che `passwordUpdatedAt` sia successivo alla password iniziale.
-4. Regole e backend negano i dati finché profilo, stato, verifica e onboarding non sono validi.
-
-La password iniziale non viene salvata in Firestore, cache, log o esportazioni. Dopo la chiusura del risultato di creazione non è recuperabile dal pannello.
+Non occorre attivare Blaze, Firestore o Cloud Functions nel progetto Firebase.
 
 ## Test
 
-Test rapidi senza emulatori:
+Test rapidi:
 
 ```powershell
 npm test
-npm --prefix functions test
 ```
 
-Test integrati isolati (la versione corrente della Emulator Suite richiede Java 21 o superiore):
+Test locale completo del database (richiede Docker e Supabase CLI):
 
 ```powershell
-npm run test:emulators
+npm run supabase:start
+npm run supabase:test
 ```
 
-I test integrati creano un PT e due clienti di prova e verificano: UID Auth/profilo, idempotenza, isolamento A/B, campi protetti, onboarding, pubblicazione/versioni scheda, risultati e peso corporeo, sospensione immediata tramite regole, riattivazione ed eliminazione ricorsiva. Non usare account o dati reali.
-
-Per provare manualmente l’interfaccia:
+Per servire il frontend statico:
 
 ```powershell
-npm run emulators
+npm run serve
 ```
 
-Apri `http://127.0.0.1:5000/?emulator=1`. L’uso degli emulatori può essere memorizzato con `localStorage.lippolis_use_emulators = "1"` soltanto nell’ambiente locale.
+## Garanzie applicative
 
-## Note operative
-
-- La sospensione imposta prima `profiles/{uid}.status = suspended`; le regole leggono lo stato corrente e bloccano anche un ID token già emesso. In seguito Auth viene disabilitato e i refresh token revocati.
-- La cancellazione marca `deleting`, blocca Auth, elimina ricorsivamente documento e sottocollezioni e infine elimina l’utente Auth. `adminOperations` conserva solo stato tecnico minimo per una ripresa controllata.
-- La pagina PT carica all’avvio soltanto i profili sintetici; storico, pesi e messaggi vengono letti quando si seleziona un cliente.
-- Le scritture dello stato atleta usano revisioni ottimistiche. Un conflitto non viene annunciato come salvato e richiede un ricaricamento.
-- L’invio email personalizzato non è implementato. Verifica e recupero password usano le email standard Firebase; configurare mittente e template dalla console.
+- le policy RLS verificano account attivo, ruolo e associazione PT-cliente;
+- la scrittura dello stato atleta usa una revisione atomica e segnala i conflitti tra dispositivi;
+- la pubblicazione di una scheda è transazionale e conserva la versione precedente;
+- sospensione ed eliminazione passano esclusivamente dall’Edge Function autenticata;
+- la cancellazione dell’utente Auth elimina a cascata i dati esclusivi del cliente;
+- l’area atleta e la cache locale esistente restano operative.

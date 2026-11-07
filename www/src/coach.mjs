@@ -1,241 +1,110 @@
-import { auth, db, functions, firebaseConfigured } from "./firebase.mjs";
+import { adminCall, profileFromRow, supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
-import {
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp,
-  where
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
 
 const $ = (id) => document.getElementById(id);
-const state = { coach: null, clients: [], selected: null, snapshot: {}, currentProgram: null, drafts: [], versions: [], messages: [], activeDraft: null, dirty: false, stops: [] };
-const calls = Object.fromEntries([
-  "createClient", "setClientAccess", "deleteClient", "exportClientData",
-  "saveProgramDraft", "publishProgram", "archiveProgramDraft"
-].map((name) => [name, () => httpsCallable(functions, name)]));
+const state = { coach: null, clients: [], selected: null, snapshot: {}, currentProgram: null, drafts: [], versions: [], messages: [], activeDraft: null, dirty: false, channels: [] };
+const calls = Object.fromEntries(["createClient", "setClientAccess", "deleteClient", "exportClientData", "saveProgramDraft", "publishProgram", "archiveProgramDraft"].map((name) => [name, (data) => adminCall(name, data)]));
 
-function esc(value) {
-  return String(value ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c]));
-}
+function esc(value) { return String(value ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
 function initials(profile) { return `${profile.firstName?.[0] || ""}${profile.lastName?.[0] || ""}`.toUpperCase() || "CL"; }
-function when(value) {
-  const date = value?.toDate ? value.toDate() : new Date(value || 0);
-  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(date);
-}
+function when(value) { const date = new Date(value || 0); return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeStyle: "short" }).format(date); }
 function notice(target, text, error = false) { target.innerHTML = text ? `<div class="notice${error ? " error" : ""}">${esc(text)}</div>` : ""; }
-function setBusy(button, busy, label = "Attendi…") {
-  if (!button.dataset.original) button.dataset.original = button.textContent;
-  button.disabled = busy; button.textContent = busy ? label : button.dataset.original;
-}
+function setBusy(button, busy, label = "Attendi…") { if (!button.dataset.original) button.dataset.original = button.textContent; button.disabled = busy; button.textContent = busy ? label : button.dataset.original; }
 function openModal(id) { $(id).classList.add("show"); }
 function closeModal(id) { $(id).classList.remove("show"); }
-document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.close)));
+function randomKey(bytes = 16) { return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (n) => n.toString(16).padStart(2, "0")).join(""); }
+function mapProgram(row) { return row ? { id: row.athlete_id, program: row.program, versionId: row.version_id, revision: row.revision, publishedAt: row.published_at, updatedAt: row.updated_at } : null; }
+function mapDraft(row) { return { id: row.id, coachId: row.coach_id, clientUid: row.athlete_id, program: row.program, revision: row.revision, status: row.status, updatedAt: row.updated_at }; }
+function mapMessage(row) { return { id: row.id, senderId: row.sender_id, targetUid: row.target_id, channel: row.channel, type: row.type, text: row.text, metadata: row.metadata, createdAt: row.created_at }; }
 
-function randomKey(bytes = 16) {
-  return Array.from(crypto.getRandomValues(new Uint8Array(bytes)), (n) => n.toString(16).padStart(2, "0")).join("");
-}
+document.querySelectorAll("[data-close]").forEach((button) => button.addEventListener("click", () => closeModal(button.dataset.close)));
 function generatePassword() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  const bytes = crypto.getRandomValues(new Uint8Array(18));
-  let value = Array.from(bytes, (n) => alphabet[n % alphabet.length]).join("");
-  value = `A7!${value.slice(3)}`;
-  $("clientPassword").value = value;
-  return value;
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%"; const bytes = crypto.getRandomValues(new Uint8Array(18));
+  let value = Array.from(bytes, (n) => alphabet[n % alphabet.length]).join(""); value = `A7!${value.slice(3)}`; $("clientPassword").value = value; return value;
 }
 
 function renderClients() {
-  const term = $("search").value.trim().toLowerCase();
-  const filtered = state.clients.filter((client) => `${client.firstName} ${client.lastName} ${client.email}`.toLowerCase().includes(term));
-  $("clientList").innerHTML = filtered.length ? filtered.map((client) => `
-    <button class="client${state.selected?.id === client.id ? " on" : ""}" data-client="${client.id}">
-      <span class="avatar">${esc(initials(client))}</span><span class="info"><b>${esc(`${client.firstName || ""} ${client.lastName || ""}`.trim())}</b><small>${esc(client.email)}</small></span><span class="pill ${esc(client.status)}">${client.status === "active" ? "Attivo" : client.status === "suspended" ? "Sospeso" : "In corso"}</span>
-    </button>`).join("") : `<p class="sub">Nessun cliente trovato.</p>`;
+  const term = $("search").value.trim().toLowerCase(); const filtered = state.clients.filter((client) => `${client.firstName} ${client.lastName} ${client.email}`.toLowerCase().includes(term));
+  $("clientList").innerHTML = filtered.length ? filtered.map((client) => `<button class="client${state.selected?.id === client.id ? " on" : ""}" data-client="${client.id}"><span class="avatar">${esc(initials(client))}</span><span class="info"><b>${esc(`${client.firstName || ""} ${client.lastName || ""}`.trim())}</b><small>${esc(client.email)}</small></span><span class="pill ${esc(client.status)}">${client.status === "active" ? "Attivo" : client.status === "suspended" ? "Sospeso" : "In corso"}</span></button>`).join("") : `<p class="sub">Nessun cliente trovato.</p>`;
   document.querySelectorAll("[data-client]").forEach((button) => button.addEventListener("click", () => selectClient(button.dataset.client)));
 }
-
-function stopDetails() { state.stops.forEach((stop) => stop()); state.stops = []; }
-
+async function loadClients() {
+  const { data, error } = await supabase.from("profiles").select("*").eq("trainer_id", state.coach.uid).eq("role", "athlete").order("last_name").limit(100);
+  if (error) throw error; state.clients = data.map(profileFromRow); if (state.selected) state.selected = state.clients.find((x) => x.id === state.selected.id) || null; renderClients();
+}
+function stopDetails() { state.channels.forEach((channel) => supabase.removeChannel(channel)); state.channels = []; }
+function watch(table, filter, reload) {
+  const channel = supabase.channel(`${table}:${filter}:${crypto.randomUUID()}`).on("postgres_changes", { event: "*", schema: "public", table, filter }, () => reload().catch((e) => alert(friendlyAuthError(e)))).subscribe();
+  state.channels.push(channel);
+}
+async function loadDetails(uid) {
+  const [profile, athleteState, program, versions, messages, drafts] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", uid).single(),
+    supabase.from("athlete_states").select("*").eq("user_id", uid).maybeSingle(),
+    supabase.from("programs").select("*").eq("athlete_id", uid).maybeSingle(),
+    supabase.from("program_versions").select("*").eq("athlete_id", uid).order("archived_at", { ascending: false }).limit(20),
+    supabase.from("messages").select("*").eq("athlete_id", uid).order("created_at").limit(100),
+    supabase.from("program_drafts").select("*").eq("coach_id", state.coach.uid).eq("athlete_id", uid).eq("status", "draft").order("updated_at", { ascending: false }).limit(30)
+  ]);
+  for (const result of [profile, athleteState, program, versions, messages, drafts]) if (result.error) throw result.error;
+  state.selected = profileFromRow(profile.data); state.snapshot = athleteState.data?.snapshot || {}; state.currentProgram = mapProgram(program.data);
+  state.versions = versions.data.map((row) => ({ id: row.id, versionId: row.id, program: row.program, archivedAt: row.archived_at })); state.messages = messages.data.map(mapMessage); state.drafts = drafts.data.map(mapDraft);
+  const index = state.clients.findIndex((item) => item.id === uid); if (index >= 0) state.clients[index] = state.selected;
+  renderClients(); renderDetail(); renderActivity(); renderMessages(); renderVersions(); renderDrafts();
+  if (!state.activeDraft && !state.dirty) resetProgramForm(state.currentProgram?.program || null);
+}
 async function selectClient(uid) {
   if (state.dirty && !confirm("Ci sono modifiche non salvate alla scheda. Vuoi abbandonarle?")) return;
-  state.dirty = false; stopDetails();
-  state.selected = state.clients.find((client) => client.id === uid);
-  if (!state.selected) return;
+  state.dirty = false; stopDetails(); state.selected = state.clients.find((client) => client.id === uid); if (!state.selected) return;
   state.snapshot = {}; state.currentProgram = null; state.versions = []; state.messages = []; state.drafts = []; state.activeDraft = null;
-  renderClients(); renderDetail(); resetProgramForm();
-  $("empty").classList.add("hidden"); $("detail").classList.add("show");
-
-  const profileRef = doc(db, "profiles", uid);
-  state.stops.push(onSnapshot(profileRef, (snap) => {
-    if (!snap.exists()) return;
-    state.selected = { id: snap.id, ...snap.data() };
-    const index = state.clients.findIndex((item) => item.id === uid);
-    if (index >= 0) state.clients[index] = state.selected;
-    renderClients(); renderDetail();
-  }));
-  state.stops.push(onSnapshot(doc(profileRef, "state", "app"), (snap) => { state.snapshot = snap.exists() ? (snap.data().snapshot || {}) : {}; renderActivity(); renderOverview(); }));
-  state.stops.push(onSnapshot(doc(profileRef, "program", "current"), (snap) => {
-    state.currentProgram = snap.exists() ? { id: snap.id, ...snap.data() } : null;
-    renderOverview();
-    if (!state.activeDraft && !state.dirty) resetProgramForm(state.currentProgram?.program || null);
-  }));
-  state.stops.push(onSnapshot(query(collection(profileRef, "programVersions"), orderBy("archivedAt", "desc"), limit(20)), (snap) => { state.versions = snap.docs.map((item) => ({ id: item.id, ...item.data() })); renderVersions(); }));
-  state.stops.push(onSnapshot(query(collection(profileRef, "messages"), orderBy("createdAt", "asc"), limit(100)), (snap) => { state.messages = snap.docs.map((item) => ({ id: item.id, ...item.data() })); renderMessages(); }));
-  state.stops.push(onSnapshot(query(collection(db, "coaches", state.coach.uid, "drafts"), where("clientUid", "==", uid), where("status", "==", "draft"), orderBy("updatedAt", "desc"), limit(30)), (snap) => { state.drafts = snap.docs.map((item) => ({ id: item.id, ...item.data() })); renderDrafts(); }));
+  renderClients(); renderDetail(); resetProgramForm(); $("empty").classList.add("hidden"); $("detail").classList.add("show"); await loadDetails(uid);
+  const reload = () => loadDetails(uid); watch("profiles", `id=eq.${uid}`, reload); watch("athlete_states", `user_id=eq.${uid}`, reload); watch("programs", `athlete_id=eq.${uid}`, reload); watch("program_versions", `athlete_id=eq.${uid}`, reload); watch("messages", `athlete_id=eq.${uid}`, reload); watch("program_drafts", `athlete_id=eq.${uid}`, reload);
 }
 
 function renderDetail() {
-  const client = state.selected; if (!client) return;
-  $("detailAvatar").textContent = initials(client); $("detailName").textContent = `${client.firstName || ""} ${client.lastName || ""}`.trim(); $("detailEmail").textContent = client.email || "";
+  const client = state.selected; if (!client) return; $("detailAvatar").textContent = initials(client); $("detailName").textContent = `${client.firstName || ""} ${client.lastName || ""}`.trim(); $("detailEmail").textContent = client.email || "";
   $("accessAction").textContent = client.status === "suspended" ? "Riattiva accesso" : "Sospendi accesso";
-  $("accountSummary").innerHTML = `<div class="metric">${client.status === "active" ? "Attivo" : client.status === "suspended" ? "Sospeso" : "In elaborazione"}</div><p class="sub">UID: ${esc(client.id)}<br>Primo accesso: ${client.onboardingComplete ? "completato" : "da completare"}</p>`;
-  renderOverview();
+  $("accountSummary").innerHTML = `<div class="metric">${client.status === "active" ? "Attivo" : client.status === "suspended" ? "Sospeso" : "In elaborazione"}</div><p class="sub">UID: ${esc(client.id)}<br>Primo accesso: ${client.onboardingComplete ? "completato" : "da completare"}</p>`; renderOverview();
 }
-
 function renderOverview() {
-  if (!state.selected) return;
-  const program = state.currentProgram?.program;
+  if (!state.selected) return; const program = state.currentProgram?.program;
   $("currentProgramSummary").innerHTML = program ? `<div class="metric" style="font-size:19px">${esc(program.nome)}</div><p class="sub">${esc(program.dal)} → ${esc(program.al)}<br>Versione ${esc(state.currentProgram.versionId || "—")}</p>` : `<p class="sub">Il PT non ha ancora assegnato una scheda.</p>`;
-  const sessions = Array.isArray(state.snapshot.sessioni) ? state.snapshot.sessioni : [];
-  const lastSession = sessions.slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))[0];
+  const sessions = Array.isArray(state.snapshot.sessioni) ? state.snapshot.sessioni : []; const lastSession = sessions.slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))[0];
   $("lastWorkout").innerHTML = lastSession ? `<div class="metric" style="font-size:18px">${esc(lastSession.titolo || "Allenamento")}</div><p class="sub">${when(lastSession.ts)} · ${esc(lastSession.prog || "")}</p>` : `<p class="sub">Nessun allenamento registrato.</p>`;
-  const weights = Array.isArray(state.snapshot.pesi) ? state.snapshot.pesi : [];
-  const lastWeight = weights.slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))[0];
+  const weights = Array.isArray(state.snapshot.pesi) ? state.snapshot.pesi : []; const lastWeight = weights.slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0))[0];
   $("lastWeight").innerHTML = lastWeight ? `<div class="metric">${Number(lastWeight.v).toFixed(1).replace(".", ",")} kg</div><p class="sub">Peso corporeo · ${when(lastWeight.ts)}</p>` : `<p class="sub">Nessuna pesata registrata.</p>`;
 }
-
 function renderActivity() {
-  const sessions = (state.snapshot.sessioni || []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
-  $("workoutList").innerHTML = sessions.slice(0, 30).map((item) => `<div class="rowcard"><b>${esc(item.titolo || "Allenamento")}</b><small>${when(item.ts)} · ${esc(item.prog || "")}</small></div>`).join("") || `<p class="sub">Nessun allenamento.</p>`;
-  const weights = (state.snapshot.pesi || []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0));
-  $("weightList").innerHTML = weights.slice(0, 30).map((item) => `<div class="rowcard"><b>${Number(item.v).toFixed(1).replace(".", ",")} kg</b><small>Peso corporeo · ${when(item.ts)}</small></div>`).join("") || `<p class="sub">Nessuna pesata.</p>`;
-  const days = Object.entries(state.snapshot.giornate || {}).sort(([a], [b]) => b.localeCompare(a));
-  $("checkinList").innerHTML = days.slice(0, 30).map(([date, item]) => `<div class="rowcard"><b>${esc(date)}</b><small>Sonno ${esc(item.sonnoOre ?? "—")} h · Energia ${esc(item.energia ?? "—")} · DOMS ${esc(item.doms ?? "—")}</small></div>`).join("") || `<p class="sub">Nessun check-in.</p>`;
-  const loads = new Map();
-  sessions.forEach((session) => (session.esercizi || []).forEach((exercise) => {
-    const set = (exercise.sets || []).filter((x) => Number(x.kg) > 0).sort((a, b) => Number(b.kg) - Number(a.kg))[0];
-    if (set && (!loads.has(exercise.nome) || Number(set.kg) > Number(loads.get(exercise.nome).kg))) loads.set(exercise.nome, { ...set, ts: session.ts });
-  }));
+  const sessions = (state.snapshot.sessioni || []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)); $("workoutList").innerHTML = sessions.slice(0, 30).map((item) => `<div class="rowcard"><b>${esc(item.titolo || "Allenamento")}</b><small>${when(item.ts)} · ${esc(item.prog || "")}</small></div>`).join("") || `<p class="sub">Nessun allenamento.</p>`;
+  const weights = (state.snapshot.pesi || []).slice().sort((a, b) => Number(b.ts || 0) - Number(a.ts || 0)); $("weightList").innerHTML = weights.slice(0, 30).map((item) => `<div class="rowcard"><b>${Number(item.v).toFixed(1).replace(".", ",")} kg</b><small>Peso corporeo · ${when(item.ts)}</small></div>`).join("") || `<p class="sub">Nessuna pesata registrata.</p>`;
+  const days = Object.entries(state.snapshot.giornate || {}).sort(([a], [b]) => b.localeCompare(a)); $("checkinList").innerHTML = days.slice(0, 30).map(([date, item]) => `<div class="rowcard"><b>${esc(date)}</b><small>Sonno ${esc(item.sonnoOre ?? "—")} h · Energia ${esc(item.energia ?? "—")} · DOMS ${esc(item.doms ?? "—")}</small></div>`).join("") || `<p class="sub">Nessun check-in.</p>`;
+  const loads = new Map(); sessions.forEach((session) => (session.esercizi || []).forEach((exercise) => { const set = (exercise.sets || []).filter((x) => Number(x.kg) > 0).sort((a, b) => Number(b.kg) - Number(a.kg))[0]; if (set && (!loads.has(exercise.nome) || Number(set.kg) > Number(loads.get(exercise.nome).kg))) loads.set(exercise.nome, { ...set, ts: session.ts }); }));
   $("loadList").innerHTML = [...loads.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, item]) => `<div class="rowcard"><b>${esc(name)}</b><small>${esc(item.kg)} kg × ${esc(item.reps)} · ${when(item.ts)}</small></div>`).join("") || `<p class="sub">Nessun carico registrato.</p>`;
 }
+function renderMessages() { $("messageList").innerHTML = state.messages.map((item) => `<div class="rowcard"><b>${item.senderId === state.coach?.uid ? "Tu" : esc(state.selected?.firstName || "Cliente")}</b><small>${when(item.createdAt)}</small><div style="margin-top:6px;font-size:13px">${esc(item.text)}</div></div>`).join("") || `<p class="sub">Nessun messaggio.</p>`; }
+function defaultWeeks() { return [{ n: 1, dal: $("programStart").value || "", al: $("programEnd").value || "", giorni: [{ titolo: "Giorno A", dt: "", esercizi: [{ nome: "", serie: 3, reps: "8-12", rec: "90", carico: "", note: "" }] }] }]; }
+function resetProgramForm(program = null) { state.activeDraft = null; state.dirty = false; $("programName").value = program?.nome || ""; $("programStart").value = program?.dal || ""; $("programEnd").value = program?.al || ""; $("programJson").value = JSON.stringify(program?.settimane || defaultWeeks(), null, 2); notice($("programNotice"), ""); }
+function formProgram() { let weeks; try { weeks = JSON.parse($("programJson").value); } catch { throw new Error("Il JSON di settimane e giornate non è valido."); } if (!Array.isArray(weeks)) throw new Error("Il JSON deve contenere un elenco di settimane."); return { nome: $("programName").value.trim(), dal: $("programStart").value, al: $("programEnd").value, settimane: weeks }; }
+function loadDraft(draft) { if (state.dirty && !confirm("Abbandonare le modifiche non salvate?")) return; state.activeDraft = draft; state.dirty = false; $("programName").value = draft.program.nome || ""; $("programStart").value = draft.program.dal || ""; $("programEnd").value = draft.program.al || ""; $("programJson").value = JSON.stringify(draft.program.settimane || [], null, 2); notice($("programNotice"), `Bozza caricata · revisione ${draft.revision}`); }
+function renderDrafts() { $("draftList").innerHTML = state.drafts.map((draft) => `<button class="client" data-draft="${draft.id}"><span class="info"><b>${esc(draft.program?.nome || "Senza nome")}</b><small>rev. ${draft.revision} · ${when(draft.updatedAt)}</small></span></button>`).join("") || `<p class="sub">Nessuna bozza.</p>`; document.querySelectorAll("[data-draft]").forEach((button) => button.addEventListener("click", () => loadDraft(state.drafts.find((item) => item.id === button.dataset.draft)))); }
+function renderVersions() { $("versionList").innerHTML = state.versions.map((version) => `<div class="rowcard"><b>${esc(version.program?.nome || "Scheda")}</b><small>${esc(version.versionId || version.id)} · ${when(version.archivedAt)}</small></div>`).join("") || `<p class="sub">Nessuna versione precedente.</p>`; }
+async function saveDraft() { if (!state.selected) throw new Error("Seleziona un cliente."); const response = await calls.saveProgramDraft({ clientUid: state.selected.id, draftId: state.activeDraft?.id || null, expectedRevision: state.activeDraft?.revision || 0, program: formProgram() }); state.activeDraft = { id: response.draftId, revision: response.revision, program: formProgram(), clientUid: state.selected.id, status: "draft" }; state.dirty = false; notice($("programNotice"), `Bozza salvata · revisione ${response.revision}`); return state.activeDraft; }
+async function downloadExport() { if (!state.selected) return; const response = await calls.exportClientData({ clientUid: state.selected.id }); const blob = new Blob([JSON.stringify(response, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `lippolis-${state.selected.lastName || "cliente"}-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 2000); }
 
-function renderMessages() {
-  $("messageList").innerHTML = state.messages.map((item) => `<div class="rowcard"><b>${item.senderId === state.coach?.uid ? "Tu" : esc(state.selected?.firstName || "Cliente")}</b><small>${when(item.createdAt)}</small><div style="margin-top:6px;font-size:13px">${esc(item.text)}</div></div>`).join("") || `<p class="sub">Nessun messaggio.</p>`;
-}
-
-function defaultWeeks() {
-  return [{ n: 1, dal: $("programStart").value || "", al: $("programEnd").value || "", giorni: [{ titolo: "Giorno A", dt: "", esercizi: [{ nome: "", serie: 3, reps: "8-12", rec: "90", carico: "", note: "" }] }] }];
-}
-function resetProgramForm(program = null) {
-  state.activeDraft = null; state.dirty = false;
-  $("programName").value = program?.nome || ""; $("programStart").value = program?.dal || ""; $("programEnd").value = program?.al || "";
-  $("programJson").value = JSON.stringify(program?.settimane || defaultWeeks(), null, 2);
-  notice($("programNotice"), "");
-}
-function formProgram() {
-  let weeks; try { weeks = JSON.parse($("programJson").value); } catch { throw new Error("Il JSON di settimane e giornate non è valido."); }
-  if (!Array.isArray(weeks)) throw new Error("Il JSON deve contenere un elenco di settimane.");
-  return { nome: $("programName").value.trim(), dal: $("programStart").value, al: $("programEnd").value, settimane: weeks };
-}
-function loadDraft(draft) {
-  if (state.dirty && !confirm("Abbandonare le modifiche non salvate?")) return;
-  state.activeDraft = draft; state.dirty = false;
-  $("programName").value = draft.program.nome || ""; $("programStart").value = draft.program.dal || ""; $("programEnd").value = draft.program.al || ""; $("programJson").value = JSON.stringify(draft.program.settimane || [], null, 2);
-  notice($("programNotice"), `Bozza caricata · revisione ${draft.revision}`);
-}
-function renderDrafts() {
-  $("draftList").innerHTML = state.drafts.map((draft) => `<button class="client" data-draft="${draft.id}"><span class="info"><b>${esc(draft.program?.nome || "Senza nome")}</b><small>rev. ${draft.revision} · ${when(draft.updatedAt)}</small></span></button>`).join("") || `<p class="sub">Nessuna bozza.</p>`;
-  document.querySelectorAll("[data-draft]").forEach((button) => button.addEventListener("click", () => loadDraft(state.drafts.find((item) => item.id === button.dataset.draft))));
-}
-function renderVersions() {
-  $("versionList").innerHTML = state.versions.map((version) => `<div class="rowcard"><b>${esc(version.program?.nome || "Scheda")}</b><small>${esc(version.versionId || version.id)} · ${when(version.archivedAt)}</small></div>`).join("") || `<p class="sub">Nessuna versione precedente.</p>`;
-}
-
-async function saveDraft() {
-  if (!state.selected) throw new Error("Seleziona un cliente.");
-  const response = await calls.saveProgramDraft()({ clientUid: state.selected.id, draftId: state.activeDraft?.id || null, expectedRevision: state.activeDraft?.revision || 0, program: formProgram() });
-  state.activeDraft = { id: response.data.draftId, revision: response.data.revision, program: formProgram(), clientUid: state.selected.id, status: "draft" };
-  state.dirty = false; notice($("programNotice"), `Bozza salvata · revisione ${response.data.revision}`);
-  return state.activeDraft;
-}
-
-async function downloadExport() {
-  if (!state.selected) return;
-  const response = await calls.exportClientData()({ clientUid: state.selected.id });
-  const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob); const a = document.createElement("a");
-  a.href = url; a.download = `lippolis-${state.selected.lastName || "cliente"}-${new Date().toISOString().slice(0, 10)}.json`; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
-
-document.querySelectorAll(".tabs button").forEach((button) => button.addEventListener("click", () => {
-  document.querySelectorAll(".tabs button").forEach((item) => item.classList.toggle("on", item === button));
-  document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("on", tab.id === `tab-${button.dataset.tab}`));
-}));
-$("search").addEventListener("input", renderClients);
-$("addClient").addEventListener("click", () => { $("addForm").classList.remove("hidden"); $("createdResult").classList.add("hidden"); $("addForm").reset(); generatePassword(); notice($("addNotice"), ""); openModal("addModal"); });
-$("generatePassword").addEventListener("click", generatePassword);
-$("addForm").addEventListener("submit", async (event) => {
-  event.preventDefault(); const button = $("createClient"); setBusy(button, true, "Creazione…"); notice($("addNotice"), "");
-  const password = $("clientPassword").value;
-  try {
-    const response = await calls.createClient()({ firstName: $("clientFirst").value, lastName: $("clientLast").value, email: $("clientEmail").value, password, idempotencyKey: randomKey() });
-    $("createdCredentials").textContent = `${response.data.email}\n${password}`; $("addForm").classList.add("hidden"); $("createdResult").classList.remove("hidden");
-  } catch (error) { notice($("addNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); }
-});
-$("accessAction").addEventListener("click", async () => {
-  const action = state.selected.status === "suspended" ? "reactivate" : "suspend";
-  if (action === "suspend" && !confirm(`Sospendere immediatamente l’accesso di ${state.selected.firstName}? I dati saranno conservati.`)) return;
-  const button = $("accessAction"); setBusy(button, true);
-  try { await calls.setClientAccess()({ clientUid: state.selected.id, action }); } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); }
-});
-$("exportClient").addEventListener("click", () => downloadExport().catch((error) => alert(friendlyAuthError(error))));
-$("deleteClient").addEventListener("click", () => { $("deletePrompt").textContent = `Stai eliminando ${state.selected.firstName} ${state.selected.lastName} (${state.selected.email}). Account Auth e dati esclusivi saranno rimossi.`; $("deleteConfirmation").value = ""; notice($("deleteNotice"), ""); openModal("deleteModal"); });
-$("exportBeforeDelete").addEventListener("click", () => downloadExport().catch((error) => notice($("deleteNotice"), friendlyAuthError(error), true)));
-$("confirmDelete").addEventListener("click", async () => {
-  const button = $("confirmDelete"); setBusy(button, true, "Eliminazione…");
-  try { await calls.deleteClient()({ clientUid: state.selected.id, confirmationEmail: $("deleteConfirmation").value.trim() }); closeModal("deleteModal"); stopDetails(); state.selected = null; $("detail").classList.remove("show"); $("empty").classList.remove("hidden"); }
-  catch (error) { notice($("deleteNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); }
-});
-[$("programName"), $("programStart"), $("programEnd"), $("programJson")].forEach((input) => input.addEventListener("input", () => { state.dirty = true; notice($("programNotice"), "Modifiche non salvate."); }));
-$("newDraft").addEventListener("click", () => resetProgramForm());
-$("duplicateDraft").addEventListener("click", () => { state.activeDraft = null; state.dirty = true; $("programName").value += " (copia)"; notice($("programNotice"), "Copia pronta: salvala come nuova bozza."); });
+document.querySelectorAll(".tabs button").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".tabs button").forEach((item) => item.classList.toggle("on", item === button)); document.querySelectorAll(".tab").forEach((tab) => tab.classList.toggle("on", tab.id === `tab-${button.dataset.tab}`)); }));
+$("search").addEventListener("input", renderClients); $("addClient").addEventListener("click", () => { $("addForm").classList.remove("hidden"); $("createdResult").classList.add("hidden"); $("addForm").reset(); generatePassword(); notice($("addNotice"), ""); openModal("addModal"); }); $("generatePassword").addEventListener("click", generatePassword);
+$("addForm").addEventListener("submit", async (event) => { event.preventDefault(); const button = $("createClient"); setBusy(button, true, "Creazione…"); notice($("addNotice"), ""); const password = $("clientPassword").value; try { const response = await calls.createClient({ firstName: $("clientFirst").value, lastName: $("clientLast").value, email: $("clientEmail").value, password, idempotencyKey: randomKey() }); $("createdCredentials").textContent = `${response.email}\n${password}`; $("addForm").classList.add("hidden"); $("createdResult").classList.remove("hidden"); await loadClients(); } catch (error) { notice($("addNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
+$("accessAction").addEventListener("click", async () => { const action = state.selected.status === "suspended" ? "reactivate" : "suspend"; if (action === "suspend" && !confirm(`Sospendere immediatamente l’accesso di ${state.selected.firstName}? I dati saranno conservati.`)) return; const button = $("accessAction"); setBusy(button, true); try { await calls.setClientAccess({ clientUid: state.selected.id, action }); await loadDetails(state.selected.id); } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); } });
+$("exportClient").addEventListener("click", () => downloadExport().catch((error) => alert(friendlyAuthError(error)))); $("deleteClient").addEventListener("click", () => { $("deletePrompt").textContent = `Stai eliminando ${state.selected.firstName} ${state.selected.lastName} (${state.selected.email}). Account e dati esclusivi saranno rimossi.`; $("deleteConfirmation").value = ""; notice($("deleteNotice"), ""); openModal("deleteModal"); }); $("exportBeforeDelete").addEventListener("click", () => downloadExport().catch((error) => notice($("deleteNotice"), friendlyAuthError(error), true)));
+$("confirmDelete").addEventListener("click", async () => { const button = $("confirmDelete"); setBusy(button, true, "Eliminazione…"); try { await calls.deleteClient({ clientUid: state.selected.id, confirmationEmail: $("deleteConfirmation").value.trim() }); closeModal("deleteModal"); stopDetails(); state.selected = null; $("detail").classList.remove("show"); $("empty").classList.remove("hidden"); await loadClients(); } catch (error) { notice($("deleteNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
+[$("programName"), $("programStart"), $("programEnd"), $("programJson")].forEach((input) => input.addEventListener("input", () => { state.dirty = true; notice($("programNotice"), "Modifiche non salvate."); })); $("newDraft").addEventListener("click", () => resetProgramForm()); $("duplicateDraft").addEventListener("click", () => { state.activeDraft = null; state.dirty = true; $("programName").value += " (copia)"; notice($("programNotice"), "Copia pronta: salvala come nuova bozza."); });
 $("saveDraft").addEventListener("click", async () => { const button = $("saveDraft"); setBusy(button, true, "Salvataggio…"); try { await saveDraft(); } catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
-$("publishProgram").addEventListener("click", async () => {
-  const button = $("publishProgram"); setBusy(button, true, "Pubblicazione…");
-  try { const draft = state.dirty || !state.activeDraft ? await saveDraft() : state.activeDraft; const response = await calls.publishProgram()({ clientUid: state.selected.id, draftId: draft.id, expectedRevision: draft.revision }); state.activeDraft = null; state.dirty = false; notice($("programNotice"), `Scheda pubblicata · versione ${response.data.versionId}`); }
-  catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); }
-});
-$("archiveDraft").addEventListener("click", async () => { if (!state.activeDraft) return notice($("programNotice"), "Carica prima una bozza.", true); if (!confirm("Archiviare questa bozza?")) return; try { await calls.archiveProgramDraft()({ draftId: state.activeDraft.id }); resetProgramForm(); } catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } });
-$("importProgram").addEventListener("click", () => $("importProgramFile").click());
-$("importProgramFile").addEventListener("change", async () => { const file = $("importProgramFile").files[0]; if (!file) return; try { const data = JSON.parse(await file.text()); const program = data.PROGRAMMA || data.program || data; $("programName").value = program.nome || program.name || ""; $("programStart").value = program.dal || program.startDate || ""; $("programEnd").value = program.al || program.endDate || ""; $("programJson").value = JSON.stringify(program.settimane || program.weeks || [], null, 2); state.activeDraft = null; state.dirty = true; notice($("programNotice"), "File importato. Controlla e salva la bozza."); } catch { notice($("programNotice"), "File JSON non valido.", true); } finally { $("importProgramFile").value = ""; } });
-$("sendMessage").addEventListener("click", async () => { const text = $("coachMessage").value.trim(); if (!text || !state.selected) return; const button = $("sendMessage"); setBusy(button, true, "Invio…"); try { await addDoc(collection(db, "profiles", state.selected.id, "messages"), { senderId: state.coach.uid, targetUid: state.selected.id, channel: "thread", text, createdAt: serverTimestamp() }); $("coachMessage").value = ""; } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); } });
-$("changePassword").addEventListener("click", () => { $("currentPassword").value = ""; $("coachNewPassword").value = ""; notice($("passwordNotice"), ""); openModal("passwordModal"); });
-$("savePassword").addEventListener("click", async () => { const button = $("savePassword"); setBusy(button, true); try { const credential = EmailAuthProvider.credential(auth.currentUser.email, $("currentPassword").value); await reauthenticateWithCredential(auth.currentUser, credential); if ($("coachNewPassword").value.length < 12) throw new Error("La nuova password deve contenere almeno 12 caratteri."); await updatePassword(auth.currentUser, $("coachNewPassword").value); notice($("passwordNotice"), "Password aggiornata."); } catch (error) { notice($("passwordNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
-$("logout").addEventListener("click", logout);
-window.addEventListener("beforeunload", (event) => { if (!state.dirty) return; event.preventDefault(); event.returnValue = ""; });
+$("publishProgram").addEventListener("click", async () => { const button = $("publishProgram"); setBusy(button, true, "Pubblicazione…"); try { const draft = state.dirty || !state.activeDraft ? await saveDraft() : state.activeDraft; const response = await calls.publishProgram({ clientUid: state.selected.id, draftId: draft.id, expectedRevision: draft.revision }); state.activeDraft = null; state.dirty = false; notice($("programNotice"), `Scheda pubblicata · versione ${response.versionId}`); await loadDetails(state.selected.id); } catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
+$("archiveDraft").addEventListener("click", async () => { if (!state.activeDraft) return notice($("programNotice"), "Carica prima una bozza.", true); if (!confirm("Archiviare questa bozza?")) return; try { await calls.archiveProgramDraft({ draftId: state.activeDraft.id }); resetProgramForm(); await loadDetails(state.selected.id); } catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } });
+$("importProgram").addEventListener("click", () => $("importProgramFile").click()); $("importProgramFile").addEventListener("change", async () => { const file = $("importProgramFile").files[0]; if (!file) return; try { const data = JSON.parse(await file.text()); const program = data.PROGRAMMA || data.program || data; $("programName").value = program.nome || program.name || ""; $("programStart").value = program.dal || program.startDate || ""; $("programEnd").value = program.al || program.endDate || ""; $("programJson").value = JSON.stringify(program.settimane || program.weeks || [], null, 2); state.activeDraft = null; state.dirty = true; notice($("programNotice"), "File importato. Controlla e salva la bozza."); } catch { notice($("programNotice"), "File JSON non valido.", true); } finally { $("importProgramFile").value = ""; } });
+$("sendMessage").addEventListener("click", async () => { const text = $("coachMessage").value.trim(); if (!text || !state.selected) return; const button = $("sendMessage"); setBusy(button, true, "Invio…"); try { const { error } = await supabase.from("messages").insert({ athlete_id: state.selected.id, sender_id: state.coach.uid, target_id: state.selected.id, channel: "thread", text }); if (error) throw error; $("coachMessage").value = ""; } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); } });
+$("changePassword").addEventListener("click", () => { $("currentPassword").value = ""; $("coachNewPassword").value = ""; notice($("passwordNotice"), ""); openModal("passwordModal"); }); $("savePassword").addEventListener("click", async () => { const button = $("savePassword"); setBusy(button, true); try { const { error: authError } = await supabase.auth.signInWithPassword({ email: state.coach.email, password: $("currentPassword").value }); if (authError) throw authError; if ($("coachNewPassword").value.length < 12) throw new Error("La nuova password deve contenere almeno 12 caratteri."); const { error } = await supabase.auth.updateUser({ password: $("coachNewPassword").value }); if (error) throw error; notice($("passwordNotice"), "Password aggiornata."); } catch (error) { notice($("passwordNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
+$("logout").addEventListener("click", logout); window.addEventListener("beforeunload", (event) => { if (!state.dirty) return; event.preventDefault(); event.returnValue = ""; });
 
-if (!firebaseConfigured) {
-  alert("Configura Firebase in firebase-config.js."); location.replace("index.html");
-} else {
-  const session = await getAuthorizedSession({ requireRole: "coach" });
-  if (session.reason) { alert(session.reason); location.replace("index.html"); }
-  else {
-    state.coach = { uid: session.user.uid, ...session.profile };
-    $("coachIdentity").textContent = `${state.coach.displayName || state.coach.email}\n${state.coach.email || ""}`;
-    const clientsQuery = query(collection(db, "profiles"), where("trainerId", "==", state.coach.uid), where("role", "==", "athlete"), orderBy("lastName"), limit(100));
-    onSnapshot(clientsQuery, (snap) => { state.clients = snap.docs.map((item) => ({ id: item.id, ...item.data() })); renderClients(); }, (error) => { $("clientList").innerHTML = `<div class="notice error">${esc(friendlyAuthError(error))}</div>`; });
-  }
-}
+if (!supabaseConfigured) { alert("Configura Supabase in supabase-config.js."); location.replace("index.html"); }
+else { const session = await getAuthorizedSession({ requireRole: "coach" }); if (session.reason) { alert(session.reason); location.replace("index.html"); } else { state.coach = { uid: session.user.uid, ...session.profile }; $("coachIdentity").textContent = `${state.coach.displayName || state.coach.email}\n${state.coach.email || ""}`; await loadClients(); supabase.channel(`clients:${state.coach.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `trainer_id=eq.${state.coach.uid}` }, () => loadClients().catch(() => {})).subscribe(); } }

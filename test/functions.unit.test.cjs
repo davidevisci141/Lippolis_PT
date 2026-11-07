@@ -2,7 +2,12 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validateCreateClient, validateProgram } = require("../functions/lib/validation");
+let validateCreateClient;
+let validateProgram;
+
+test.before(async () => {
+  ({ validateCreateClient, validateProgram } = await import("../supabase/functions/_shared/validation.mjs"));
+});
 
 test("valida e normalizza la creazione cliente", () => {
   const value = validateCreateClient({

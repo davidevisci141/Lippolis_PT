@@ -1,23 +1,5 @@
-import { auth, db, firebaseConfigured } from "./firebase.mjs";
+import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
-import {
-  EmailAuthProvider,
-  reauthenticateWithCredential,
-  updatePassword
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  limit,
-  onSnapshot,
-  orderBy,
-  query,
-  runTransaction,
-  serverTimestamp,
-  updateDoc
-} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
@@ -29,201 +11,83 @@ let saving = false;
 let saveTimer = null;
 
 function badgeText(text, isError = false) {
-  if (!badge) return;
-  badge.textContent = text;
-  badge.style.background = isError ? "#b83d35" : "";
-  badge.classList.add("show");
-  clearTimeout(badgeText.timer);
-  badgeText.timer = setTimeout(() => badge.classList.remove("show"), isError ? 4500 : 1400);
+  if (!badge) return; badge.textContent = text; badge.style.background = isError ? "#b83d35" : ""; badge.classList.add("show");
+  clearTimeout(badgeText.timer); badgeText.timer = setTimeout(() => badge.classList.remove("show"), isError ? 4500 : 1400);
 }
-
-function localData() {
-  try { return JSON.parse(localStorage.getItem(api.storageKey) || "null") || api.snapshot(); }
-  catch { return api.snapshot(); }
-}
-
-function saveLocal(data) {
-  localStorage.setItem(api.storageKey, JSON.stringify({ ...data, salvato: Number(data.salvato || Date.now()) }));
-}
-
-function sanitizeSnapshot(value) {
-  const clean = structuredClone(value || {});
-  delete clean.PROGRAMMA;
-  delete clean.thread;
-  delete clean.diario;
-  delete clean.differite;
-  delete clean.app;
-  delete clean.esportato;
-  clean.v = 1;
-  return clean;
-}
-
+function localData() { try { return JSON.parse(localStorage.getItem(api.storageKey) || "null") || api.snapshot(); } catch { return api.snapshot(); } }
+function saveLocal(data) { localStorage.setItem(api.storageKey, JSON.stringify({ ...data, salvato: Number(data.salvato || Date.now()) })); }
+function sanitizeSnapshot(value) { const clean = structuredClone(value || {}); delete clean.PROGRAMMA; delete clean.thread; delete clean.diario; delete clean.differite; delete clean.app; delete clean.esportato; clean.v = 1; return clean; }
 function mergeRemote(remoteState, currentProgram, profile) {
-  const local = localData();
-  const merged = { ...local, ...(remoteState || {}) };
-  if (currentProgram?.program) merged.PROGRAMMA = currentProgram.program;
-  merged.profilo = {
-    ...(merged.profilo || {}),
-    nome: profile.firstName || merged.profilo?.nome || "",
-    cognome: profile.lastName || merged.profilo?.cognome || ""
-  };
-  merged.salvato = Math.max(Number(merged.salvato || 0), Date.now());
-  return merged;
+  const local = localData(); const merged = { ...local, ...(remoteState || {}) }; if (currentProgram?.program) merged.PROGRAMMA = currentProgram.program;
+  merged.profilo = { ...(merged.profilo || {}), nome: profile.firstName || merged.profilo?.nome || "", cognome: profile.lastName || merged.profilo?.cognome || "" };
+  merged.salvato = Math.max(Number(merged.salvato || 0), Date.now()); return merged;
 }
-
+async function loadMessages(uid) {
+  const { data, error } = await supabase.from("messages").select("*").eq("athlete_id", uid).order("created_at").limit(200); if (error) throw error;
+  api.applyMessages(data.map((item) => ({ id: item.id, ts: new Date(item.created_at).getTime(), from: item.sender_id === uid ? "atleta" : "coach", tipo: item.type || "messaggio", testo: item.text, meta: item.metadata || null, channel: item.channel || "thread", letto: true })));
+}
 async function bootstrap(session) {
-  if (!api) throw new Error("Area atleta non inizializzata.");
-  const { user, profile } = session;
-  const storedUid = sessionStorage.getItem("lippolis_uid");
-  if (storedUid !== user.uid) {
-    sessionStorage.setItem("lippolis_uid", user.uid);
-    location.reload();
-    return false;
-  }
+  if (!api) throw new Error("Area atleta non inizializzata."); const { user, profile } = session; const storedUid = sessionStorage.getItem("lippolis_uid");
+  if (storedUid !== user.uid) { sessionStorage.setItem("lippolis_uid", user.uid); location.reload(); return false; }
   window.__LIPPOLIS_PROFILE__ = profile;
-
-  const stateRef = doc(db, "profiles", user.uid, "state", "app");
-  const programRef = doc(db, "profiles", user.uid, "program", "current");
-  const [stateSnap, programSnap] = await Promise.all([getDoc(stateRef), getDoc(programRef)]);
-  const stateDoc = stateSnap.exists() ? stateSnap.data() : null;
-  const programDoc = programSnap.exists() ? programSnap.data() : null;
-  knownRevision = Number(stateDoc?.revision || 0);
-  knownProgramVersion = programDoc?.versionId || "";
-  window.__LIPPOLIS_PROGRAM_VERSION__ = knownProgramVersion;
-
-  const markerKey = `lippolis_cloud_boot_${user.uid}`;
-  const marker = `${knownRevision}:${knownProgramVersion}`;
-  if (sessionStorage.getItem(markerKey) !== marker) {
-    saveLocal(mergeRemote(stateDoc?.snapshot, programDoc, profile));
-    sessionStorage.setItem(markerKey, marker);
-    location.reload();
-    return false;
-  }
+  const [stateResult, programResult] = await Promise.all([
+    supabase.from("athlete_states").select("*").eq("user_id", user.uid).maybeSingle(),
+    supabase.from("programs").select("*").eq("athlete_id", user.uid).maybeSingle()
+  ]);
+  if (stateResult.error) throw stateResult.error; if (programResult.error) throw programResult.error;
+  const stateDoc = stateResult.data; const programDoc = programResult.data ? { ...programResult.data, versionId: programResult.data.version_id } : null;
+  knownRevision = Number(stateDoc?.revision || 0); knownProgramVersion = programDoc?.versionId || ""; window.__LIPPOLIS_PROGRAM_VERSION__ = knownProgramVersion;
+  const markerKey = `lippolis_cloud_boot_${user.uid}`; const marker = `${knownRevision}:${knownProgramVersion}`;
+  if (sessionStorage.getItem(markerKey) !== marker) { saveLocal(mergeRemote(stateDoc?.snapshot, programDoc, profile)); sessionStorage.setItem(markerKey, marker); location.reload(); return false; }
 
   window.lippolisAccount = {
-    logout: async () => { try { if (pendingSnapshot) await flush(user.uid, stateRef); } catch {} await logout(); },
-    updateProfile: async (value) => updateDoc(doc(db, "profiles", user.uid), {
-      firstName: String(value.nome || "").trim(),
-      lastName: String(value.cognome || "").trim(),
-      displayName: `${String(value.nome || "").trim()} ${String(value.cognome || "").trim()}`.trim(),
-      updatedAt: serverTimestamp()
-    }),
+    logout: async () => { try { if (pendingSnapshot) await flush(user.uid); } catch {} await logout(); },
+    updateProfile: async (value) => {
+      const first = String(value.nome || "").trim(); const last = String(value.cognome || "").trim();
+      const { error } = await supabase.from("profiles").update({ first_name: first, last_name: last, display_name: `${first} ${last}`.trim(), updated_at: new Date().toISOString() }).eq("id", user.uid); if (error) throw error;
+    },
     changePassword: async () => {
-      const current = prompt("Password attuale:"); if (!current) return;
-      const next = prompt("Nuova password (almeno 12 caratteri):"); if (!next) return;
-      const confirmNext = prompt("Ripeti la nuova password:");
-      if (next !== confirmNext) return alert("Le password non coincidono.");
-      if (next.length < 12) return alert("La password deve contenere almeno 12 caratteri.");
-      try {
-        await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, current));
-        await updatePassword(user, next);
-        alert("Password aggiornata.");
-      } catch (error) { alert(friendlyAuthError(error)); }
+      const current = prompt("Password attuale:"); if (!current) return; const next = prompt("Nuova password (almeno 12 caratteri):"); if (!next) return; const confirmNext = prompt("Ripeti la nuova password:");
+      if (next !== confirmNext) return alert("Le password non coincidono."); if (next.length < 12) return alert("La password deve contenere almeno 12 caratteri.");
+      try { const { error: loginError } = await supabase.auth.signInWithPassword({ email: user.email, password: current }); if (loginError) throw loginError; const { error } = await supabase.auth.updateUser({ password: next }); if (error) throw error; alert("Password aggiornata."); }
+      catch (error) { alert(friendlyAuthError(error)); }
     }
   };
 
   window.lippolisCloudSync = {
-    queue(snapshot) {
-      pendingSnapshot = sanitizeSnapshot(snapshot);
-      if (!cloudReady) return;
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => flush(user.uid, stateRef), 850);
-    },
+    queue(snapshot) { pendingSnapshot = sanitizeSnapshot(snapshot); if (!cloudReady) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => flush(user.uid), 850); },
     async sendMessage(message, channel) {
-      const text = String(message?.testo || "").trim();
-      if (!text) return;
-      try {
-        await addDoc(collection(db, "profiles", user.uid, "messages"), {
-          senderId: user.uid,
-          targetUid: user.uid,
-          channel,
-          type: String(message.tipo || "message").slice(0, 40),
-          text: text.slice(0, 4000),
-          metadata: message.meta || null,
-          createdAt: serverTimestamp()
-        });
-      } catch (error) { badgeText(friendlyAuthError(error), true); }
+      const text = String(message?.testo || "").trim(); if (!text) return;
+      try { const { error } = await supabase.from("messages").insert({ athlete_id: user.uid, sender_id: user.uid, target_id: user.uid, channel, type: String(message.tipo || "message").slice(0, 40), text: text.slice(0, 4000), metadata: message.meta || null }); if (error) throw error; }
+      catch (error) { badgeText(friendlyAuthError(error), true); }
     }
   };
 
-  onSnapshot(stateRef, (snap) => {
-    if (!snap.exists()) return;
-    const value = snap.data();
-    const revision = Number(value.revision || 0);
-    if (revision <= knownRevision) return;
-    if (saving || pendingSnapshot) {
-      badgeText("Conflitto: dati aggiornati su un altro dispositivo", true);
-      return;
-    }
-    knownRevision = revision;
-    saveLocal(mergeRemote(value.snapshot, null, profile));
-    sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`);
-    location.reload();
-  }, (error) => badgeText(friendlyAuthError(error), true));
-
-  onSnapshot(programRef, (snap) => {
-    const value = snap.exists() ? snap.data() : null;
-    const version = value?.versionId || "";
-    if (version === knownProgramVersion) return;
+  supabase.channel(`athlete-state:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "athlete_states", filter: `user_id=eq.${user.uid}` }, (payload) => {
+    const value = payload.new || {}; const revision = Number(value.revision || 0); if (revision <= knownRevision) return;
+    if (saving || pendingSnapshot) return badgeText("Conflitto: dati aggiornati su un altro dispositivo", true);
+    knownRevision = revision; saveLocal(mergeRemote(value.snapshot, null, profile)); sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`); location.reload();
+  }).subscribe();
+  supabase.channel(`athlete-profile:${user.uid}`).on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.uid}` }, async (payload) => {
+    if (payload.new?.status === "active") return;
+    await supabase.auth.signOut(); alert("Il tuo accesso non è più attivo."); location.replace("index.html");
+  }).subscribe();
+  supabase.channel(`athlete-program:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "programs", filter: `athlete_id=eq.${user.uid}` }, (payload) => {
+    const value = payload.new || null; const version = value?.version_id || ""; if (version === knownProgramVersion) return;
     if (pendingSnapshot) return badgeText("Nuova scheda disponibile: salva o ricarica", true);
-    knownProgramVersion = version;
-    window.__LIPPOLIS_PROGRAM_VERSION__ = version;
-    saveLocal(mergeRemote(null, value, profile));
-    sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`);
-    location.reload();
-  }, (error) => badgeText(friendlyAuthError(error), true));
-
-  onSnapshot(query(collection(db, "profiles", user.uid, "messages"), orderBy("createdAt", "asc"), limit(200)), (snap) => {
-    const messages = snap.docs.map((item) => {
-      const data = item.data();
-      return {
-        id: item.id,
-        ts: data.createdAt?.toMillis?.() || Date.now(),
-        from: data.senderId === user.uid ? "atleta" : "coach",
-        tipo: data.type || "messaggio",
-        testo: data.text,
-        meta: data.metadata || null,
-        channel: data.channel || "thread",
-        letto: true
-      };
-    });
-    api.applyMessages(messages);
-  }, (error) => badgeText(friendlyAuthError(error), true));
-
-  cloudReady = true;
-  if (pendingSnapshot) flush(user.uid, stateRef);
-  else if (!stateSnap.exists()) window.lippolisCloudSync.queue(api.snapshot());
-  return true;
+    knownProgramVersion = version; window.__LIPPOLIS_PROGRAM_VERSION__ = version; saveLocal(mergeRemote(null, value, profile)); sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`); location.reload();
+  }).subscribe();
+  supabase.channel(`athlete-messages:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `athlete_id=eq.${user.uid}` }, () => loadMessages(user.uid).catch((error) => badgeText(friendlyAuthError(error), true))).subscribe();
+  await loadMessages(user.uid); cloudReady = true; if (pendingSnapshot) flush(user.uid); else if (!stateDoc) window.lippolisCloudSync.queue(api.snapshot()); return true;
 }
 
-async function flush(uid, stateRef) {
-  if (!cloudReady || saving || !pendingSnapshot) return;
-  const snapshot = pendingSnapshot;
-  pendingSnapshot = null;
-  saving = true;
-  badgeText("Sincronizzazione…");
-  try {
-    const nextRevision = await runTransaction(db, async (tx) => {
-      const current = await tx.get(stateRef);
-      const revision = current.exists() ? Number(current.data().revision || 0) : 0;
-      if (revision !== knownRevision) throw new Error("CONFLICT");
-      tx.set(stateRef, { uid, snapshot, revision: revision + 1, updatedAt: serverTimestamp() });
-      return revision + 1;
-    });
-    knownRevision = nextRevision;
-    badgeText("Salvato e sincronizzato");
-  } catch (error) {
-    pendingSnapshot = snapshot;
-    badgeText(error.message === "CONFLICT" ? "Conflitto: ricarica prima di continuare" : "Offline: salvataggio locale in attesa", true);
-  } finally { saving = false; }
+async function flush(uid) {
+  if (!cloudReady || saving || !pendingSnapshot) return; const snapshot = pendingSnapshot; pendingSnapshot = null; saving = true; badgeText("Sincronizzazione…");
+  try { const { data, error } = await supabase.rpc("save_athlete_state", { p_expected_revision: knownRevision, p_snapshot: snapshot }); if (error) throw error; knownRevision = Number(data); badgeText("Salvato e sincronizzato"); }
+  catch (error) { pendingSnapshot = snapshot; badgeText(error.code === "40001" || /STATE_CONFLICT/.test(error.message) ? "Conflitto: ricarica prima di continuare" : "Offline: salvataggio locale in attesa", true); }
+  finally { saving = false; }
 }
 
-window.addEventListener("online", () => { if (pendingSnapshot && auth.currentUser) flush(auth.currentUser.uid, doc(db, "profiles", auth.currentUser.uid, "state", "app")); });
-
-if (!firebaseConfigured) {
-  alert("Configura Firebase in firebase-config.js."); location.replace("index.html");
-} else {
-  const session = await getAuthorizedSession({ requireRole: "athlete" });
-  if (session.reason) { alert(session.reason); location.replace("index.html"); }
-  else bootstrap(session).catch((error) => { alert(friendlyAuthError(error)); location.replace("index.html"); });
-}
+window.addEventListener("online", async () => { const { data: { session } } = await supabase.auth.getSession(); if (pendingSnapshot && session?.user) flush(session.user.id); });
+if (!supabaseConfigured) { alert("Configura Supabase in supabase-config.js."); location.replace("index.html"); }
+else { const session = await getAuthorizedSession({ requireRole: "athlete" }); if (session.reason) { alert(session.reason); location.replace("index.html"); } else bootstrap(session).catch((error) => { alert(friendlyAuthError(error)); location.replace("index.html"); }); }

@@ -2245,7 +2245,7 @@
       <div class="vol-hint">Nell'app installata il timer suona sul volume <b>Sveglia</b> del telefono: questo cursore ne regola una parte.</div>
 
       <div class="pf-sec">Account</div>
-      <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Accesso personale</div><div class="bk-v" id="accountEmail">${esc((window.__LIPPOLIS_PROFILE__&&window.__LIPPOLIS_PROFILE__.email)||'')}</div><div class="bk-n">I dati sono separati per account e sincronizzati con Firestore.</div><div class="bk-actions" style="margin-top:10px"><button class="bk-b" id="accountPassword">Cambia password</button><button class="bk-b" id="accountLogout">Esci</button></div></div>
+      <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Accesso personale</div><div class="bk-v" id="accountEmail">${esc((window.__LIPPOLIS_PROFILE__&&window.__LIPPOLIS_PROFILE__.email)||'')}</div><div class="bk-n">I dati sono separati per account e sincronizzati con Supabase.</div><div class="bk-actions" style="margin-top:10px"><button class="bk-b" id="accountPassword">Cambia password</button><button class="bk-b" id="accountLogout">Esci</button></div></div>
 
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>
@@ -2361,7 +2361,7 @@
 
   // ====== PERSISTENZA LOCALE (offline-first) ======
   // Il workout in corso, i check-in, i pesi e i messaggi sopravvivono a chiusura app,
-  // schermo bloccato o connessione assente. Firestore sincronizza alla riconnessione.
+  // schermo bloccato o connessione assente. Supabase sincronizza alla riconnessione.
   const ACCOUNT_UID = (()=>{ try{return sessionStorage.getItem('lippolis_uid')||'anonymous';}catch(e){return 'anonymous';} })();
   const LS_KEY = 'lippolis_pt_atleta_v1_'+ACCOUNT_UID.replace(/[^a-zA-Z0-9_-]/g,'_');
   let _saveT = null;
@@ -2504,7 +2504,7 @@
   renderNav();
   renderView();
 </script>
-<script src="firebase-config.js"></script>
+<script src="supabase-config.js"></script>
 <script type="module" src="src/athlete.mjs"></script>
 </body>
 </html>
