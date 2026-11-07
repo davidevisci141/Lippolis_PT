@@ -1,0 +1,8 @@
+{
+  "appId": "it.lippolis.pt",
+  "appName": "LIPPOLIS PT",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#E1E2E3"
+  }
+}

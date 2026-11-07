@@ -1,0 +1,12 @@
+{
+  "name": "timer-recupero",
+  "version": "1.0.0",
+  "description": "LIPPOLIS PT - timer di recupero nativo: notifica con conto alla rovescia, bolla sopra le altre app, allarme in background",
+  "main": "index.js",
+  "private": true,
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  }
+}
