@@ -79,6 +79,15 @@
   .topbar .account-password{display:none;}
   .pf-save-status{min-height:18px;margin:6px 2px 12px;color:var(--muted);font-size:11px;font-weight:700;}
   .pf-save-status.error{color:var(--danger-ink);}
+  .password-modal{position:absolute;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(8,17,15,.58);}
+  .password-modal.show{display:flex;}
+  .password-dialog{width:min(460px,100%);max-height:92%;overflow:auto;padding:22px;border-radius:20px;background:var(--device);color:var(--text);box-shadow:0 20px 60px rgba(0,0,0,.28);}
+  .password-dialog h2{font:800 20px 'Archivo',system-ui,sans-serif;margin-bottom:6px;}
+  .password-dialog p{font-size:12px;line-height:1.5;color:var(--muted);margin-bottom:12px;}
+  .password-dialog .pf-field{margin-bottom:10px;}
+  .password-feedback{display:none;margin:10px 0;padding:10px 12px;border-radius:11px;font-size:12px;font-weight:700;background:var(--accent-soft);color:var(--accent-ink);}
+  .password-feedback.show{display:block;}
+  .password-feedback.error{background:rgba(216,80,70,.1);color:var(--danger-ink);}
   @media (min-width:900px){.topbar .account-password{display:flex;}}
   @media (max-width:899px){.topbar .identity,.topbar .account-password{display:none}.topbar .avatar{margin-left:0}}
   @media (max-width:380px){.topbar .account-exit{padding:8px}.topbar .account-exit span{display:none}}
@@ -684,7 +693,7 @@
       <div class="name">LIPPOLIS<b>PT</b></div>
       <div class="account-tools">
         <div class="identity" id="athleteIdentity"></div>
-        <button class="account-password" id="athletePasswordTop" type="button">Cambia password</button>
+        <button class="account-password" id="athletePasswordTop" type="button" onclick="window.lippolisOpenPassword()">Cambia password</button>
         <div class="avatar" onclick="showTab('profilo')">LP</div>
         <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account" onclick="window.lippolisLogoutNow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
       </div>
@@ -699,6 +708,17 @@
     <div class="sync-badge" id="syncBadge">Salvato e sincronizzato</div>
 
     <div class="tabbar" id="tabbar"></div>
+    <div class="password-modal" id="athletePasswordModal" aria-hidden="true">
+      <div class="password-dialog" role="dialog" aria-modal="true" aria-labelledby="athletePasswordTitle">
+        <h2 id="athletePasswordTitle">Cambia password</h2>
+        <p>Conferma la password attuale e scegli una nuova password di almeno 12 caratteri.</p>
+        <div class="pf-field"><label for="athleteCurrentPassword">Password attuale</label><input class="pf-input" id="athleteCurrentPassword" type="password" autocomplete="current-password"></div>
+        <div class="pf-field"><label for="athleteNewPassword">Nuova password</label><input class="pf-input" id="athleteNewPassword" type="password" autocomplete="new-password"></div>
+        <div class="pf-field"><label for="athleteConfirmPassword">Ripeti la nuova password</label><input class="pf-input" id="athleteConfirmPassword" type="password" autocomplete="new-password"></div>
+        <div class="password-feedback" id="athletePasswordFeedback" role="status" aria-live="polite"></div>
+        <div class="sg-acts"><button class="ann" type="button" onclick="window.lippolisClosePassword()">Annulla</button><button class="inv" id="athleteSavePassword" type="button">Aggiorna password</button></div>
+      </div>
+    </div>
   </div>
 
 
@@ -710,6 +730,14 @@
     try{ const pending=window.lippolisAccount&&window.lippolisAccount.logout&&window.lippolisAccount.logout(); if(pending&&pending.catch) pending.catch(()=>{}); }catch(e){}
     location.replace(new URL('index.html',location.href).href);
   };
+  window.lippolisOpenPassword = function(){
+    const modal=document.getElementById('athletePasswordModal'); if(!modal) return;
+    modal.classList.add('show'); modal.setAttribute('aria-hidden','false');
+    document.getElementById('athletePasswordFeedback').className='password-feedback'; document.getElementById('athletePasswordFeedback').textContent='';
+    document.getElementById('athleteCurrentPassword').value=''; document.getElementById('athleteNewPassword').value=''; document.getElementById('athleteConfirmPassword').value='';
+    document.getElementById('athleteCurrentPassword').focus();
+  };
+  window.lippolisClosePassword = function(){ const modal=document.getElementById('athletePasswordModal'); if(modal){modal.classList.remove('show');modal.setAttribute('aria-hidden','true');} };
   // ====== DATI WORKOUT ======
   // ====== PROGRAMMA ======
   // L'app nasce senza scheda: arriva dal file che il coach consegna al cliente

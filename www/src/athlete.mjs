@@ -3,7 +3,6 @@ import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
-document.getElementById("athletePasswordTop")?.addEventListener("click", () => window.lippolisAccount?.changePassword());
 let knownRevision = 0;
 let knownProgramVersion = "";
 let cloudReady = false;
@@ -61,13 +60,35 @@ async function bootstrap(session) {
       if (identityName) identityName.textContent = data.display_name || `${data.first_name} ${data.last_name}`.trim();
       return window.__LIPPOLIS_PROFILE__;
     },
-    changePassword: async () => {
-      const current = prompt("Password attuale:"); if (!current) return; const next = prompt("Nuova password (almeno 12 caratteri):"); if (!next) return; const confirmNext = prompt("Ripeti la nuova password:");
-      if (next !== confirmNext) return alert("Le password non coincidono."); if (next.length < 12) return alert("La password deve contenere almeno 12 caratteri.");
-      try { const { error: loginError } = await supabase.auth.signInWithPassword({ email: user.email, password: current }); if (loginError) throw loginError; const { error } = await supabase.auth.updateUser({ password: next }); if (error) throw error; alert("Password aggiornata."); }
-      catch (error) { alert(friendlyAuthError(error)); }
-    }
+    changePassword: () => window.lippolisOpenPassword?.()
   };
+
+  const savePasswordButton = document.getElementById("athleteSavePassword");
+  savePasswordButton?.addEventListener("click", async () => {
+    const current = document.getElementById("athleteCurrentPassword").value;
+    const next = document.getElementById("athleteNewPassword").value;
+    const confirmNext = document.getElementById("athleteConfirmPassword").value;
+    const feedback = document.getElementById("athletePasswordFeedback");
+    const showFeedback = (message, error = false) => { feedback.textContent = message; feedback.className = `password-feedback show${error ? " error" : ""}`; };
+    if (!current) return showFeedback("Inserisci la password attuale.", true);
+    if (next.length < 12) return showFeedback("La nuova password deve contenere almeno 12 caratteri.", true);
+    if (next !== confirmNext) return showFeedback("Le nuove password non coincidono.", true);
+    savePasswordButton.disabled = true; savePasswordButton.textContent = "Aggiornamento…";
+    try {
+      const { error: loginError } = await supabase.auth.signInWithPassword({ email: user.email, password: current });
+      if (loginError) throw loginError;
+      const { error } = await supabase.auth.updateUser({ password: next });
+      if (error) throw error;
+      showFeedback("Password aggiornata.");
+      document.getElementById("athleteCurrentPassword").value = "";
+      document.getElementById("athleteNewPassword").value = "";
+      document.getElementById("athleteConfirmPassword").value = "";
+    } catch (error) {
+      showFeedback(friendlyAuthError(error), true);
+    } finally {
+      savePasswordButton.disabled = false; savePasswordButton.textContent = "Aggiorna password";
+    }
+  });
 
   window.lippolisCloudSync = {
     queue(snapshot) { pendingSnapshot = sanitizeSnapshot(snapshot); if (!cloudReady) return; clearTimeout(saveTimer); saveTimer = setTimeout(() => flush(user.uid), 850); },
