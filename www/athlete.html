@@ -2358,7 +2358,8 @@
   // Con i dati solo sul telefono, il backup è l'unica copia di sicurezza: un file JSON
   // che si salva dove si vuole (Download, Drive, e-mail) e si reimporta su qualsiasi dispositivo.
   function snapshot(){
-    return { v:1, app:'lippolis-pt-atleta', esportato:Date.now(), PROGRAMMA, statoSett, noteSessione, sessioni, profilo, abitudini, giornate, pesi, thread, diario, differite,
+    let datiBia=[]; try{ const stored=JSON.parse(localStorage.getItem(LS_KEY)||'null'); if(Array.isArray(stored&&stored.bia)) datiBia=stored.bia; }catch(e){}
+    return { v:1, app:'lippolis-pt-atleta', esportato:Date.now(), bia:datiBia, PROGRAMMA, statoSett, noteSessione, sessioni, profilo, abitudini, giornate, pesi, thread, diario, differite,
       progressi, plicheVals, plicheSex, plicheAge, metriche: metriche.map(m=>({nome:m.nome, dati:m.dati})), seqIdx, giornoCorr, volTimer };
   }
   function esportaBackup(){

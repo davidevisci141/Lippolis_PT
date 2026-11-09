@@ -97,6 +97,62 @@ async function exportClientData(authorizationHeader: AuthorizationHeader, body: 
   return { exportedAt: new Date().toISOString(), profile, program: program.data, state: state.data, messages: messages.data, programVersions: versions.data };
 }
 
+function optionalNumber(value: unknown, label: string, min: number, max: number) {
+  if (value === undefined || value === null || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < min || number > max) throw new ApiError("invalid-argument", `${label}: valore non valido.`);
+  return Math.round(number * 100) / 100;
+}
+
+async function recordBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  const parsedDate = new Date(String(body.measuredAt || ""));
+  if (!Number.isFinite(parsedDate.getTime())) throw new ApiError("invalid-argument", "Inserisci data e ora della misurazione.");
+  const heightCm = optionalNumber(body.heightCm, "Altezza", 80, 250);
+  const weightKg = optionalNumber(body.weightKg, "Peso", 20, 400);
+  const bodyFatPercent = optionalNumber(body.bodyFatPercent, "Percentuale di grasso", 0, 75);
+  if (heightCm === null || weightKg === null) throw new ApiError("invalid-argument", "Altezza e peso sono obbligatori.");
+  const bodyFatMassKg = bodyFatPercent === null ? null : Math.round(weightKg * bodyFatPercent) / 100;
+  const measuredAt = parsedDate.toISOString();
+  const segment = (value: unknown, label: string) => optionalNumber(value, label, 0, 100);
+  const lean = body.segmentalLean && typeof body.segmentalLean === "object" ? body.segmentalLean as Record<string, unknown> : {};
+  const fat = body.segmentalFat && typeof body.segmentalFat === "object" ? body.segmentalFat as Record<string, unknown> : {};
+  const record = {
+    id: crypto.randomUUID(), measuredAt,
+    age: optionalNumber(body.age, "Età", 10, 110), sex: body.sex === "female" ? "female" : body.sex === "male" ? "male" : null,
+    heightCm, weightKg, bmi: Math.round((weightKg / ((heightCm / 100) ** 2)) * 10) / 10,
+    obesityDegreePercent: Math.round((weightKg / (22 * ((heightCm / 100) ** 2))) * 100),
+    bodyFatPercent, bodyFatMassKg, fatFreeMassKg: bodyFatMassKg === null ? null : Math.round((weightKg - bodyFatMassKg) * 100) / 100,
+    skeletalMuscleKg: optionalNumber(body.skeletalMuscleKg, "Massa muscolo scheletrico", 0, 200),
+    totalBodyWaterL: optionalNumber(body.totalBodyWaterL, "Acqua corporea totale", 0, 200),
+    proteinKg: optionalNumber(body.proteinKg, "Proteine", 0, 100), mineralsKg: optionalNumber(body.mineralsKg, "Minerali", 0, 50),
+    visceralFatLevel: optionalNumber(body.visceralFatLevel, "Grasso viscerale", 0, 50),
+    basalMetabolicRateKcal: optionalNumber(body.basalMetabolicRateKcal, "Metabolismo basale", 500, 6000),
+    waistHipRatio: optionalNumber(body.waistHipRatio, "Rapporto vita/fianchi", 0.3, 2),
+    score: optionalNumber(body.score, "Punteggio InBody", 0, 150),
+    targetWeightKg: optionalNumber(body.targetWeightKg, "Peso obiettivo", 20, 400),
+    weightControlKg: optionalNumber(body.weightControlKg, "Controllo del peso", -200, 200),
+    fatControlKg: optionalNumber(body.fatControlKg, "Controllo del grasso", -200, 200),
+    muscleControlKg: optionalNumber(body.muscleControlKg, "Controllo del muscolo", -200, 200),
+    segmentalLean: { leftArm: segment(lean.leftArm, "Massa magra braccio sinistro"), rightArm: segment(lean.rightArm, "Massa magra braccio destro"), trunk: segment(lean.trunk, "Massa magra tronco"), leftLeg: segment(lean.leftLeg, "Massa magra gamba sinistra"), rightLeg: segment(lean.rightLeg, "Massa magra gamba destra") },
+    segmentalFat: { leftArm: segment(fat.leftArm, "Massa grassa braccio sinistro"), rightArm: segment(fat.rightArm, "Massa grassa braccio destro"), trunk: segment(fat.trunk, "Massa grassa tronco"), leftLeg: segment(fat.leftLeg, "Massa grassa gamba sinistra"), rightLeg: segment(fat.rightLeg, "Massa grassa gamba destra") }
+  };
+
+  const { data: current, error: readError } = await admin.from("athlete_states").select("snapshot, revision").eq("user_id", athlete.id).maybeSingle();
+  if (readError) throw readError;
+  const snapshot = current?.snapshot && typeof current.snapshot === "object" ? current.snapshot as Record<string, unknown> : {};
+  const bia = Array.isArray(snapshot.bia) ? snapshot.bia : [];
+  if (!current) {
+    const { error } = await admin.from("athlete_states").insert({ user_id: athlete.id, snapshot: { ...snapshot, bia: [record] }, revision: 1 });
+    if (error) { if (error.code === "23505") throw new ApiError("aborted", "Lo storico è stato aggiornato. Riprova.", 409); throw error; }
+  } else {
+    const revision = Number(current.revision || 0);
+    const { data, error } = await admin.from("athlete_states").update({ snapshot: { ...snapshot, bia: [...bia, record] }, revision: revision + 1, updated_at: new Date().toISOString() }).eq("user_id", athlete.id).eq("revision", revision).select("revision").maybeSingle();
+    if (error) throw error; if (!data) throw new ApiError("aborted", "I dati dell’atleta sono cambiati. Ricarica e riprova.", 409);
+  }
+  return { record };
+}
+
 async function deleteClient(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const target = await ownedAthlete(coach.user.id, body.clientUid);
   if (cleanText(body.confirmationEmail, 254).toLowerCase() !== String(target.email).toLowerCase()) throw new ApiError("invalid-argument", "Email di conferma non corrispondente.");
@@ -138,7 +194,7 @@ Deno.serve(async (request) => {
     const authorizationHeader = request.headers?.get?.("Authorization") || null;
     const body = await request.json(); const action = String(body.action || "");
     const handlers: Record<string, (authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) => Promise<unknown>> = {
-      createClient: createAthleteAccount, completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, deleteClient,
+      createClient: createAthleteAccount, completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, recordBia, deleteClient,
       saveProgramDraft, publishProgram, archiveProgramDraft, health: async () => ({ ok: true, time: new Date().toISOString() })
     };
     if (!handlers[action]) throw new ApiError("invalid-argument", "Azione non valida.");

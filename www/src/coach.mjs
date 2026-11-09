@@ -3,7 +3,7 @@ import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 
 const $ = (id) => document.getElementById(id);
 const state = { coach: null, clients: [], selected: null, snapshot: {}, currentProgram: null, drafts: [], versions: [], messages: [], activeDraft: null, dirty: false, channels: [] };
-const calls = Object.fromEntries(["createClient", "setClientAccess", "deleteClient", "exportClientData", "saveProgramDraft", "publishProgram", "archiveProgramDraft"].map((name) => [name, (data) => adminCall(name, data)]));
+const calls = Object.fromEntries(["createClient", "setClientAccess", "deleteClient", "exportClientData", "recordBia", "saveProgramDraft", "publishProgram", "archiveProgramDraft"].map((name) => [name, (data) => adminCall(name, data)]));
 
 function esc(value) { return String(value ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
 function initials(profile) { return `${profile.firstName?.[0] || ""}${profile.lastName?.[0] || ""}`.toUpperCase() || "CL"; }
@@ -80,6 +80,35 @@ function renderActivity() {
   const days = Object.entries(state.snapshot.giornate || {}).sort(([a], [b]) => b.localeCompare(a)); $("checkinList").innerHTML = days.slice(0, 30).map(([date, item]) => `<div class="rowcard"><b>${esc(date)}</b><small>Sonno ${esc(item.sonnoOre ?? "—")} h · Energia ${esc(item.energia ?? "—")} · DOMS ${esc(item.doms ?? "—")}</small></div>`).join("") || `<p class="sub">Nessun check-in.</p>`;
   const loads = new Map(); sessions.forEach((session) => (session.esercizi || []).forEach((exercise) => { const set = (exercise.sets || []).filter((x) => Number(x.kg) > 0).sort((a, b) => Number(b.kg) - Number(a.kg))[0]; if (set && (!loads.has(exercise.nome) || Number(set.kg) > Number(loads.get(exercise.nome).kg))) loads.set(exercise.nome, { ...set, ts: session.ts }); }));
   $("loadList").innerHTML = [...loads.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, item]) => `<div class="rowcard"><b>${esc(name)}</b><small>${esc(item.kg)} kg × ${esc(item.reps)} · ${when(item.ts)}</small></div>`).join("") || `<p class="sub">Nessun carico registrato.</p>`;
+  renderBia();
+}
+const biaMetrics = [
+  { key: "weightKg", title: "Peso", unit: "kg", color: "#087b65" },
+  { key: "skeletalMuscleKg", title: "Massa muscolo scheletrico", unit: "kg", color: "#3867b7" },
+  { key: "bodyFatPercent", title: "Grasso corporeo", unit: "%", color: "#c47713" }
+];
+function biaNumber(value, digits = 1) { return Number.isFinite(Number(value)) && value !== null && value !== "" ? `${Number(value).toLocaleString("it-IT", { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : "—"; }
+function drawBiaChart(entries, metric) {
+  const points = entries.filter((item) => Number.isFinite(Number(item[metric.key])) && item[metric.key] !== null).slice(-12);
+  if (!points.length) return `<section class="bia-chart"><h4>${metric.title}</h4><p class="sub">Dati non ancora disponibili.</p></section>`;
+  const width = 340, height = 150, left = 30, right = 14, top = 20, bottom = 25;
+  const values = points.map((item) => Number(item[metric.key])); const min = Math.min(...values), max = Math.max(...values); const pad = Math.max((max - min) * 0.18, Math.abs(max || 1) * 0.04, 0.5);
+  const low = min - pad, high = max + pad; const x = (i) => left + (points.length === 1 ? (width - left - right) / 2 : i * (width - left - right) / (points.length - 1)); const y = (value) => top + (high - value) * (height - top - bottom) / (high - low);
+  const line = points.map((item, i) => `${x(i)},${y(Number(item[metric.key]))}`).join(" ");
+  const circles = points.map((item, i) => `<circle cx="${x(i)}" cy="${y(Number(item[metric.key]))}" r="4" fill="${metric.color}"><title>${biaNumber(Number(item[metric.key]))} ${metric.unit} · ${esc(new Date(item.measuredAt).toLocaleDateString("it-IT"))}</title></circle>`).join("");
+  const first = new Date(points[0].measuredAt), last = new Date(points.at(-1).measuredAt);
+  return `<section class="bia-chart"><h4>${metric.title} <span class="bia-note">(${metric.unit})</span></h4><svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Andamento ${metric.title}"><line x1="${left}" y1="${height - bottom}" x2="${width - right}" y2="${height - bottom}" stroke="#dce5e2"/><polyline points="${line}" fill="none" stroke="${metric.color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${circles}<text class="axis-label" x="${left}" y="${height - 5}">${esc(first.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" }))}</text><text class="axis-label" text-anchor="end" x="${width - right}" y="${height - 5}">${esc(last.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit" }))}</text><text class="axis-label" x="${left}" y="13">${biaNumber(max)} ${metric.unit}</text></svg></section>`;
+}
+function renderSegmental(record) {
+  const names = { leftArm: "Braccio sinistro", rightArm: "Braccio destro", trunk: "Tronco", leftLeg: "Gamba sinistra", rightLeg: "Gamba destra" };
+  const group = (title, values) => { const details = Object.entries(names).filter(([key]) => values?.[key] != null).map(([key, name]) => `${name}: ${biaNumber(values[key])} kg`).join(" · "); return details ? `<div><b>${title}</b>: ${esc(details)}</div>` : ""; };
+  const lean = group("Massa magra", record.segmentalLean), fat = group("Massa grassa", record.segmentalFat);
+  return lean || fat ? `<details class="bia-note" style="margin-top:6px"><summary>Valori segmentali</summary>${lean}${fat}</details>` : "";
+}
+function renderBia() {
+  const entries = (Array.isArray(state.snapshot.bia) ? state.snapshot.bia : []).slice().sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime());
+  $("biaCharts").innerHTML = biaMetrics.map((metric) => drawBiaChart(entries, metric)).join("");
+  $("biaList").innerHTML = entries.slice().reverse().slice(0, 30).map((item) => `<div class="rowcard"><b>${when(item.measuredAt)} · ${biaNumber(item.weightKg)} kg</b><small>BMI ${biaNumber(item.bmi)} · Grado obesità ${biaNumber(item.obesityDegreePercent, 0)}% · Grasso ${biaNumber(item.bodyFatPercent)}% (${biaNumber(item.bodyFatMassKg)} kg) · Massa magra ${biaNumber(item.fatFreeMassKg)} kg · Muscolo scheletrico ${biaNumber(item.skeletalMuscleKg)} kg</small><small style="display:block;margin-top:4px">Età ${biaNumber(item.age, 0)} · ${item.sex === "male" ? "Maschio" : item.sex === "female" ? "Femmina" : "Sesso non indicato"} · Altezza ${biaNumber(item.heightCm, 0)} cm · Acqua ${biaNumber(item.totalBodyWaterL)} L · Proteine ${biaNumber(item.proteinKg)} kg · Minerali ${biaNumber(item.mineralsKg, 2)} kg · Viscerale ${biaNumber(item.visceralFatLevel, 0)} · BMR ${biaNumber(item.basalMetabolicRateKcal, 0)} kcal · V/F ${biaNumber(item.waistHipRatio, 2)}${item.score == null ? "" : ` · InBody ${biaNumber(item.score, 0)}/100`}</small>${item.targetWeightKg == null && item.weightControlKg == null && item.fatControlKg == null && item.muscleControlKg == null ? "" : `<small style="display:block;margin-top:4px">Obiettivo ${biaNumber(item.targetWeightKg)} kg · Controllo peso ${biaNumber(item.weightControlKg)} kg · grasso ${biaNumber(item.fatControlKg)} kg · muscolo ${biaNumber(item.muscleControlKg)} kg</small>`}${renderSegmental(item)}</div>`).join("") || `<p class="sub">Nessuna rilevazione BIA. Inserisci i valori dal referto InBody.</p>`;
 }
 function renderMessages() { $("messageList").innerHTML = state.messages.map((item) => `<div class="rowcard"><b>${item.senderId === state.coach?.uid ? "Tu" : esc(state.selected?.firstName || "Cliente")}</b><small>${when(item.createdAt)}</small><div style="margin-top:6px;font-size:13px">${esc(item.text)}</div></div>`).join("") || `<p class="sub">Nessun messaggio.</p>`; }
 function defaultWeeks() { return [{ n: 1, dal: $("programStart").value || "", al: $("programEnd").value || "", giorni: [{ titolo: "Giorno A", dt: "", esercizi: [{ nome: "", serie: 3, reps: "8-12", rec: "90", carico: "", note: "" }] }] }]; }
@@ -103,6 +132,43 @@ $("publishProgram").addEventListener("click", async () => { const button = $("pu
 $("archiveDraft").addEventListener("click", async () => { if (!state.activeDraft) return notice($("programNotice"), "Carica prima una bozza.", true); if (!confirm("Archiviare questa bozza?")) return; try { await calls.archiveProgramDraft({ draftId: state.activeDraft.id }); resetProgramForm(); await loadDetails(state.selected.id); } catch (error) { notice($("programNotice"), friendlyAuthError(error), true); } });
 $("importProgram").addEventListener("click", () => $("importProgramFile").click()); $("importProgramFile").addEventListener("change", async () => { const file = $("importProgramFile").files[0]; if (!file) return; try { const data = JSON.parse(await file.text()); const program = data.PROGRAMMA || data.program || data; $("programName").value = program.nome || program.name || ""; $("programStart").value = program.dal || program.startDate || ""; $("programEnd").value = program.al || program.endDate || ""; $("programJson").value = JSON.stringify(program.settimane || program.weeks || [], null, 2); state.activeDraft = null; state.dirty = true; notice($("programNotice"), "File importato. Controlla e salva la bozza."); } catch { notice($("programNotice"), "File JSON non valido.", true); } finally { $("importProgramFile").value = ""; } });
 $("sendMessage").addEventListener("click", async () => { const text = $("coachMessage").value.trim(); if (!text || !state.selected) return; const button = $("sendMessage"); setBusy(button, true, "Invio…"); try { const { error } = await supabase.from("messages").insert({ athlete_id: state.selected.id, sender_id: state.coach.uid, target_id: state.selected.id, channel: "thread", text }); if (error) throw error; $("coachMessage").value = ""; } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); } });
+function localDateTimeValue(date = new Date()) { return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16); }
+function numericField(id) { const value = $(id).value.trim(); return value === "" ? null : Number(value); }
+function renderBiaPreview() {
+  const height = numericField("biaHeight"), weight = numericField("biaWeight"), fatPercent = numericField("biaFatPercent");
+  if (!(height > 0) || !(weight > 0)) { $("biaDerived").textContent = "Inserisci altezza e peso per calcolare BMI e massa magra."; return; }
+  const bmi = weight / ((height / 100) ** 2); const fatMass = Number.isFinite(fatPercent) ? weight * fatPercent / 100 : null;
+  const fatFree = fatMass === null ? null : weight - fatMass;
+  $("biaDerived").textContent = `Valori calcolati · BMI ${biaNumber(bmi)}${fatMass === null ? "" : ` · Massa grassa ${biaNumber(fatMass)} kg · Massa magra ${biaNumber(fatFree)} kg`}`;
+}
+$("addBia").addEventListener("click", () => {
+  if (!state.selected) return;
+  $("biaForm").reset(); $("biaDate").value = localDateTimeValue(); notice($("biaNotice"), "");
+  const latest = (state.snapshot.bia || []).slice().sort((a, b) => new Date(b.measuredAt) - new Date(a.measuredAt))[0];
+  if (latest?.heightCm) $("biaHeight").value = latest.heightCm; if (latest?.age) $("biaAge").value = latest.age; if (latest?.sex) $("biaSex").value = latest.sex;
+  renderBiaPreview(); openModal("biaModal");
+});
+$("printBia").addEventListener("click", () => window.print());
+["biaHeight", "biaWeight", "biaFatPercent"].forEach((id) => $(id).addEventListener("input", renderBiaPreview));
+$("biaForm").addEventListener("submit", async (event) => {
+  event.preventDefault(); if (!state.selected) return;
+  const button = $("saveBia"); setBusy(button, true, "Salvataggio…"); notice($("biaNotice"), "");
+  const segment = (prefix) => ({ leftArm: numericField(`${prefix}LeftArm`), rightArm: numericField(`${prefix}RightArm`), trunk: numericField(`${prefix}Trunk`), leftLeg: numericField(`${prefix}LeftLeg`), rightLeg: numericField(`${prefix}RightLeg`) });
+  const payload = {
+    clientUid: state.selected.id, measuredAt: new Date($("biaDate").value).toISOString(), age: numericField("biaAge"), sex: $("biaSex").value || null,
+    heightCm: numericField("biaHeight"), weightKg: numericField("biaWeight"), bodyFatPercent: numericField("biaFatPercent"),
+    skeletalMuscleKg: numericField("biaMuscle"), totalBodyWaterL: numericField("biaWater"), proteinKg: numericField("biaProtein"), mineralsKg: numericField("biaMinerals"),
+    visceralFatLevel: numericField("biaVisceral"), basalMetabolicRateKcal: numericField("biaBmr"), waistHipRatio: numericField("biaWhRatio"), score: numericField("biaScore"),
+    targetWeightKg: numericField("biaTargetWeight"), weightControlKg: numericField("biaWeightControl"), fatControlKg: numericField("biaFatControl"), muscleControlKg: numericField("biaMuscleControl"),
+    segmentalLean: segment("biaLean"), segmentalFat: segment("biaFat")
+  };
+  try {
+    const { record } = await calls.recordBia(payload);
+    if (state.selected?.id === payload.clientUid) { const bia = Array.isArray(state.snapshot.bia) ? state.snapshot.bia : []; state.snapshot = { ...state.snapshot, bia: bia.some((item) => item.id === record.id) ? bia : [...bia, record] }; renderActivity(); }
+    closeModal("biaModal"); $("biaForm").reset();
+  } catch (error) { notice($("biaNotice"), friendlyAuthError(error), true); }
+  finally { setBusy(button, false); }
+});
 $("changePassword").addEventListener("click", () => { $("currentPassword").value = ""; $("coachNewPassword").value = ""; notice($("passwordNotice"), ""); openModal("passwordModal"); }); $("savePassword").addEventListener("click", async () => { const button = $("savePassword"); setBusy(button, true); try { const { error: authError } = await supabase.auth.signInWithPassword({ email: state.coach.email, password: $("currentPassword").value }); if (authError) throw authError; if ($("coachNewPassword").value.length < 12) throw new Error("La nuova password deve contenere almeno 12 caratteri."); const { error } = await supabase.auth.updateUser({ password: $("coachNewPassword").value }); if (error) throw error; notice($("passwordNotice"), "Password aggiornata."); } catch (error) { notice($("passwordNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
 $("logout").addEventListener("click", logout); window.addEventListener("beforeunload", (event) => { if (!state.dirty) return; event.preventDefault(); event.returnValue = ""; });
 
