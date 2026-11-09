@@ -686,7 +686,7 @@
         <div class="identity" id="athleteIdentity"></div>
         <button class="account-password" id="athletePasswordTop" type="button">Cambia password</button>
         <div class="avatar" onclick="showTab('profilo')">LP</div>
-        <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
+        <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account" onclick="window.lippolisLogoutNow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
       </div>
     </div>
 
@@ -703,6 +703,13 @@
 
 
 <script>
+  // Logout di emergenza sincrono: funziona anche se il modulo Supabase o la rete restano bloccati.
+  window.lippolisLogoutNow = function(){
+    try{ const ref=new URL(window.LIPPOLIS_SUPABASE_CONFIG.url).hostname.split('.')[0], key=`sb-${ref}-auth-token`; for(const storedKey of Object.keys(localStorage)) if(storedKey===key||storedKey.startsWith(`${key}-`)) localStorage.removeItem(storedKey); }catch(e){}
+    try{ sessionStorage.removeItem('lippolis_uid'); }catch(e){}
+    try{ const pending=window.lippolisAccount&&window.lippolisAccount.logout&&window.lippolisAccount.logout(); if(pending&&pending.catch) pending.catch(()=>{}); }catch(e){}
+    location.replace(new URL('index.html',location.href).href);
+  };
   // ====== DATI WORKOUT ======
   // ====== PROGRAMMA ======
   // L'app nasce senza scheda: arriva dal file che il coach consegna al cliente

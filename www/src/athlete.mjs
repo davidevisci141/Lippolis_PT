@@ -3,21 +3,6 @@ import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
-document.getElementById("athleteLogout")?.addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  if (button.disabled) return;
-  button.disabled = true;
-  const label = button.querySelector("span");
-  if (label) label.textContent = "Uscita…";
-  try {
-    if (window.lippolisAccount?.logout) await window.lippolisAccount.logout();
-    else await logout();
-  } catch (error) {
-    console.warn("Uscita non completata dal client Supabase; torno alla schermata di accesso.", error);
-    try { sessionStorage.removeItem("lippolis_uid"); } catch {}
-    location.replace(new URL("index.html", location.href).href);
-  }
-});
 document.getElementById("athletePasswordTop")?.addEventListener("click", () => window.lippolisAccount?.changePassword());
 let knownRevision = 0;
 let knownProgramVersion = "";
