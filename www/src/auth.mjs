@@ -40,9 +40,28 @@ export async function getAuthorizedSession({ requireRole, allowOnboarding = fals
 export function destinationFor(profile) { return profile?.role === "coach" ? "coach.html" : "athlete.html"; }
 
 export async function logout() {
-  if (supabase) await supabase.auth.signOut();
-  sessionStorage.removeItem("lippolis_uid");
-  location.replace("index.html");
+  let timeout;
+  try {
+    if (supabase) {
+      await Promise.race([
+        supabase.auth.signOut({ scope: "local" }),
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error("Logout timeout")), 1200); })
+      ]);
+    }
+  } catch (error) {
+    console.warn("Logout remoto non riuscito; chiudo comunque la sessione locale.", error);
+  } finally {
+    clearTimeout(timeout);
+    try {
+      const projectRef = new URL(window.LIPPOLIS_SUPABASE_CONFIG?.url).hostname.split(".")[0];
+      const storageKey = supabase?.auth?.storageKey || `sb-${projectRef}-auth-token`;
+      for (const key of Object.keys(localStorage)) {
+        if (key === storageKey || key.startsWith(`${storageKey}-`)) localStorage.removeItem(key);
+      }
+    } catch {}
+    try { sessionStorage.removeItem("lippolis_uid"); } catch {}
+    location.replace(new URL("index.html", location.href).href);
+  }
 }
 
 export function friendlyAuthError(error) {
