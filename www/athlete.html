@@ -594,8 +594,7 @@
   .bk-acts{display:flex; gap:8px; margin-top:12px;}
   .bk-b{flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 6px; border-radius:11px; border:1px solid var(--line); background:var(--surface2); color:var(--text); font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:12px; cursor:pointer;}
   .bk-b svg{width:15px;height:15px;}
-  .bia-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.bia-value{background:var(--surface2);border-radius:11px;padding:10px}.bia-value b{display:block;font:800 16px 'Archivo',system-ui,sans-serif}.bia-value span{font-size:10px;color:var(--muted)}.bia-photo-preview{width:100%;max-height:260px;object-fit:contain;background:var(--surface2);border-radius:12px;margin:10px 0}.bia-review{border-top:1px solid var(--line-soft);margin-top:12px;padding-top:12px}.bia-review-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 10px}.bia-review .pf-field{margin-bottom:8px}.bia-review .pf-field label{display:block;font-size:11px;font-weight:800;margin:0 0 5px;color:var(--muted)}.bia-review .pf-input{padding:10px 11px;font-size:13px}.bia-status{font-size:12px;color:var(--muted);margin-top:8px;min-height:18px}.bia-status.error{color:var(--danger-ink)}.bia-history{display:grid;gap:7px;margin-top:12px}.bia-history-item{border-top:1px solid var(--line-soft);padding-top:8px;font-size:11px;color:var(--muted)}.bia-history-item b{color:var(--text);font-size:12px}.bia-raw{margin-top:10px;font-size:11px;color:var(--muted)}.bia-raw summary{cursor:pointer;font-weight:800}.bia-raw pre{white-space:pre-wrap;word-break:break-word;max-height:150px;overflow:auto;margin-top:6px;font:10px/1.4 ui-monospace,monospace}
-  @media(max-width:380px){.bia-review-grid{grid-template-columns:1fr}}
+  .bia-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.bia-value{background:var(--surface2);border-radius:11px;padding:10px}.bia-value b{display:block;font:800 16px 'Archivo',system-ui,sans-serif}.bia-value span{font-size:10px;color:var(--muted)}.bia-history{display:grid;gap:7px;margin-top:12px}.bia-history-item{border-top:1px solid var(--line-soft);padding-top:8px;font-size:11px;color:var(--muted)}.bia-history-item b{color:var(--text);font-size:12px}
   .ck-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:11px;}
   .ck-fr{width:32px;height:32px;border-radius:9px;border:1px solid var(--line-soft);background:var(--surface2);color:var(--muted);display:grid;place-items:center;cursor:pointer;}
   .ck-fr svg{width:15px;height:15px;} .ck-fr:disabled{opacity:.3;}
@@ -2313,39 +2312,9 @@
       <div class="bk-card" id="biaProfileCard">
         <div class="bk-l">${ultimaBia?'Ultima rilevazione BIA':'Referto InBody'}</div>
         <div class="bk-v">${ultimaBia?formatBiaDate(ultimaBia.measuredAt):'Nessuna BIA caricata'}</div>
-        <div class="bk-n">Carica una foto leggibile del referto. L’app riconosce i valori sul dispositivo; controllali prima di salvarli nel tuo profilo.</div>
+        <div class="bk-n">La composizione corporea e lo storico inseriti dal tuo Personal Trainer.</div>
         ${ultimaBia?`<div class="bia-summary"><div class="bia-value"><b>${formatBia(ultimaBia.weightKg)} kg</b><span>Peso</span></div><div class="bia-value"><b>${formatBia(ultimaBia.bmi)}</b><span>Indice di massa corporea</span></div><div class="bia-value"><b>${formatBia(ultimaBia.bodyFatPercent)}%</b><span>Grasso corporeo</span></div><div class="bia-value"><b>${formatBia(ultimaBia.skeletalMuscleKg)} kg</b><span>Muscolo scheletrico</span></div><div class="bia-value"><b>${formatBia(ultimaBia.totalBodyWaterL)} L</b><span>Acqua corporea</span></div><div class="bia-value"><b>${formatBia(ultimaBia.basalMetabolicRateKcal,0)} kcal</b><span>Metabolismo basale</span></div></div>`:''}
-        <div class="bk-acts"><button class="bk-b" id="biaChoosePhoto" type="button">${I.upload} Scatta o scegli la foto</button></div>
-        <input id="biaPhotoInput" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" hidden>
-        <div class="bia-status" id="biaUploadStatus" role="status" aria-live="polite"></div>
-        <div class="hidden" id="biaReviewArea"><img class="bia-photo-preview" id="biaPhotoPreview" alt="Anteprima privata della foto BIA"><form id="biaReviewForm" class="bia-review">
-          <div class="bk-l">Valori riconosciuti · verifica prima di salvare</div>
-          <div class="bia-review-grid">
-            <div class="pf-field"><label for="biaMeasuredAt">Data e ora del referto</label><input class="pf-input" id="biaMeasuredAt" type="datetime-local" required></div>
-            <div class="pf-field"><label for="biaSex">Sesso</label><select class="pf-input" id="biaSex"><option value="">Non indicato</option><option value="male">Maschio</option><option value="female">Femmina</option></select></div>
-            <div class="pf-field"><label for="biaAge">Età (anni)</label><input class="pf-input" id="biaAge" type="text" inputmode="numeric"></div>
-            <div class="pf-field"><label for="biaHeight">Altezza (cm) *</label><input class="pf-input" id="biaHeight" type="text" inputmode="decimal" required></div>
-            <div class="pf-field"><label for="biaWeight">Peso (kg) *</label><input class="pf-input" id="biaWeight" type="text" inputmode="decimal" required></div>
-            <div class="pf-field"><label for="biaFatPercent">Grasso corporeo (%)</label><input class="pf-input" id="biaFatPercent" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaFatMass">Massa grassa (kg)</label><input class="pf-input" id="biaFatMass" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaMuscle">Massa muscolo scheletrico (kg)</label><input class="pf-input" id="biaMuscle" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaWater">Acqua corporea totale (L)</label><input class="pf-input" id="biaWater" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaProtein">Proteine (kg)</label><input class="pf-input" id="biaProtein" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaMinerals">Minerali (kg)</label><input class="pf-input" id="biaMinerals" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaVisceral">Grasso viscerale (livello)</label><input class="pf-input" id="biaVisceral" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaBmr">Metabolismo basale (kcal)</label><input class="pf-input" id="biaBmr" type="text" inputmode="numeric"></div>
-            <div class="pf-field"><label for="biaWaistHip">Rapporto vita/fianchi</label><input class="pf-input" id="biaWaistHip" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaScore">Punteggio InBody</label><input class="pf-input" id="biaScore" type="text" inputmode="numeric"></div>
-            <div class="pf-field"><label for="biaTargetWeight">Peso obiettivo (kg)</label><input class="pf-input" id="biaTargetWeight" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaWeightControl">Controllo peso (kg)</label><input class="pf-input" id="biaWeightControl" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaFatControl">Controllo grasso (kg)</label><input class="pf-input" id="biaFatControl" type="text" inputmode="decimal"></div>
-            <div class="pf-field"><label for="biaMuscleControl">Controllo muscolo (kg)</label><input class="pf-input" id="biaMuscleControl" type="text" inputmode="decimal"></div>
-          </div>
-          <div class="bia-summary" id="biaDerivedValues"></div>
-          <details class="bia-raw"><summary>Mostra il testo letto dalla foto</summary><pre id="biaRawText"></pre></details>
-          <div class="bia-status" id="biaReviewStatus" role="status" aria-live="polite"></div>
-          <div class="bk-acts"><button class="bk-b" id="biaCancelReview" type="button">Annulla</button><button class="bk-b" type="submit">Salva BIA nel profilo</button></div>
-        </form></div>
+        ${!ultimaBia?'<div class="bk-n">Nessuna rilevazione registrata.</div>':''}
         ${storicoBiaHtml?`<div class="bia-history"><div class="bk-l">Storico recente</div>${storicoBiaHtml}</div>`:''}
       </div>
 
@@ -2387,54 +2356,6 @@
     pv.onchange=()=>{ volTimer=+pv.value; saveStateNow(); riapplicaVolume(); };
     document.getElementById('pfVolProva').onclick=()=>{ ensureAudio(); provaSuono(); };
     document.getElementById('bkExp').onclick=esportaBackup;
-    const biaPhotoInput=document.getElementById('biaPhotoInput'), biaReviewArea=document.getElementById('biaReviewArea');
-    const biaUploadStatus=document.getElementById('biaUploadStatus'), biaReviewStatus=document.getElementById('biaReviewStatus');
-    let biaPhotoUrl=null, pendingBia=null, fatMassEdited=false;
-    const localDateInput=()=>{ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); };
-    const readBiaNumber=id=>{ const raw=document.getElementById(id).value.trim().replace(/\s/g,'').replace(',','.'); if(!raw)return null; const n=Number(raw); return Number.isFinite(n)?n:null; };
-    const writeBiaNumber=(id,value,digits=2)=>{ document.getElementById(id).value=value==null?'':Number(value).toFixed(digits).replace(/\.?0+$/,''); };
-    const updateBiaDerived=()=>{
-      const h=readBiaNumber('biaHeight'), w=readBiaNumber('biaWeight'), pct=readBiaNumber('biaFatPercent'), mass=document.getElementById('biaFatMass');
-      if(!fatMassEdited && w>0 && pct!=null && pct>=0) mass.value=(w*pct/100).toFixed(1);
-      const fat=readBiaNumber('biaFatMass'), bmi=h>0&&w>0?w/((h/100)**2):null, lean=w!=null&&fat!=null?w-fat:null;
-      document.getElementById('biaDerivedValues').innerHTML=`<div class="bia-value"><b>${formatBia(bmi)}</b><span>BMI calcolato</span></div><div class="bia-value"><b>${formatBia(fat)} kg</b><span>Massa grassa</span></div><div class="bia-value"><b>${formatBia(lean)} kg</b><span>Massa magra</span></div><div class="bia-value"><b>${h>0&&w>0?Math.round((w/(22*((h/100)**2)))*100):'—'}%</b><span>Grado obesità stimato</span></div>`;
-    };
-    document.getElementById('biaChoosePhoto').onclick=()=>biaPhotoInput.click();
-    biaPhotoInput.onchange=async()=>{
-      const file=biaPhotoInput.files&&biaPhotoInput.files[0]; biaPhotoInput.value=''; if(!file)return;
-      if(biaPhotoUrl)URL.revokeObjectURL(biaPhotoUrl); biaPhotoUrl=URL.createObjectURL(file); pendingBia=null; fatMassEdited=false;
-      document.getElementById('biaPhotoPreview').src=biaPhotoUrl; biaReviewArea.classList.add('hidden'); biaReviewStatus.textContent=''; biaReviewStatus.classList.remove('error');
-      biaUploadStatus.textContent='Sto leggendo il referto…'; biaUploadStatus.classList.remove('error');
-      try{
-        if(!window.lippolisBiaOcr)throw new Error('Lettore OCR in caricamento. Riprova tra qualche secondo.');
-        pendingBia=await window.lippolisBiaOcr.recognize(file,({status,progress})=>{ const pct=Number.isFinite(progress)?` ${Math.round(progress*100)}%`:''; biaUploadStatus.textContent=`${status||'Lettura del referto…'}${pct}`; });
-        const values={biaAge:pendingBia.age,biaHeight:pendingBia.heightCm,biaWeight:pendingBia.weightKg,biaFatPercent:pendingBia.bodyFatPercent,biaFatMass:pendingBia.bodyFatMassKg,biaMuscle:pendingBia.skeletalMuscleKg,biaWater:pendingBia.totalBodyWaterL,biaProtein:pendingBia.proteinKg,biaMinerals:pendingBia.mineralsKg,biaVisceral:pendingBia.visceralFatLevel,biaBmr:pendingBia.basalMetabolicRateKcal,biaWaistHip:pendingBia.waistHipRatio,biaScore:pendingBia.score,biaTargetWeight:pendingBia.targetWeightKg,biaWeightControl:pendingBia.weightControlKg,biaFatControl:pendingBia.fatControlKg,biaMuscleControl:pendingBia.muscleControlKg};
-        Object.entries(values).forEach(([id,value])=>writeBiaNumber(id,value));
-        document.getElementById('biaMeasuredAt').value=pendingBia.measuredAtLocal||localDateInput(); document.getElementById('biaSex').value=pendingBia.sex||'';
-        document.getElementById('biaRawText').textContent=pendingBia.rawText||'Nessun testo rilevato.';
-        document.getElementById('biaReviewArea').classList.remove('hidden');
-        document.getElementById('biaReviewStatus').textContent=`Lettura completata (${Math.round(pendingBia.confidence||0)}% di confidenza OCR). Verifica i campi prima di salvare.`;
-        biaUploadStatus.textContent='Foto letta. Controlla i valori riconosciuti.'; updateBiaDerived();
-      }catch(error){ biaUploadStatus.textContent=error.message||'Lettura non riuscita.'; biaUploadStatus.classList.add('error'); }
-    };
-    ['biaHeight','biaWeight','biaFatPercent'].forEach(id=>document.getElementById(id).addEventListener('input',updateBiaDerived));
-    document.getElementById('biaFatMass').addEventListener('input',()=>{fatMassEdited=true;updateBiaDerived();});
-    document.getElementById('biaCancelReview').onclick=()=>{ biaReviewArea.classList.add('hidden'); biaUploadStatus.textContent='Foto annullata.'; pendingBia=null; if(biaPhotoUrl){URL.revokeObjectURL(biaPhotoUrl);biaPhotoUrl=null;} };
-    document.getElementById('biaReviewForm').onsubmit=event=>{
-      event.preventDefault(); if(!pendingBia)return;
-      const h=readBiaNumber('biaHeight'),w=readBiaNumber('biaWeight');
-      if(!(h>=80&&h<=250)||!(w>=20&&w<=400)){biaReviewStatus.textContent='Controlla altezza (80–250 cm) e peso (20–400 kg).';biaReviewStatus.classList.add('error');return;}
-      const measuredAt=new Date(document.getElementById('biaMeasuredAt').value); if(Number.isNaN(measuredAt.getTime())){biaReviewStatus.textContent='Inserisci la data della misurazione.';biaReviewStatus.classList.add('error');return;}
-      const fatPercent=readBiaNumber('biaFatPercent'),fatMass=readBiaNumber('biaFatMass');
-      const checks=[['biaAge',10,110,'età'],['biaMuscle',0,w,'massa muscolare'],['biaWater',0,w,'acqua corporea'],['biaProtein',0,w,'proteine'],['biaMinerals',0,w,'minerali'],['biaVisceral',0,50,'grasso viscerale'],['biaBmr',500,6000,'metabolismo basale'],['biaWaistHip',0.3,2,'rapporto vita/fianchi'],['biaScore',0,150,'punteggio InBody'],['biaTargetWeight',20,400,'peso obiettivo'],['biaWeightControl',-200,200,'controllo peso'],['biaFatControl',-200,200,'controllo grasso'],['biaMuscleControl',-200,200,'controllo muscolo']];
-      const invalid=checks.find(([id,min,max])=>{const value=readBiaNumber(id);return value!=null&&(value<min||value>max);});
-      if(invalid){biaReviewStatus.textContent=`Controlla il campo ${invalid[3]}: il valore letto è fuori dall’intervallo previsto.`;biaReviewStatus.classList.add('error');return;}
-      if(fatPercent!=null&&(fatPercent<0||fatPercent>75)||fatMass!=null&&(fatMass<0||fatMass>w)){biaReviewStatus.textContent='Controlla percentuale e massa grassa.';biaReviewStatus.classList.add('error');return;}
-      const futureLimit=Date.now()+5*60*1000;if(measuredAt.getTime()>futureLimit){biaReviewStatus.textContent='La data della misurazione non può essere nel futuro.';biaReviewStatus.classList.add('error');return;}
-      const record={id:crypto.randomUUID(),source:'photo-ocr',measuredAt:measuredAt.toISOString(),age:readBiaNumber('biaAge'),sex:document.getElementById('biaSex').value||null,heightCm:h,weightKg:w,bmi:Math.round(w/((h/100)**2)*10)/10,obesityDegreePercent:Math.round((w/(22*((h/100)**2)))*100),bodyFatPercent:fatPercent,bodyFatMassKg:fatMass==null&&fatPercent!=null?Math.round(w*fatPercent)/100:fatMass,fatFreeMassKg:fatMass==null&&fatPercent==null?null:Math.round((w-(fatMass==null?w*fatPercent/100:fatMass))*100)/100,skeletalMuscleKg:readBiaNumber('biaMuscle'),totalBodyWaterL:readBiaNumber('biaWater'),proteinKg:readBiaNumber('biaProtein'),mineralsKg:readBiaNumber('biaMinerals'),visceralFatLevel:readBiaNumber('biaVisceral'),basalMetabolicRateKcal:readBiaNumber('biaBmr'),waistHipRatio:readBiaNumber('biaWaistHip'),score:readBiaNumber('biaScore'),targetWeightKg:readBiaNumber('biaTargetWeight'),weightControlKg:readBiaNumber('biaWeightControl'),fatControlKg:readBiaNumber('biaFatControl'),muscleControlKg:readBiaNumber('biaMuscleControl'),ocrConfidence:Math.round(pendingBia.confidence||0)};
-      try{ const duplicate=biaRecords.some(item=>item.measuredAt===record.measuredAt&&Number(item.weightKg)===record.weightKg); if(duplicate){biaReviewStatus.textContent='Questa misurazione sembra già presente nello storico.';biaReviewStatus.classList.add('error');return;} window.lippolisAthleteApi.addBiaRecord(record); if(biaPhotoUrl){URL.revokeObjectURL(biaPhotoUrl);biaPhotoUrl=null;} toastMsg('BIA salvata nel profilo e nello storico'); renderProfilo(); }
-      catch(error){biaReviewStatus.textContent=error.message||'Non è stato possibile salvare la BIA.';biaReviewStatus.classList.add('error');}
-    };
     const fi=document.getElementById('bkFile');
     document.getElementById('bkImp').onclick=()=>fi.click();
     fi.onchange=()=>{ const f=fi.files&&fi.files[0]; if(f) importaBackupFile(f); fi.value=''; };
@@ -2673,6 +2594,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261109-bia-photo-ocr1"></script>
+<script type="module" src="src/athlete.mjs?v=20261109-bia-photo-ocr2"></script>
 </body>
 </html>

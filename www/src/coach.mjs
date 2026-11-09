@@ -1,9 +1,11 @@
 import { adminCall, profileFromRow, supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
+import { recognizeInBodyPhoto } from "./bia-ocr.mjs";
 
 const $ = (id) => document.getElementById(id);
 const state = { coach: null, clients: [], selected: null, snapshot: {}, currentProgram: null, drafts: [], versions: [], messages: [], activeDraft: null, dirty: false, channels: [] };
-const calls = Object.fromEntries(["createClient", "setClientAccess", "deleteClient", "exportClientData", "saveProgramDraft", "publishProgram", "archiveProgramDraft"].map((name) => [name, (data) => adminCall(name, data)]));
+const calls = Object.fromEntries(["createClient", "setClientAccess", "deleteClient", "exportClientData", "recordBia", "saveProgramDraft", "publishProgram", "archiveProgramDraft"].map((name) => [name, (data) => adminCall(name, data)]));
+let pendingBia = null, biaPhotoUrl = null, biaSourceClientUid = null;
 
 function esc(value) { return String(value ?? "").replace(/[&<>'"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
 function initials(profile) { return `${profile.firstName?.[0] || ""}${profile.lastName?.[0] || ""}`.toUpperCase() || "CL"; }
@@ -55,7 +57,7 @@ async function loadDetails(uid) {
 }
 async function selectClient(uid) {
   if (state.dirty && !confirm("Ci sono modifiche non salvate alla scheda. Vuoi abbandonarle?")) return;
-  state.dirty = false; stopDetails(); state.selected = state.clients.find((client) => client.id === uid); if (!state.selected) return;
+  resetBiaUpload(); state.dirty = false; stopDetails(); state.selected = state.clients.find((client) => client.id === uid); if (!state.selected) return;
   state.snapshot = {}; state.currentProgram = null; state.versions = []; state.messages = []; state.drafts = []; state.activeDraft = null;
   renderClients(); renderDetail(); resetProgramForm(); $("empty").classList.add("hidden"); $("detail").classList.add("show"); await loadDetails(uid);
   const reload = () => loadDetails(uid); watch("profiles", `id=eq.${uid}`, reload); watch("athlete_states", `user_id=eq.${uid}`, reload); watch("programs", `athlete_id=eq.${uid}`, reload); watch("program_versions", `athlete_id=eq.${uid}`, reload); watch("messages", `athlete_id=eq.${uid}`, reload); watch("program_drafts", `athlete_id=eq.${uid}`, reload);
@@ -85,7 +87,8 @@ function renderActivity() {
 const biaMetrics = [
   { key: "weightKg", title: "Peso", unit: "kg", color: "#087b65" },
   { key: "skeletalMuscleKg", title: "Massa muscolo scheletrico", unit: "kg", color: "#3867b7" },
-  { key: "bodyFatPercent", title: "Grasso corporeo", unit: "%", color: "#c47713" }
+  { key: "bodyFatMassKg", title: "Massa grassa", unit: "kg", color: "#c47713" },
+  { key: "bodyFatPercent", title: "Grasso corporeo", unit: "%", color: "#a84747" }
 ];
 function biaNumber(value, digits = 1) { return Number.isFinite(Number(value)) && value !== null && value !== "" ? `${Number(value).toLocaleString("it-IT", { minimumFractionDigits: digits, maximumFractionDigits: digits })}` : "—"; }
 function drawBiaChart(entries, metric) {
@@ -108,7 +111,71 @@ function renderSegmental(record) {
 function renderBia() {
   const entries = (Array.isArray(state.snapshot.bia) ? state.snapshot.bia : []).slice().sort((a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime());
   $("biaCharts").innerHTML = biaMetrics.map((metric) => drawBiaChart(entries, metric)).join("");
-  $("biaList").innerHTML = entries.slice().reverse().slice(0, 30).map((item) => `<div class="rowcard"><b>${when(item.measuredAt)} · ${biaNumber(item.weightKg)} kg</b><small>BMI ${biaNumber(item.bmi)} · Grado obesità ${biaNumber(item.obesityDegreePercent, 0)}% · Grasso ${biaNumber(item.bodyFatPercent)}% (${biaNumber(item.bodyFatMassKg)} kg) · Massa magra ${biaNumber(item.fatFreeMassKg)} kg · Muscolo scheletrico ${biaNumber(item.skeletalMuscleKg)} kg</small><small style="display:block;margin-top:4px">Età ${biaNumber(item.age, 0)} · ${item.sex === "male" ? "Maschio" : item.sex === "female" ? "Femmina" : "Sesso non indicato"} · Altezza ${biaNumber(item.heightCm, 0)} cm · Acqua ${biaNumber(item.totalBodyWaterL)} L · Proteine ${biaNumber(item.proteinKg)} kg · Minerali ${biaNumber(item.mineralsKg, 2)} kg · Viscerale ${biaNumber(item.visceralFatLevel, 0)} · BMR ${biaNumber(item.basalMetabolicRateKcal, 0)} kcal · V/F ${biaNumber(item.waistHipRatio, 2)}${item.score == null ? "" : ` · InBody ${biaNumber(item.score, 0)}/100`}</small>${item.targetWeightKg == null && item.weightControlKg == null && item.fatControlKg == null && item.muscleControlKg == null ? "" : `<small style="display:block;margin-top:4px">Obiettivo ${biaNumber(item.targetWeightKg)} kg · Controllo peso ${biaNumber(item.weightControlKg)} kg · grasso ${biaNumber(item.fatControlKg)} kg · muscolo ${biaNumber(item.muscleControlKg)} kg</small>`}${renderSegmental(item)}</div>`).join("") || `<p class="sub">Quando il cliente caricherà una foto BIA, qui compariranno i valori e l’andamento.</p>`;
+  $("biaList").innerHTML = entries.slice().reverse().slice(0, 30).map((item) => `<div class="rowcard"><b>${when(item.measuredAt)} · ${biaNumber(item.weightKg)} kg</b><small>BMI ${biaNumber(item.bmi)} · Grado obesità ${biaNumber(item.obesityDegreePercent, 0)}% · Grasso ${biaNumber(item.bodyFatPercent)}% (${biaNumber(item.bodyFatMassKg)} kg) · Massa magra ${biaNumber(item.fatFreeMassKg)} kg · Muscolo scheletrico ${biaNumber(item.skeletalMuscleKg)} kg</small><small style="display:block;margin-top:4px">Età ${biaNumber(item.age, 0)} · ${item.sex === "male" ? "Maschio" : item.sex === "female" ? "Femmina" : "Sesso non indicato"} · Altezza ${biaNumber(item.heightCm, 0)} cm · Acqua ${biaNumber(item.totalBodyWaterL)} L · Proteine ${biaNumber(item.proteinKg)} kg · Minerali ${biaNumber(item.mineralsKg, 2)} kg · Viscerale ${biaNumber(item.visceralFatLevel, 0)} · BMR ${biaNumber(item.basalMetabolicRateKcal, 0)} kcal · V/F ${biaNumber(item.waistHipRatio, 2)}${item.score == null ? "" : ` · InBody ${biaNumber(item.score, 0)}/100`}</small>${item.targetWeightKg == null && item.weightControlKg == null && item.fatControlKg == null && item.muscleControlKg == null ? "" : `<small style="display:block;margin-top:4px">Obiettivo ${biaNumber(item.targetWeightKg)} kg · Controllo peso ${biaNumber(item.weightControlKg)} kg · grasso ${biaNumber(item.fatControlKg)} kg · muscolo ${biaNumber(item.muscleControlKg)} kg</small>`}${renderSegmental(item)}</div>`).join("") || `<p class="sub">Carica qui la foto BIA del cliente: dopo il salvataggio compariranno i valori riconosciuti e l’andamento.</p>`;
+}
+function resetBiaUpload() {
+  pendingBia = null; biaSourceClientUid = null;
+  if (biaPhotoUrl) { URL.revokeObjectURL(biaPhotoUrl); biaPhotoUrl = null; }
+  const input = $("biaPhotoInput"); if (input) input.value = "";
+  const area = $("biaReviewArea"); if (area) area.classList.add("hidden");
+  const status = $("biaUploadStatus"); if (status) { status.textContent = ""; status.classList.remove("error"); }
+}
+function numberFromBiaField(id) {
+  const raw = $(id).value.trim().replace(/\s/g, "").replace(",", "."); if (!raw) return null;
+  const value = Number(raw); return Number.isFinite(value) ? value : null;
+}
+function updateBiaFatMass() {
+  const weight = numberFromBiaField("biaWeight"), percent = numberFromBiaField("biaFatPercent");
+  $("biaFatMass").value = weight != null && percent != null ? (weight * percent / 100).toFixed(2).replace(".", ",") : "";
+}
+function writeBiaField(id, value) { $(id).value = value == null ? "" : String(value).replace(".", ","); }
+function localDateTimeInput(value) {
+  const date = value ? new Date(value) : new Date(); if (!Number.isFinite(date.getTime())) return "";
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+function setupBiaUpload() {
+  const input = $("biaPhotoInput"), area = $("biaReviewArea"), uploadStatus = $("biaUploadStatus"), reviewStatus = $("biaReviewStatus");
+  const photoPreview = $("biaPhotoPreview");
+  const mappings = { biaAge: "age", biaHeight: "heightCm", biaWeight: "weightKg", biaFatPercent: "bodyFatPercent", biaFatMass: "bodyFatMassKg", biaMuscle: "skeletalMuscleKg", biaWater: "totalBodyWaterL", biaProtein: "proteinKg", biaMinerals: "mineralsKg", biaVisceral: "visceralFatLevel", biaBmr: "basalMetabolicRateKcal", biaWaistHip: "waistHipRatio", biaScore: "score", biaTargetWeight: "targetWeightKg", biaWeightControl: "weightControlKg", biaFatControl: "fatControlKg", biaMuscleControl: "muscleControlKg" };
+  $("biaChoosePhoto").addEventListener("click", () => { if (!state.selected) return; input.click(); });
+  input.addEventListener("change", async () => {
+    const file = input.files?.[0]; input.value = ""; if (!file) return;
+    resetBiaUpload(); biaSourceClientUid = state.selected?.id || null;
+    if (!biaSourceClientUid) { uploadStatus.textContent = "Seleziona prima un cliente."; uploadStatus.classList.add("error"); return; }
+    if (!file.type.startsWith("image/") || file.size > 15 * 1024 * 1024) { uploadStatus.textContent = file.size > 15 * 1024 * 1024 ? "La foto supera 15 MB. Riducila e riprova." : "Scegli una foto JPG, PNG o WebP."; uploadStatus.classList.add("error"); return; }
+    biaPhotoUrl = URL.createObjectURL(file); photoPreview.src = biaPhotoUrl; uploadStatus.classList.remove("error"); uploadStatus.textContent = "Lettura della foto sul dispositivo…";
+    try {
+      pendingBia = await recognizeInBodyPhoto(file, ({ status, progress }) => { const percent = Number.isFinite(progress) ? ` ${Math.round(progress * 100)}%` : ""; uploadStatus.textContent = `${status || "Lettura del referto…"}${percent}`; });
+      for (const [id, key] of Object.entries(mappings)) writeBiaField(id, pendingBia[key]);
+      updateBiaFatMass();
+      $("biaMeasuredAt").value = localDateTimeInput(pendingBia.measuredAtLocal); $("biaSex").value = pendingBia.sex || "";
+      $("biaRawText").textContent = pendingBia.rawText || "Nessun testo riconosciuto.";
+      area.classList.remove("hidden"); reviewStatus.classList.remove("error");
+      reviewStatus.textContent = `Lettura completata · confidenza OCR ${Math.round(pendingBia.confidence || 0)}%. Verifica i valori, soprattutto data, peso e percentuali.`;
+      uploadStatus.textContent = "Foto letta: controlla i dati prima del salvataggio.";
+    } catch (error) { uploadStatus.textContent = error.message || "Non è stato possibile leggere la foto."; uploadStatus.classList.add("error"); }
+  });
+  ["biaWeight", "biaFatPercent"].forEach((id) => $(id).addEventListener("input", updateBiaFatMass));
+  $("biaCancelReview").addEventListener("click", resetBiaUpload);
+  $("biaReviewForm").addEventListener("submit", async (event) => {
+    event.preventDefault(); if (!pendingBia) return;
+    if (!state.selected || state.selected.id !== biaSourceClientUid) { reviewStatus.textContent = "Il cliente selezionato è cambiato. Selezionalo di nuovo e ricarica la foto."; reviewStatus.classList.add("error"); return; }
+    const measuredAt = new Date($("biaMeasuredAt").value), heightCm = numberFromBiaField("biaHeight"), weightKg = numberFromBiaField("biaWeight");
+    if (!Number.isFinite(measuredAt.getTime()) || measuredAt.getTime() > Date.now() + 5 * 60 * 1000) { reviewStatus.textContent = "Controlla la data del referto."; reviewStatus.classList.add("error"); return; }
+    if (!(heightCm >= 80 && heightCm <= 250) || !(weightKg >= 20 && weightKg <= 400)) { reviewStatus.textContent = "Altezza (80–250 cm) e peso (20–400 kg) sono obbligatori: verifica i valori riconosciuti."; reviewStatus.classList.add("error"); return; }
+    const bodyFatPercent = numberFromBiaField("biaFatPercent");
+    if (bodyFatPercent != null && (bodyFatPercent < 0 || bodyFatPercent > 75)) { reviewStatus.textContent = "Controlla la percentuale di grasso corporeo."; reviewStatus.classList.add("error"); return; }
+    const ranges = [["biaAge",10,110,"età"],["biaMuscle",0,weightKg,"massa muscolare"],["biaWater",0,200,"acqua corporea"],["biaProtein",0,100,"proteine"],["biaMinerals",0,50,"minerali"],["biaVisceral",0,50,"grasso viscerale"],["biaBmr",500,6000,"metabolismo basale"],["biaWaistHip",0.3,2,"rapporto vita/fianchi"],["biaScore",0,150,"punteggio InBody"],["biaTargetWeight",20,400,"peso obiettivo"],["biaWeightControl",-200,200,"controllo peso"],["biaFatControl",-200,200,"controllo grasso"],["biaMuscleControl",-200,200,"controllo muscolo"]];
+    const invalid = ranges.find(([id, min, max]) => { const value = numberFromBiaField(id); return value != null && (value < min || value > max); });
+    if (invalid) { reviewStatus.textContent = `Verifica ${invalid[3]}: il valore è fuori dall’intervallo previsto.`; reviewStatus.classList.add("error"); return; }
+    if ((state.snapshot.bia || []).some((item) => item.measuredAt === measuredAt.toISOString() && Number(item.weightKg) === weightKg)) { reviewStatus.textContent = "Questa misurazione sembra già presente nello storico."; reviewStatus.classList.add("error"); return; }
+    const button = $("biaSave"); setBusy(button, true, "Salvataggio…"); reviewStatus.textContent = "Salvo la rilevazione nel profilo del cliente…"; reviewStatus.classList.remove("error");
+    try {
+      const result = await calls.recordBia({ clientUid: biaSourceClientUid, measuredAt: measuredAt.toISOString(), age: numberFromBiaField("biaAge"), sex: $("biaSex").value || null, heightCm, weightKg, bodyFatPercent, skeletalMuscleKg: numberFromBiaField("biaMuscle"), totalBodyWaterL: numberFromBiaField("biaWater"), proteinKg: numberFromBiaField("biaProtein"), mineralsKg: numberFromBiaField("biaMinerals"), visceralFatLevel: numberFromBiaField("biaVisceral"), basalMetabolicRateKcal: numberFromBiaField("biaBmr"), waistHipRatio: numberFromBiaField("biaWaistHip"), score: numberFromBiaField("biaScore"), targetWeightKg: numberFromBiaField("biaTargetWeight"), weightControlKg: numberFromBiaField("biaWeightControl"), fatControlKg: numberFromBiaField("biaFatControl"), muscleControlKg: numberFromBiaField("biaMuscleControl") });
+      state.snapshot.bia = [...(Array.isArray(state.snapshot.bia) ? state.snapshot.bia : []), result.record]; renderBia(); resetBiaUpload(); uploadStatus.textContent = "BIA salvata. Lo storico e i grafici del cliente sono aggiornati.";
+    } catch (error) { reviewStatus.textContent = friendlyAuthError(error); reviewStatus.classList.add("error"); }
+    finally { setBusy(button, false); }
+  });
 }
 function renderMessages() { $("messageList").innerHTML = state.messages.map((item) => `<div class="rowcard"><b>${item.senderId === state.coach?.uid ? "Tu" : esc(state.selected?.firstName || "Cliente")}</b><small>${when(item.createdAt)}</small><div style="margin-top:6px;font-size:13px">${esc(item.text)}</div></div>`).join("") || `<p class="sub">Nessun messaggio.</p>`; }
 function defaultWeeks() { return [{ n: 1, dal: $("programStart").value || "", al: $("programEnd").value || "", giorni: [{ titolo: "Giorno A", dt: "", esercizi: [{ nome: "", serie: 3, reps: "8-12", rec: "90", carico: "", note: "" }] }] }]; }
@@ -133,6 +200,7 @@ $("archiveDraft").addEventListener("click", async () => { if (!state.activeDraft
 $("importProgram").addEventListener("click", () => $("importProgramFile").click()); $("importProgramFile").addEventListener("change", async () => { const file = $("importProgramFile").files[0]; if (!file) return; try { const data = JSON.parse(await file.text()); const program = data.PROGRAMMA || data.program || data; $("programName").value = program.nome || program.name || ""; $("programStart").value = program.dal || program.startDate || ""; $("programEnd").value = program.al || program.endDate || ""; $("programJson").value = JSON.stringify(program.settimane || program.weeks || [], null, 2); state.activeDraft = null; state.dirty = true; notice($("programNotice"), "File importato. Controlla e salva la bozza."); } catch { notice($("programNotice"), "File JSON non valido.", true); } finally { $("importProgramFile").value = ""; } });
 $("sendMessage").addEventListener("click", async () => { const text = $("coachMessage").value.trim(); if (!text || !state.selected) return; const button = $("sendMessage"); setBusy(button, true, "Invio…"); try { const { error } = await supabase.from("messages").insert({ athlete_id: state.selected.id, sender_id: state.coach.uid, target_id: state.selected.id, channel: "thread", text }); if (error) throw error; $("coachMessage").value = ""; } catch (error) { alert(friendlyAuthError(error)); } finally { setBusy(button, false); } });
 $("printBia").addEventListener("click", () => window.print());
+setupBiaUpload();
 $("changePassword").addEventListener("click", () => { $("currentPassword").value = ""; $("coachNewPassword").value = ""; notice($("passwordNotice"), ""); openModal("passwordModal"); }); $("savePassword").addEventListener("click", async () => { const button = $("savePassword"); setBusy(button, true); try { const { error: authError } = await supabase.auth.signInWithPassword({ email: state.coach.email, password: $("currentPassword").value }); if (authError) throw authError; if ($("coachNewPassword").value.length < 12) throw new Error("La nuova password deve contenere almeno 12 caratteri."); const { error } = await supabase.auth.updateUser({ password: $("coachNewPassword").value }); if (error) throw error; notice($("passwordNotice"), "Password aggiornata."); } catch (error) { notice($("passwordNotice"), friendlyAuthError(error), true); } finally { setBusy(button, false); } });
 $("logout").addEventListener("click", logout); window.addEventListener("beforeunload", (event) => { if (!state.dirty) return; event.preventDefault(); event.returnValue = ""; });
 

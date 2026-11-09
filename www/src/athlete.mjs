@@ -1,9 +1,5 @@
 import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
-import { recognizeInBodyPhoto } from "./bia-ocr.mjs";
-
-window.lippolisBiaOcr = { recognize: recognizeInBodyPhoto };
-
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
 let knownRevision = 0;
