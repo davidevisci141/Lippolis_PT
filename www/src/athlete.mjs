@@ -7,6 +7,7 @@ document.getElementById("athleteLogout")?.addEventListener("click", async () => 
   if (window.lippolisAccount?.logout) await window.lippolisAccount.logout();
   else await logout();
 });
+document.getElementById("athletePasswordTop")?.addEventListener("click", () => window.lippolisAccount?.changePassword());
 let knownRevision = 0;
 let knownProgramVersion = "";
 let cloudReady = false;
@@ -59,6 +60,8 @@ async function bootstrap(session) {
       if (error) throw error;
       if (!data || data.id !== user.uid) throw new Error("Il profilo non è stato aggiornato. Ricarica la pagina e riprova.");
       window.__LIPPOLIS_PROFILE__ = { ...profile, firstName: data.first_name, lastName: data.last_name, displayName: data.display_name };
+      const identityName = document.querySelector("#athleteIdentity b");
+      if (identityName) identityName.textContent = data.display_name || `${data.first_name} ${data.last_name}`.trim();
       return window.__LIPPOLIS_PROFILE__;
     },
     changePassword: async () => {

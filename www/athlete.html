@@ -52,14 +52,16 @@
   @media (min-width:600px){ body{background:var(--bg);} .phone{box-shadow:0 0 60px rgba(0,0,0,.35);} }
   @media (min-width:900px){
     html:not([data-tema="scuro"]) .phone{--device:#F2F6F4;--surface:#fff;--surface2:#EAF2EF;--line:#DCE5E2;--line-soft:#E7EEEB;--text:#13211F;--muted:#687572;--muted2:#87928F;}
-    body{background:#EAF0ED;overflow:auto;}
-    .phone{max-width:1180px;height:calc(100% - 48px);min-height:680px;margin:24px auto;border-radius:22px;box-shadow:0 18px 55px rgba(19,33,31,.16);}
+    body{background:var(--device);overflow:hidden;}
+    .phone{max-width:none;width:100%;height:100%;min-height:0;margin:0;border-radius:0;box-shadow:none;}
     .topbar{min-height:72px;padding:12px 28px;background:#101817;}
     .topbar .name{color:#fff;}
     .topbar .identity{color:#adbbb7;}
     .topbar .identity b{color:#fff;}
-    .topbar .account-exit{margin-left:2px;border-color:#40504c;background:transparent;color:#fff;}
-    .view{padding:18px 30px 28px;}
+    .topbar .account-tools{margin-left:auto;}
+    .topbar .account-exit,.topbar .account-password{border-color:#40504c;background:transparent;color:#fff;}
+    .view{width:100%;padding:18px clamp(24px,4vw,72px) 28px;}
+    #profileAccount{display:none;}
   }
 
   .topbar{display:flex; align-items:center; gap:10px; padding:8px 20px 12px;}
@@ -68,14 +70,17 @@
   .topbar .name{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:15px; letter-spacing:1.5px; color:var(--text);}
   .topbar .name b{color:var(--accent-ink);}
   .topbar .avatar{margin-left:0; width:34px;height:34px;border-radius:50%; background:linear-gradient(150deg,var(--accent),var(--accent-dark)); display:grid;place-items:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14px; color:var(--on-accent); box-shadow:var(--shadow-card); cursor:pointer;}
-  .topbar .identity{margin-left:auto;text-align:right;font-size:11px;line-height:1.35;color:var(--muted);}
+  .topbar .identity{text-align:right;font-size:11px;line-height:1.35;color:var(--muted);}
   .topbar .identity b,.topbar .identity span{display:block;}
   .topbar .identity b{color:var(--text);font-size:12px;}
-  .topbar .account-exit{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;}
+  .topbar .account-tools{display:flex;align-items:center;gap:10px;margin-left:auto;}
+  .topbar .account-exit,.topbar .account-password{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;white-space:nowrap;}
   .topbar .account-exit svg{width:16px;height:16px;}
+  .topbar .account-password{display:none;}
   .pf-save-status{min-height:18px;margin:6px 2px 12px;color:var(--muted);font-size:11px;font-weight:700;}
   .pf-save-status.error{color:var(--danger-ink);}
-  @media (max-width:899px){.topbar .identity{display:none}.topbar .avatar{margin-left:auto}}
+  @media (min-width:900px){.topbar .account-password{display:flex;}}
+  @media (max-width:899px){.topbar .identity,.topbar .account-password{display:none}.topbar .avatar{margin-left:0}}
   @media (max-width:380px){.topbar .account-exit{padding:8px}.topbar .account-exit span{display:none}}
 
   .view{flex:1; overflow-y:auto; padding:6px 16px 24px; scrollbar-width:thin; scrollbar-color:#9aa0a8 transparent;}
@@ -677,9 +682,12 @@
         <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="9" width="3" height="6" rx="1.2" fill="var(--accent)"/><rect x="5.5" y="7" width="3" height="10" rx="1.2" fill="var(--accent)"/><rect x="15.5" y="7" width="3" height="10" rx="1.2" fill="var(--accent)"/><rect x="19" y="9" width="3" height="6" rx="1.2" fill="var(--accent)"/><rect x="8" y="11" width="8" height="2" rx="1" fill="var(--accent)"/></svg>
       </div>
       <div class="name">LIPPOLIS<b>PT</b></div>
-      <div class="identity" id="athleteIdentity"></div>
-      <div class="avatar" onclick="showTab('profilo')">LP</div>
-      <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
+      <div class="account-tools">
+        <div class="identity" id="athleteIdentity"></div>
+        <button class="account-password" id="athletePasswordTop" type="button">Cambia password</button>
+        <div class="avatar" onclick="showTab('profilo')">LP</div>
+        <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
+      </div>
     </div>
 
     <div class="view" id="view"></div>
@@ -2268,7 +2276,7 @@
       <div class="vol-hint">Nell'app installata il timer suona sul volume <b>Sveglia</b> del telefono: questo cursore ne regola una parte.</div>
 
       <div class="pf-sec">Account</div>
-      <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Accesso personale</div><div class="bk-v" id="accountEmail">${esc((window.__LIPPOLIS_PROFILE__&&window.__LIPPOLIS_PROFILE__.email)||'')}</div><div class="bk-n">I dati sono separati per account e sincronizzati con Supabase.</div><div class="bk-actions" style="margin-top:10px"><button class="bk-b" id="accountPassword">Cambia password</button><button class="bk-b" id="accountLogout">Esci</button></div></div>
+      <div class="bk-card" id="profileAccount" style="margin-bottom:14px"><div class="bk-l">Accesso personale</div><div class="bk-v" id="accountEmail">${esc((window.__LIPPOLIS_PROFILE__&&window.__LIPPOLIS_PROFILE__.email)||'')}</div><div class="bk-n">I dati sono separati per account e sincronizzati con Supabase.</div><div class="bk-actions" style="margin-top:10px"><button class="bk-b" id="accountPassword">Cambia password</button></div></div>
 
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>
