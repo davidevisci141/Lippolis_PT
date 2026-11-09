@@ -50,13 +50,33 @@
   /* App a tutto schermo: occupa il display reale, rispettando notch e barra di navigazione */
   .phone{width:100%; max-width:560px; height:100%; margin:0 auto; background:var(--device); overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top:env(safe-area-inset-top, 0px);}
   @media (min-width:600px){ body{background:var(--bg);} .phone{box-shadow:0 0 60px rgba(0,0,0,.35);} }
+  @media (min-width:900px){
+    html:not([data-tema="scuro"]) .phone{--device:#F2F6F4;--surface:#fff;--surface2:#EAF2EF;--line:#DCE5E2;--line-soft:#E7EEEB;--text:#13211F;--muted:#687572;--muted2:#87928F;}
+    body{background:#EAF0ED;overflow:auto;}
+    .phone{max-width:1180px;height:calc(100% - 48px);min-height:680px;margin:24px auto;border-radius:22px;box-shadow:0 18px 55px rgba(19,33,31,.16);}
+    .topbar{min-height:72px;padding:12px 28px;background:#101817;}
+    .topbar .name{color:#fff;}
+    .topbar .identity{color:#adbbb7;}
+    .topbar .identity b{color:#fff;}
+    .topbar .account-exit{margin-left:2px;border-color:#40504c;background:transparent;color:#fff;}
+    .view{padding:18px 30px 28px;}
+  }
 
   .topbar{display:flex; align-items:center; gap:10px; padding:8px 20px 12px;}
   .logo{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:#23262B; box-shadow:var(--shadow-card);}
   .logo svg{width:20px;height:20px;}
   .topbar .name{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:15px; letter-spacing:1.5px; color:var(--text);}
   .topbar .name b{color:var(--accent-ink);}
-  .topbar .avatar{margin-left:auto; width:34px;height:34px;border-radius:50%; background:linear-gradient(150deg,var(--accent),var(--accent-dark)); display:grid;place-items:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14px; color:var(--on-accent); box-shadow:var(--shadow-card); cursor:pointer;}
+  .topbar .avatar{margin-left:0; width:34px;height:34px;border-radius:50%; background:linear-gradient(150deg,var(--accent),var(--accent-dark)); display:grid;place-items:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14px; color:var(--on-accent); box-shadow:var(--shadow-card); cursor:pointer;}
+  .topbar .identity{margin-left:auto;text-align:right;font-size:11px;line-height:1.35;color:var(--muted);}
+  .topbar .identity b,.topbar .identity span{display:block;}
+  .topbar .identity b{color:var(--text);font-size:12px;}
+  .topbar .account-exit{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;}
+  .topbar .account-exit svg{width:16px;height:16px;}
+  .pf-save-status{min-height:18px;margin:6px 2px 12px;color:var(--muted);font-size:11px;font-weight:700;}
+  .pf-save-status.error{color:var(--danger-ink);}
+  @media (max-width:899px){.topbar .identity{display:none}.topbar .avatar{margin-left:auto}}
+  @media (max-width:380px){.topbar .account-exit{padding:8px}.topbar .account-exit span{display:none}}
 
   .view{flex:1; overflow-y:auto; padding:6px 16px 24px; scrollbar-width:thin; scrollbar-color:#9aa0a8 transparent;}
   .view::-webkit-scrollbar{width:6px;} .view::-webkit-scrollbar-thumb{background:#a9adb3; border-radius:3px;}
@@ -657,7 +677,9 @@
         <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="9" width="3" height="6" rx="1.2" fill="var(--accent)"/><rect x="5.5" y="7" width="3" height="10" rx="1.2" fill="var(--accent)"/><rect x="15.5" y="7" width="3" height="10" rx="1.2" fill="var(--accent)"/><rect x="19" y="9" width="3" height="6" rx="1.2" fill="var(--accent)"/><rect x="8" y="11" width="8" height="2" rx="1" fill="var(--accent)"/></svg>
       </div>
       <div class="name">LIPPOLIS<b>PT</b></div>
+      <div class="identity" id="athleteIdentity"></div>
       <div class="avatar" onclick="showTab('profilo')">LP</div>
+      <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
     </div>
 
     <div class="view" id="view"></div>
@@ -2219,6 +2241,7 @@
       <div class="pf-field"><label>Cognome</label><input class="pf-input" id="pfCogn" value="${esc(profilo.cognome)}" autocomplete="family-name"></div>
       <div class="pf-field"><label>Lingua</label><div class="pf-input sel">Italiano 🇮🇹 <span class="chev">▼</span></div></div>
       <button class="btn-accent" id="save">Salva</button>
+      <div class="pf-save-status" id="profileSaveStatus" role="status" aria-live="polite"></div>
 
       <div class="pf-sec">Scheda</div>
       <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Programma in corso</div><div class="bk-v">${senzaScheda()?'Nessuna scheda':esc(PROGRAMMA.nome)}</div><div class="bk-n">${senzaScheda()?'Il PT non ha ancora assegnato una scheda':`${PROGRAMMA.settimane.length} settimane · ${PROGRAMMA.dal} → ${PROGRAMMA.al}`}</div></div>
@@ -2253,14 +2276,18 @@
       <div class="pf-link danger" id="pfReset">${I.trash} Cancella tutti i dati</div>`;
 
     const sv=document.getElementById('save');
-    sv.onclick=()=>{
-      profilo.nome=document.getElementById('pfNome').value.trim();
-      profilo.cognome=document.getElementById('pfCogn').value.trim();
-      saveStateNow(); aggiornaAvatar();
-      const cloudSave=window.lippolisAccount&&window.lippolisAccount.updateProfile ? window.lippolisAccount.updateProfile(profilo) : Promise.resolve();
-      sv.disabled=true; sv.textContent='Salvataggio…';
-      cloudSave.then(()=>{ sv.textContent='✓ Salvato'; }).catch(()=>{ sv.textContent='Errore'; }).finally(()=>setTimeout(()=>{ if(sv.isConnected){ sv.disabled=false; sv.textContent='Salva'; } },1500));
-      const av=view.querySelector('.pf-avatar .av'); if(av) av.firstChild.textContent=iniziali();
+    sv.onclick=async()=>{
+      const first=document.getElementById('pfNome').value.trim(), last=document.getElementById('pfCogn').value.trim(), status=document.getElementById('profileSaveStatus');
+      if(!first||!last){ status.textContent='Inserisci nome e cognome.'; status.classList.add('error'); return; }
+      sv.disabled=true; sv.textContent='Salvataggio…'; status.textContent=''; status.classList.remove('error');
+      try{
+        if(!window.lippolisAccount||!window.lippolisAccount.updateProfile) throw new Error('Connessione account non pronta. Riprova tra qualche secondo.');
+        await window.lippolisAccount.updateProfile({nome:first,cognome:last});
+        profilo.nome=first; profilo.cognome=last; saveStateNow(); aggiornaAvatar();
+        const av=view.querySelector('.pf-avatar .av'); if(av) av.firstChild.textContent=iniziali();
+        sv.textContent='✓ Salvato'; status.textContent='Nome e cognome aggiornati sul tuo account.';
+      }catch(error){ sv.textContent='Errore'; status.textContent=error.message||'Non è stato possibile salvare i dati. Riprova.'; status.classList.add('error'); }
+      finally{ setTimeout(()=>{ if(sv.isConnected){ sv.disabled=false; sv.textContent='Salva'; } },1800); }
     };
     view.querySelectorAll('[data-col]').forEach(b=> b.onclick=()=>{ accento=b.dataset.col; applicaAccento(); saveStateNow(); renderProfilo(); renderNav(); });
     document.getElementById('pfTema').onclick=()=>{ tema = tema==='scuro' ? 'chiaro' : 'scuro'; applicaTema(); saveStateNow(); renderProfilo(); };

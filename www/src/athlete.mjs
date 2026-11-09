@@ -3,6 +3,10 @@ import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
+document.getElementById("athleteLogout")?.addEventListener("click", async () => {
+  if (window.lippolisAccount?.logout) await window.lippolisAccount.logout();
+  else await logout();
+});
 let knownRevision = 0;
 let knownProgramVersion = "";
 let cloudReady = false;
@@ -30,6 +34,12 @@ async function bootstrap(session) {
   if (!api) throw new Error("Area atleta non inizializzata."); const { user, profile } = session; const storedUid = sessionStorage.getItem("lippolis_uid");
   if (storedUid !== user.uid) { sessionStorage.setItem("lippolis_uid", user.uid); location.reload(); return false; }
   window.__LIPPOLIS_PROFILE__ = profile;
+  const identity = document.getElementById("athleteIdentity");
+  if (identity) {
+    const name = document.createElement("b"); name.textContent = profile.displayName || `${profile.firstName || ""} ${profile.lastName || ""}`.trim() || profile.email || user.email || "Cliente";
+    const email = document.createElement("span"); email.textContent = profile.email || user.email || "";
+    identity.replaceChildren(name, email);
+  }
   const [stateResult, programResult] = await Promise.all([
     supabase.from("athlete_states").select("*").eq("user_id", user.uid).maybeSingle(),
     supabase.from("programs").select("*").eq("athlete_id", user.uid).maybeSingle()
@@ -44,7 +54,12 @@ async function bootstrap(session) {
     logout: async () => { try { if (pendingSnapshot) await flush(user.uid); } catch {} await logout(); },
     updateProfile: async (value) => {
       const first = String(value.nome || "").trim(); const last = String(value.cognome || "").trim();
-      const { error } = await supabase.from("profiles").update({ first_name: first, last_name: last, display_name: `${first} ${last}`.trim(), updated_at: new Date().toISOString() }).eq("id", user.uid); if (error) throw error;
+      const displayName = `${first} ${last}`.trim();
+      const { data, error } = await supabase.from("profiles").update({ first_name: first, last_name: last, display_name: displayName, updated_at: new Date().toISOString() }).eq("id", user.uid).select("id, first_name, last_name, display_name").single();
+      if (error) throw error;
+      if (!data || data.id !== user.uid) throw new Error("Il profilo non è stato aggiornato. Ricarica la pagina e riprova.");
+      window.__LIPPOLIS_PROFILE__ = { ...profile, firstName: data.first_name, lastName: data.last_name, displayName: data.display_name };
+      return window.__LIPPOLIS_PROFILE__;
     },
     changePassword: async () => {
       const current = prompt("Password attuale:"); if (!current) return; const next = prompt("Nuova password (almeno 12 caratteri):"); if (!next) return; const confirmNext = prompt("Ripeti la nuova password:");
