@@ -54,3 +54,12 @@ test("i blocchi restano compatti e si apre il blocco da compilare", () => {
   assert.match(html, /\.pb-block-content>header\{display:flex;flex-wrap:nowrap/);
   assert.match(html, /@media\(max-width:520px\)\{\.pb-block>summary/);
 });
+
+test("gli strumenti laterali hanno schede separate per libreria, volume e progressione", () => {
+  assert.match(builder, /\[\["library", "Libreria"\], \["volume", "Volume"\], \["progression", "Progressione"\]\]/);
+  assert.match(builder, /data-action="select-tool-panel"/);
+  assert.match(builder, /id="pbToolLibrary"/);
+  assert.match(builder, /id="pbToolVolume"/);
+  assert.match(builder, /id="pbToolProgression"/);
+  assert.match(builder, /exerciseCatalog\.values\(\)/);
+});
