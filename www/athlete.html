@@ -2449,8 +2449,8 @@
   // ====== PERSISTENZA LOCALE (offline-first) ======
   // Il workout in corso, i check-in, i pesi e i messaggi sopravvivono a chiusura app,
   // schermo bloccato o connessione assente. Supabase sincronizza alla riconnessione.
-  const ACCOUNT_UID = (()=>{ try{return sessionStorage.getItem('lippolis_uid')||'anonymous';}catch(e){return 'anonymous';} })();
-  const LS_KEY = 'lippolis_pt_atleta_v1_'+ACCOUNT_UID.replace(/[^a-zA-Z0-9_-]/g,'_');
+  let ACCOUNT_UID = (()=>{ try{return sessionStorage.getItem('lippolis_uid')||'anonymous';}catch(e){return 'anonymous';} })();
+  let LS_KEY = 'lippolis_pt_atleta_v1_'+ACCOUNT_UID.replace(/[^a-zA-Z0-9_-]/g,'_');
   let _saveT = null;
   let bloccaSalvataggi = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());   // durante un import in corso nulla deve sovrascrivere il file appena scritto
   function saveStateNow(){
@@ -2474,7 +2474,7 @@
   // (aggiornamento, poca memoria, app in background) gli ultimi minuti possono andare persi.
   // Ogni salvataggio va quindi anche su file interni dell'app, alternando due copie (se una si rompe
   // a metà scrittura resta l'altra). All'avvio vince la copia più recente fra file e localStorage.
-  const COPIE=['stato_'+ACCOUNT_UID+'_a.json','stato_'+ACCOUNT_UID+'_b.json'];
+  let COPIE=['stato_'+ACCOUNT_UID+'_a.json','stato_'+ACCOUNT_UID+'_b.json'];
   let _copiaIdx=0, _copiaIn=false, _copiaPend=null, recuperoFatto=false;
   function fsNativo(){ try{ const C=window.Capacitor; if(C && C.isNativePlatform && C.isNativePlatform() && C.Plugins && C.Plugins.Filesystem) return C.Plugins.Filesystem; }catch(e){} return null; }
   function scriviCopiaNativa(txt){
@@ -2493,19 +2493,19 @@
     let migliore=null;
     for(const p of COPIE){ try{ const r=await F.readFile({path:p, directory:'DATA', encoding:'utf8'}); const d=JSON.parse(r.data); if(d && d.v===1 && (!migliore || (d.salvato||0)>(migliore.salvato||0))) migliore=d; }catch(e){} }
     let locale=0; try{ const l=JSON.parse(localStorage.getItem(LS_KEY)||'null'); locale=(l && l.salvato)||0; }catch(e){}
-    let giaTentato=false; try{ giaTentato=sessionStorage.getItem('lpt_recupero')==='1'; }catch(e){}
-    if(migliore && (migliore.salvato||0)>locale && !giaTentato){
-      try{ sessionStorage.setItem('lpt_recupero','1'); localStorage.setItem(LS_KEY, JSON.stringify(migliore)); location.reload(); return; }catch(e){}
+    if(migliore && (migliore.salvato||0)>locale){
+      try{ localStorage.setItem(LS_KEY, JSON.stringify(migliore)); window.lippolisAthleteApi?.applySnapshot(migliore); }catch(e){}
     }
     clearTimeout(paracadute);
     try{ sessionStorage.removeItem('lpt_recupero'); }catch(e){}
     if(recuperoFatto) return;
     recuperoFatto=true; bloccaSalvataggi=false; saveStateNow();
   }
-  function loadState(){
+  function loadState(source){
     try{
-      const raw=localStorage.getItem(LS_KEY); if(!raw) return false;
-      const d=JSON.parse(raw); if(!d || d.v!==1) return false;
+      let d=source;
+      if(d===undefined){ const raw=localStorage.getItem(LS_KEY); if(!raw) return false; d=JSON.parse(raw); }
+      if(!d || d.v!==1) return false;
       if(d.PROGRAMMA && Array.isArray(d.PROGRAMMA.settimane) && d.PROGRAMMA.settimane.length) PROGRAMMA=d.PROGRAMMA;
       if(d.statoSett && typeof d.statoSett==='object') statoSett=d.statoSett;
       if(d.noteSessione && typeof d.noteSessione==='object') noteSessione=d.noteSessione;
@@ -2563,9 +2563,29 @@
     A.addListener('pause', saveStateNow);
   }
 
+  let accountDefaults = null;
   window.lippolisAthleteApi = {
-    storageKey: LS_KEY,
+    get storageKey(){ return LS_KEY; },
     snapshot: ()=>{ try{return JSON.parse(localStorage.getItem(LS_KEY)||'null')||snapshot();}catch(e){return snapshot();} },
+    switchAccount: (uid)=>{
+      const next=String(uid||'').replace(/[^a-zA-Z0-9_-]/g,'_'); if(!next) return false;
+      if(next===ACCOUNT_UID) return false;
+      const nextKey='lippolis_pt_atleta_v1_'+next;
+      let cached=null; try{ cached=JSON.parse(localStorage.getItem(nextKey)||'null'); }catch(e){}
+      ACCOUNT_UID=next; LS_KEY=nextKey; COPIE=['stato_'+next+'_a.json','stato_'+next+'_b.json'];
+      try{ sessionStorage.setItem('lippolis_uid',uid); }catch(e){}
+      loadState(cached && cached.v===1 ? cached : accountDefaults || snapshot());
+      return true;
+    },
+    applySnapshot: (value)=>{
+      if(!value || typeof value!=='object') return false;
+      const data={...snapshot(), ...value};
+      if(value.PROGRAMMA===null) data.PROGRAMMA=PROGRAMMA_DEFAULT;
+      data.salvato=Number(data.salvato||Date.now());
+      try{ localStorage.setItem(LS_KEY,JSON.stringify(data)); }catch(e){}
+      loadState(data); applicaTema(); impostaSettimana(settimanaPerData(Date.now())); ricalcolaUltimi(); aggiornaAvatar(); renderNav(); renderView();
+      return true;
+    },
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
     applyMessages: (messages)=>{
       thread=messages.filter(x=>x.channel==='thread');
@@ -2577,6 +2597,7 @@
   };
 
   // ====== AVVIO ======
+  accountDefaults=snapshot();
   loadState();
   applicaTema();
   if(PROGRAMMA===PROGRAMMA_DEFAULT){
@@ -2594,6 +2615,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261109-bia-photo-ocr2"></script>
+<script type="module" src="src/athlete.mjs?v=20261110-program-v4"></script>
 </body>
 </html>
