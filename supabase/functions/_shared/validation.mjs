@@ -1,3 +1,5 @@
+import { validateV2Program } from "../../../www/src/workout-metrics.mjs";
+
 const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ID_RX = /^[A-Za-z0-9_-]{8,128}$/;
 
@@ -19,27 +21,79 @@ export function validateCreateClient(input = {}) {
   return { firstName, lastName, email, password, idempotencyKey };
 }
 
-export function validateProgram(program = {}) {
+function dateMs(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const ms = Date.parse(`${value}T00:00:00.000Z`);
+  return Number.isFinite(ms) && new Date(ms).toISOString().slice(0, 10) === value ? ms : null;
+}
+
+function isoDate(ms) { return new Date(ms).toISOString().slice(0, 10); }
+
+export function validateProgram(program = {}, { forPublish = false } = {}) {
+  if (!program || typeof program !== "object" || Array.isArray(program)) throw new Error("Dati della scheda non validi.");
+  if (Number(program.schemaVersion || program.schema_version) === 2) {
+    const result = validateV2Program(program, { forPublish });
+    if (!result.valid) {
+      const first = result.errors[0];
+      throw new Error(`${first.path}: ${first.message}`);
+    }
+    return result.program;
+  }
   const name = cleanText(program.name || program.nome, 120);
   const startDate = cleanText(program.startDate || program.dal, 10);
   const endDate = cleanText(program.endDate || program.al, 10);
   const weeks = program.weeks || program.settimane;
   if (!name) throw new Error("Il nome della scheda è obbligatorio.");
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate) || startDate > endDate) throw new Error("Il periodo della scheda non è valido.");
+  const startMs = dateMs(startDate), endMs = dateMs(endDate);
+  if (startMs === null || endMs === null || startMs > endMs) throw new Error("Il periodo della scheda non è valido.");
   if (!Array.isArray(weeks) || weeks.length < 1 || weeks.length > 52) throw new Error("La scheda deve contenere da 1 a 52 settimane.");
+  if (weeks.some((week) => !week || typeof week !== "object" || Array.isArray(week))) throw new Error("Una o più settimane non sono valide.");
+  const hasWeekDates = weeks.some((week) => week.dal || week.al || week.startDate || week.endDate);
+  const allWeekDates = weeks.every((week) => week.dal || week.al || week.startDate || week.endDate);
+  if (hasWeekDates && !allWeekDates) throw new Error("Completa le date di tutte le settimane oppure lasciale tutte vuote per calcolarle automaticamente.");
+  let weekRanges;
+  if (hasWeekDates) {
+    weekRanges = weeks.map((week, index) => {
+      const start = cleanText(week.startDate || week.dal, 10), end = cleanText(week.endDate || week.al, 10);
+      if (dateMs(start) === null || dateMs(end) === null || start > end) throw new Error(`Settimana ${index + 1}: intervallo date non valido.`);
+      return { dal: start, al: end };
+    });
+    if (weekRanges[0].dal !== startDate || weekRanges.at(-1).al !== endDate || weekRanges.some((range, index) => index > 0 && dateMs(range.dal) !== dateMs(weekRanges[index - 1].al) + 86400000)) {
+      throw new Error("Le date delle settimane devono coprire tutto il periodo della scheda senza interruzioni.");
+    }
+  } else {
+    const totalDays = Math.floor((endMs - startMs) / 86400000) + 1;
+    if (totalDays < weeks.length) throw new Error("Il periodo è troppo breve per il numero di settimane inserite.");
+    weekRanges = weeks.map((_, index) => ({
+      dal: isoDate(startMs + Math.floor(totalDays * index / weeks.length) * 86400000),
+      al: isoDate(startMs + (Math.floor(totalDays * (index + 1) / weeks.length) - 1) * 86400000)
+    }));
+  }
+  const weekNumbers = new Set();
   const normalizedWeeks = weeks.map((week, wi) => {
     const days = week.days || week.giorni;
     if (!Array.isArray(days) || days.length < 1 || days.length > 7) throw new Error(`Settimana ${wi + 1}: giorni non validi.`);
-    return { ...week, n: Number(week.n || wi + 1), giorni: days.map((day, di) => {
+    const weekNumber = Number(week.n || wi + 1);
+    if (!Number.isInteger(weekNumber) || weekNumber < 1 || weekNumber > 52 || weekNumbers.has(weekNumber)) throw new Error(`Settimana ${wi + 1}: numero settimana non valido o duplicato.`);
+    weekNumbers.add(weekNumber);
+    return { ...week, ...weekRanges[wi], n: weekNumber, giorni: days.map((day, di) => {
+      if (!day || typeof day !== "object" || Array.isArray(day)) throw new Error(`Settimana ${wi + 1}, giorno ${di + 1}: dati non validi.`);
       const exercises = day.exercises || day.esercizi;
       if (!Array.isArray(exercises) || exercises.length < 1 || exercises.length > 40) throw new Error(`Settimana ${wi + 1}, giorno ${di + 1}: esercizi non validi.`);
-      return { ...day, titolo: cleanText(day.title || day.titolo || `Giorno ${di + 1}`, 120), esercizi: exercises.map((exercise, ei) => {
+      const normalizedExercises = exercises.map((exercise, ei) => {
+        if (!exercise || typeof exercise !== "object" || Array.isArray(exercise)) throw new Error(`Settimana ${wi + 1}, giorno ${di + 1}, esercizio ${ei + 1}: dati non validi.`);
         const exerciseName = cleanText(exercise.name || exercise.nome, 160);
         if (!exerciseName) throw new Error(`Settimana ${wi + 1}, giorno ${di + 1}, esercizio ${ei + 1}: nome mancante.`);
         const sets = Number(exercise.sets ?? exercise.serie ?? 0);
         if (!Number.isFinite(sets) || sets < 1 || sets > 20) throw new Error(`${exerciseName}: numero di serie non valido.`);
         return { ...exercise, nome: exerciseName, serie: sets, reps: cleanText(exercise.reps ?? exercise.ripetizioni, 80), rec: cleanText(exercise.rec ?? exercise.recupero, 40), note: cleanText(exercise.note, 1000) };
-      }) };
+      });
+      const minutes = Number(day.min ?? day.minutes);
+      const estimatedMinutes = Math.max(10, Math.ceil(normalizedExercises.reduce((sum, exercise) => sum + exercise.serie * (2.5 + (Number.parseFloat(exercise.rec) || 0) / 120), 0)));
+      const normalizedMinutes = day.min != null || day.minutes != null ? minutes : estimatedMinutes;
+      if (!Number.isFinite(normalizedMinutes) || normalizedMinutes < 1 || normalizedMinutes > 600) throw new Error(`Settimana ${wi + 1}, giorno ${di + 1}: durata non valida.`);
+      const letter = String.fromCharCode(65 + di);
+      return { ...day, titolo: cleanText(day.title || day.titolo || `Giorno ${letter}`, 120), dn: cleanText(day.dn || day.weekday || "Allenamento", 32), dt: cleanText(day.dt || day.dayCode || letter, 32), min: normalizedMinutes, esercizi: normalizedExercises };
     }) };
   });
   return { ...program, nome: name, dal: startDate, al: endDate, settimane: normalizedWeeks };

@@ -69,3 +69,6 @@ node_modules/
 
 # dataconnect generated files
 .dataconnect
+
+# OCR runtime bundle (recreated by npm run build:bia-ocr before Hosting deploy)
+www/vendor/bia-runtime/

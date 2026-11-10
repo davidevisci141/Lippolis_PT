@@ -6,7 +6,7 @@ class ApiError extends Error { code: string; status: number; constructor(code: s
 const ok = (data: unknown) => new Response(JSON.stringify({ data }), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
 const fail = (error: unknown) => {
   const known = error instanceof ApiError; const value = error as Error & { code?: string };
-  console.error("admin-api", value?.message || error);
+  console.error("admin-api", { code: known ? value.code : value?.code || "internal", status: known ? value.status : 500 });
   return new Response(JSON.stringify({ code: known ? value.code : value?.code || "internal", error: known ? value.message : "Operazione non riuscita." }), {
     status: known ? (error as ApiError).status : 500, headers: { ...cors, "Content-Type": "application/json" }
   });
@@ -104,44 +104,117 @@ function optionalNumber(value: unknown, label: string, min: number, max: number)
   return Math.round(number * 100) / 100;
 }
 
+const biaRequiredFields = [
+  "measuredAtLocal", "weightKg", "bodyFatMassKg", "skeletalMuscleKg"
+];
+const biaReportTypes: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", heic: "image/heic", pdf: "application/pdf" };
+function validatedSourceAudit(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new ApiError("invalid-argument", "Conferma i valori principali del referto prima di salvare.");
+  const audit = value as Record<string, unknown>, sourceFields = audit.fields;
+  if (!sourceFields || typeof sourceFields !== "object" || Array.isArray(sourceFields)) throw new ApiError("invalid-argument", "Provenienza dei campi non valida.");
+  const fields = sourceFields as Record<string, unknown>, normalized: Record<string, unknown> = {};
+  for (const key of biaRequiredFields) {
+    const entry = fields[key];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw new ApiError("invalid-argument", "Alcuni valori principali non sono stati verificati.");
+    const item = entry as Record<string, unknown>, source = String(item.source || ""), confidence = Number(item.confidence);
+    if (item.status !== "ok" || !["ocr", "pdf", "corretto_manualmente", "verificato_dal_pt"].includes(source) || !Number.isFinite(confidence) || confidence < 0 || confidence > 1 || (source === "ocr" && confidence < 0.82)) {
+      throw new ApiError("invalid-argument", "Verifica i valori principali guardando il referto.");
+    }
+    let bbox: number[][] | null = null;
+    if (item.bbox !== null && item.bbox !== undefined) {
+      if (!Array.isArray(item.bbox) || item.bbox.length < 3 || item.bbox.length > 8 || item.bbox.some((point) => !Array.isArray(point) || point.length !== 2 || point.some((coordinate) => !Number.isFinite(Number(coordinate)) || Number(coordinate) < 0 || Number(coordinate) > 1))) {
+        throw new ApiError("invalid-argument", "Coordinate OCR non valide.");
+      }
+      bbox = item.bbox.map((point) => (point as unknown[]).map(Number));
+    }
+    normalized[key] = { status: "ok", source, confidence, bbox };
+  }
+  const confirmation = audit.confirmation as Record<string, unknown> | null;
+  if (!confirmation || confirmation.manuallyConfirmed !== true) throw new ApiError("invalid-argument", "Conferma di aver controllato i valori principali sul referto.");
+  return { fields: normalized, confirmation: { manuallyConfirmed: true } };
+}
+async function validateArchivedBiaReport(path: unknown, athleteId: string) {
+  if (path === null || path === undefined || path === "") return null;
+  const safePath = String(path), uuid = "[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
+  const match = safePath.match(new RegExp(`^(${uuid})/(${uuid})(?:-preview)?\\.(jpg|png|webp|heic|pdf)$`, "i"));
+  if (!match || match[1].toLowerCase() !== athleteId.toLowerCase()) throw new ApiError("invalid-argument", "Percorso del referto non valido.");
+  const { data: file, error } = await admin.storage.from("bia-reports").download(safePath);
+  if (error || !file || file.size <= 0 || file.size > 15 * 1024 * 1024) throw new ApiError("invalid-argument", "Il referto archiviato non è leggibile o supera 15 MB.");
+  const bytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
+  const starts = (...signature: number[]) => signature.every((byte, index) => bytes[index] === byte);
+  const ascii = (from: number, length: number) => String.fromCharCode(...bytes.slice(from, from + length));
+  let actual = "";
+  if (starts(0xff, 0xd8, 0xff)) actual = "image/jpeg";
+  else if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) actual = "image/png";
+  else if (ascii(0, 4) === "RIFF" && ascii(8, 4) === "WEBP") actual = "image/webp";
+  else if (ascii(0, 5) === "%PDF-") actual = "application/pdf";
+  else if (ascii(4, 4) === "ftyp" && /^(heic|heix|hevc|hevx|mif1|msf1)$/i.test(ascii(8, 4))) actual = "image/heic";
+  if (actual !== biaReportTypes[match[3].toLowerCase()] || (file.type && file.type !== actual)) throw new ApiError("invalid-argument", "Il contenuto del referto non corrisponde al formato consentito.");
+  return safePath;
+}
+function validateBiaMath(values: Record<string, number | null>) {
+  const near = (a: number, b: number, tolerance: number) => Math.abs(a - b) <= tolerance;
+  const has = (...keys: string[]) => keys.every((key) => values[key] !== null);
+  const v = (key: string) => values[key] as number;
+  if (has("totalBodyWaterL", "proteinKg", "mineralsKg") && !near(v("weightKg"), v("totalBodyWaterL") + v("proteinKg") + v("mineralsKg") + v("bodyFatMassKg"), 0.3)) throw new ApiError("invalid-argument", "Il peso non coincide con la somma dei componenti corporei.");
+  if (has("bmi", "heightCm") && !near(v("bmi"), v("weightKg") / ((v("heightCm") / 100) ** 2), 0.15)) throw new ApiError("invalid-argument", "IMC non coerente con peso e altezza.");
+  if (has("bodyFatPercent") && !near(v("bodyFatPercent"), v("bodyFatMassKg") / v("weightKg") * 100, 0.3)) throw new ApiError("invalid-argument", "Percentuale di grasso non coerente con peso e massa grassa.");
+  if (has("targetWeightKg", "weightControlKg") && !near(v("targetWeightKg"), v("weightKg") + v("weightControlKg"), 0.2)) throw new ApiError("invalid-argument", "Peso obiettivo non coerente con il controllo del peso.");
+  if (has("weightControlKg", "fatControlKg", "muscleControlKg") && !near(v("weightControlKg"), v("fatControlKg") + v("muscleControlKg"), 0.2)) throw new ApiError("invalid-argument", "Controllo peso non coerente con grasso e muscolo.");
+  if (has("heightCm", "obesityDegreePercent")) {
+    const obesity = v("weightKg") / (22 * ((v("heightCm") / 100) ** 2)) * 100;
+    if (!near(v("obesityDegreePercent"), obesity, 1.1)) throw new ApiError("invalid-argument", "Grado di obesità non coerente con peso e altezza.");
+  }
+  const leanMass = v("weightKg") - v("bodyFatMassKg");
+  if (leanMass <= 0 || v("skeletalMuscleKg") > leanMass + 0.2) throw new ApiError("invalid-argument", "Massa muscolare incompatibile con la massa magra. Controlla i valori sul referto.");
+}
 async function recordBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  const { data: rateAllowed, error: rateError } = await admin.rpc("consume_bia_rate_limit", { p_actor: coach.user.id });
+  if (rateError) throw rateError;
+  if (rateAllowed !== true) throw new ApiError("rate-limited", "Hai raggiunto il limite temporaneo di salvataggi BIA. Riprova tra qualche minuto.", 429);
+  const sourceAudit = validatedSourceAudit(body.sourceAudit);
   const parsedDate = new Date(String(body.measuredAt || ""));
-  if (!Number.isFinite(parsedDate.getTime())) throw new ApiError("invalid-argument", "Inserisci data e ora della misurazione.");
-  const heightCm = optionalNumber(body.heightCm, "Altezza", 80, 250);
-  const weightKg = optionalNumber(body.weightKg, "Peso", 20, 400);
-  const bodyFatPercent = optionalNumber(body.bodyFatPercent, "Percentuale di grasso", 0, 75);
-  if (heightCm === null || weightKg === null) throw new ApiError("invalid-argument", "Altezza e peso sono obbligatori.");
-  const bodyFatMassKg = bodyFatPercent === null ? null : Math.round(weightKg * bodyFatPercent) / 100;
-  const measuredAt = parsedDate.toISOString();
-  const segment = (value: unknown, label: string) => optionalNumber(value, label, 0, 100);
-  const lean = body.segmentalLean && typeof body.segmentalLean === "object" ? body.segmentalLean as Record<string, unknown> : {};
-  const fat = body.segmentalFat && typeof body.segmentalFat === "object" ? body.segmentalFat as Record<string, unknown> : {};
-  const record = {
-    id: crypto.randomUUID(), measuredAt,
-    age: optionalNumber(body.age, "Età", 10, 110), sex: body.sex === "female" ? "female" : body.sex === "male" ? "male" : null,
-    heightCm, weightKg, bmi: Math.round((weightKg / ((heightCm / 100) ** 2)) * 10) / 10,
-    obesityDegreePercent: Math.round((weightKg / (22 * ((heightCm / 100) ** 2))) * 100),
-    bodyFatPercent, bodyFatMassKg, fatFreeMassKg: bodyFatMassKg === null ? null : Math.round((weightKg - bodyFatMassKg) * 100) / 100,
-    skeletalMuscleKg: optionalNumber(body.skeletalMuscleKg, "Massa muscolo scheletrico", 0, 200),
-    totalBodyWaterL: optionalNumber(body.totalBodyWaterL, "Acqua corporea totale", 0, 200),
-    proteinKg: optionalNumber(body.proteinKg, "Proteine", 0, 100), mineralsKg: optionalNumber(body.mineralsKg, "Minerali", 0, 50),
-    visceralFatLevel: optionalNumber(body.visceralFatLevel, "Grasso viscerale", 0, 50),
-    basalMetabolicRateKcal: optionalNumber(body.basalMetabolicRateKcal, "Metabolismo basale", 500, 6000),
-    waistHipRatio: optionalNumber(body.waistHipRatio, "Rapporto vita/fianchi", 0.3, 2),
-    score: optionalNumber(body.score, "Punteggio InBody", 0, 150),
-    targetWeightKg: optionalNumber(body.targetWeightKg, "Peso obiettivo", 20, 400),
-    weightControlKg: optionalNumber(body.weightControlKg, "Controllo del peso", -200, 200),
-    fatControlKg: optionalNumber(body.fatControlKg, "Controllo del grasso", -200, 200),
-    muscleControlKg: optionalNumber(body.muscleControlKg, "Controllo del muscolo", -200, 200),
-    segmentalLean: { leftArm: segment(lean.leftArm, "Massa magra braccio sinistro"), rightArm: segment(lean.rightArm, "Massa magra braccio destro"), trunk: segment(lean.trunk, "Massa magra tronco"), leftLeg: segment(lean.leftLeg, "Massa magra gamba sinistra"), rightLeg: segment(lean.rightLeg, "Massa magra gamba destra") },
-    segmentalFat: { leftArm: segment(fat.leftArm, "Massa grassa braccio sinistro"), rightArm: segment(fat.rightArm, "Massa grassa braccio destro"), trunk: segment(fat.trunk, "Massa grassa tronco"), leftLeg: segment(fat.leftLeg, "Massa grassa gamba sinistra"), rightLeg: segment(fat.rightLeg, "Massa grassa gamba destra") }
+  if (!Number.isFinite(parsedDate.getTime()) || parsedDate.getTime() > Date.now() + 5 * 60 * 1000) throw new ApiError("invalid-argument", "Data e ora del referto non valide.");
+  const ranges: Record<string, [number, number, string]> = {
+    age: [5, 100, "Età"], heightCm: [120, 230, "Altezza"], weightKg: [30, 250, "Peso"],
+    bodyFatPercent: [2, 60, "Grasso corporeo"], bodyFatMassKg: [0.1, 100, "Massa grassa"], skeletalMuscleKg: [1, 150, "Massa muscolare"],
+    totalBodyWaterL: [1, 200, "Acqua corporea"], proteinKg: [0.1, 100, "Proteine"], mineralsKg: [0.1, 50, "Minerali"],
+    bmi: [10, 60, "IMC"], obesityDegreePercent: [30, 300, "Grado di obesità"], visceralFatLevel: [1, 20, "Grasso viscerale"],
+    basalMetabolicRateKcal: [500, 6000, "Metabolismo basale"], waistHipRatio: [0.3, 2, "Rapporto vita/fianchi"], score: [0, 100, "Punteggio"],
+    targetWeightKg: [20, 250, "Peso obiettivo"], weightControlKg: [-200, 200, "Controllo peso"], fatControlKg: [-200, 200, "Controllo grasso"], muscleControlKg: [-200, 200, "Controllo muscolo"]
   };
-
+  const values: Record<string, number | null> = {};
+  for (const [key, [min, max, label]] of Object.entries(ranges)) {
+    const value = optionalNumber(body[key], label, min, max);
+    values[key] = value;
+  }
+  for (const key of ["weightKg", "bodyFatMassKg", "skeletalMuscleKg"]) if (values[key] === null) throw new ApiError("invalid-argument", `${key}: campo obbligatorio.`);
+  if (body.sex != null && body.sex !== "male" && body.sex !== "female") throw new ApiError("invalid-argument", "Sesso non valido.");
+  validateBiaMath(values);
+  const reportPath = await validateArchivedBiaReport(body.reportPath, athlete.id);
+  const reportPreviewPath = await validateArchivedBiaReport(body.reportPreviewPath, athlete.id);
+  if (!reportPath || !reportPreviewPath) throw new ApiError("invalid-argument", "L’originale e la sua anteprima devono essere archiviati prima del salvataggio.");
+  if (reportPreviewPath !== reportPath.replace(/\.[^.]+$/, "-preview.jpg")) throw new ApiError("invalid-argument", "Il referto e la sua anteprima non corrispondono.");
+  const reportId = body.reportId == null ? null : cleanText(body.reportId, 40);
   const { data: current, error: readError } = await admin.from("athlete_states").select("snapshot, revision").eq("user_id", athlete.id).maybeSingle();
   if (readError) throw readError;
   const snapshot = current?.snapshot && typeof current.snapshot === "object" ? current.snapshot as Record<string, unknown> : {};
-  const bia = Array.isArray(snapshot.bia) ? snapshot.bia : [];
+  const bia = Array.isArray(snapshot.bia) ? snapshot.bia as Record<string, unknown>[] : [];
+  if (bia.some((item) => Math.floor(new Date(String(item.measuredAt || "")).getTime() / 60000) === Math.floor(parsedDate.getTime() / 60000))) throw new ApiError("already-exists", "Esiste già una rilevazione BIA per questa data e ora.", 409);
+  const measuredAt = parsedDate.toISOString();
+  const bodyFatMassKg = values.bodyFatMassKg as number;
+  const weightKg = values.weightKg as number;
+  const record = {
+    id: crypto.randomUUID(), measuredAt, age: values.age, sex: body.sex ?? null, heightCm: values.heightCm,
+    weightKg, bmi: values.bmi, obesityDegreePercent: values.obesityDegreePercent,
+    bodyFatPercent: values.bodyFatPercent, bodyFatMassKg, fatFreeMassKg: Math.round((weightKg - bodyFatMassKg) * 100) / 100,
+    skeletalMuscleKg: values.skeletalMuscleKg, totalBodyWaterL: values.totalBodyWaterL, proteinKg: values.proteinKg,
+    mineralsKg: values.mineralsKg, visceralFatLevel: values.visceralFatLevel, basalMetabolicRateKcal: values.basalMetabolicRateKcal,
+    waistHipRatio: values.waistHipRatio, score: values.score, targetWeightKg: values.targetWeightKg,
+    weightControlKg: values.weightControlKg, fatControlKg: values.fatControlKg, muscleControlKg: values.muscleControlKg,
+    reportId, device: "InBody120", reportPath, reportPreviewPath, sourceAudit
+  };
   if (!current) {
     const { error } = await admin.from("athlete_states").insert({ user_id: athlete.id, snapshot: { ...snapshot, bia: [record] }, revision: 1 });
     if (error) { if (error.code === "23505") throw new ApiError("aborted", "Lo storico è stato aggiornato. Riprova.", 409); throw error; }
@@ -152,10 +225,17 @@ async function recordBia(authorizationHeader: AuthorizationHeader, body: Record<
   }
   return { record };
 }
-
 async function deleteClient(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const target = await ownedAthlete(coach.user.id, body.clientUid);
   if (cleanText(body.confirmationEmail, 254).toLowerCase() !== String(target.email).toLowerCase()) throw new ApiError("invalid-argument", "Email di conferma non corrispondente.");
+  const { data: athleteState, error: stateError } = await admin.from("athlete_states").select("snapshot").eq("user_id", target.id).maybeSingle();
+  if (stateError) throw stateError;
+  const bia = Array.isArray((athleteState?.snapshot as Record<string, unknown> | null)?.bia) ? (athleteState?.snapshot as Record<string, unknown>).bia as Record<string, unknown>[] : [];
+  const reportPaths = [...new Set(bia.flatMap((record) => [record.reportPath, record.reportPreviewPath]).filter((value): value is string => typeof value === "string" && new RegExp(`^${target.id}/[0-9a-f-]{8}-[0-9a-f-]{4}-[1-8][0-9a-f-]{3}-[89ab][0-9a-f-]{3}-[0-9a-f-]{12}(?:-preview)?[.](jpg|png|webp|heic|pdf)$`, "i").test(value)))];
+  if (reportPaths.length) {
+    const { error: storageError } = await admin.storage.from("bia-reports").remove(reportPaths);
+    if (storageError) throw new ApiError("storage-cleanup-failed", "Non è stato possibile rimuovere gli originali BIA. Account non eliminato.", 500);
+  }
   await admin.from("profiles").update({ status: "deleting", updated_at: new Date().toISOString() }).eq("id", target.id);
   const { error } = await admin.auth.admin.deleteUser(target.id); if (error) throw error;
   return { deleted: true, uid: target.id };
@@ -163,19 +243,43 @@ async function deleteClient(authorizationHeader: AuthorizationHeader, body: Reco
 
 async function saveProgramDraft(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid); const program = validateProgram(body.program);
-  const expected = Number(body.expectedRevision || 0); const now = new Date().toISOString();
-  if (body.draftId) {
-    const id = validateId(body.draftId, "ID bozza");
-    const { data, error } = await admin.from("program_drafts").update({ program, revision: expected + 1, updated_at: now }).eq("id", id).eq("coach_id", coach.user.id).eq("athlete_id", athlete.id).eq("status", "draft").eq("revision", expected).select("id, revision").maybeSingle();
-    if (error) throw error; if (!data) throw new ApiError("aborted", "La bozza è stata modificata altrove.", 409);
-    return { draftId: data.id, revision: data.revision };
+  const expected = Number(body.expectedRevision || 0);
+  if (!Number.isSafeInteger(expected) || expected < 0) throw new ApiError("invalid-argument", "Revisione bozza non valida.");
+  const draftId = body.draftId ? validateId(body.draftId, "ID bozza") : null;
+  const { data, error } = await admin.rpc("save_program_draft", {
+    p_coach_id: coach.user.id, p_athlete_id: athlete.id, p_draft_id: draftId,
+    p_expected_revision: expected, p_program: program
+  });
+  if (error) {
+    if (error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove. Ricaricala prima di salvare.", 409);
+    if (error.code === "P0001") throw new ApiError("not-found", "Bozza non trovata o già archiviata.", 404);
+    throw error;
   }
-  const { data, error } = await admin.from("program_drafts").insert({ coach_id: coach.user.id, athlete_id: athlete.id, program, revision: 1 }).select("id, revision").single();
-  if (error) throw error; return { draftId: data.id, revision: data.revision };
+  return data;
 }
 
 async function publishProgram(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid); const draftId = validateId(body.draftId, "ID bozza");
+  const expectedRevision = Number(body.expectedRevision || 0);
+  const { data: draft, error: draftError } = await admin.from("program_drafts").select("program, revision, status, published_version_id").eq("id", draftId).eq("coach_id", coach.user.id).eq("athlete_id", athlete.id).maybeSingle();
+  if (draftError) throw draftError;
+  if (!draft) throw new ApiError("not-found", "Bozza non trovata.", 404);
+  if (Number(draft.revision) !== expectedRevision) throw new ApiError("aborted", "La bozza è stata modificata altrove.", 409);
+  if (draft.status === "published" && draft.published_version_id) {
+    const { data: active, error: activeError } = await admin.from("programs").select("version_id, revision").eq("athlete_id", athlete.id).maybeSingle();
+    if (activeError) throw activeError;
+    if (active?.version_id === draft.published_version_id) return { versionId: active.version_id, revision: active.revision };
+    throw new ApiError("aborted", "Questa versione è già stata sostituita da una pubblicazione successiva.", 409);
+  }
+  if (draft.status !== "draft") throw new ApiError("not-found", "Bozza non trovata o già archiviata.", 404);
+  const canonicalProgram = validateProgram(draft.program, { forPublish: true });
+  if (Number((draft.program as Record<string, unknown>)?.schemaVersion || (draft.program as Record<string, unknown>)?.schema_version) === 2) {
+    const { data: refreshed, error: refreshError } = await admin.from("program_drafts").update({ program: canonicalProgram })
+      .eq("id", draftId).eq("coach_id", coach.user.id).eq("athlete_id", athlete.id).eq("status", "draft")
+      .eq("revision", expectedRevision).select("id").maybeSingle();
+    if (refreshError) throw refreshError;
+    if (!refreshed) throw new ApiError("aborted", "La bozza è stata modificata altrove. Ricaricala prima di pubblicare.", 409);
+  }
   const { data, error } = await admin.rpc("publish_program", { p_coach_id: coach.user.id, p_athlete_id: athlete.id, p_draft_id: draftId, p_expected_revision: Number(body.expectedRevision || 0) });
   if (error) { if (error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove.", 409); throw error; }
   return data;
@@ -183,8 +287,9 @@ async function publishProgram(authorizationHeader: AuthorizationHeader, body: Re
 
 async function archiveProgramDraft(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const id = validateId(body.draftId, "ID bozza");
-  const { data, error } = await admin.from("program_drafts").update({ status: "archived", archived_at: new Date().toISOString(), updated_at: new Date().toISOString() }).eq("id", id).eq("coach_id", coach.user.id).select("id").maybeSingle();
-  if (error) throw error; if (!data) throw new ApiError("not-found", "Bozza non trovata.", 404); return { archived: true };
+  const { data, error } = await admin.rpc("archive_program_draft", { p_coach_id: coach.user.id, p_draft_id: id });
+  if (error) { if (error.code === "P0001") throw new ApiError("not-found", "Bozza non trovata o non archiviabile.", 404); throw error; }
+  return data;
 }
 
 Deno.serve(async (request) => {

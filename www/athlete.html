@@ -684,6 +684,7 @@
   @keyframes sheetUp{from{transform:translateY(100%);}to{transform:translateY(0);}}
 
 </style>
+<style>.set-prescription{display:block;margin-top:3px;color:var(--muted);font-size:9px;font-weight:600;line-height:1.25;white-space:normal}</style>
 </head>
 <body>
   <div class="phone">
@@ -790,7 +791,7 @@
   function recEff(ex){ const s=toSec(ex.rec||0); return (isUnilat(ex) && s>REC_MAX_UNILAT) ? REC_MAX_UNILAT : s; }
   const NOTA_UNILAT_VECCHIA=/\s*Esercizio unilaterale: registra un lato per serie\.?/i;
   const MESI_B=['gen','feb','mar','apr','mag','giu','lug','ago','set','ott','nov','dic'];
-  function rangeSett(w){ const a=w.dal.split('-'), b=w.al.split('-'); return (+a[2])+(a[1]===b[1]?'':' '+MESI_B[+a[1]-1])+'–'+(+b[2])+' '+MESI_B[+b[1]-1]; }
+  function rangeSett(w){ if(!w?.dal||!w?.al||!/^\d{4}-\d{2}-\d{2}$/.test(w.dal)||!/^\d{4}-\d{2}-\d{2}$/.test(w.al)) return 'Settimana '+(w?.n||1); const a=w.dal.split('-'), b=w.al.split('-'); return (+a[2])+(a[1]===b[1]?'':' '+MESI_B[+a[1]-1])+'–'+(+b[2])+' '+MESI_B[+b[1]-1]; }
 
   // Carichi dell'ultima sessione per esercizio: NON sono dati fissi, si ricalcolano dallo storico reale.
   let ultimiPesi = {};
@@ -1543,7 +1544,7 @@
     let i=0;
     while(i<g.esercizi.length){
       const ex=g.esercizi[i];
-      if(ex.ss){ const grp=document.createElement('div'); grp.className='ss-group'; grp.innerHTML='<div class="ss-tag">SUPERSERIE</div>'; while(i<g.esercizi.length && g.esercizi[i].ss===ex.ss){ grp.appendChild(card(g.esercizi[i],i)); i++; } list.appendChild(grp); }
+      if(ex.ss){ const grp=document.createElement('div'); grp.className='ss-group'; const labels={superset:'SUPERSET',giant_set:'GIANT SET',circuit:'CIRCUITO'}; grp.innerHTML='<div class="ss-tag">'+(labels[ex.ssType]||'SUPERSET')+'</div>'; while(i<g.esercizi.length && g.esercizi[i].ss===ex.ss){ grp.appendChild(card(g.esercizi[i],i)); i++; } list.appendChild(grp); }
       else { list.appendChild(card(ex,i)); i++; }
     }
     list.appendChild(feedbackBox());
@@ -1655,7 +1656,17 @@
       duo=`<div class="duo">${items}</div>`;
     }
     let sets='';
-    if(ex.carico){ sets='<div class="sets">'; for(let s=1;s<=nSlot(ex);s++){ const k=uni?Math.ceil(s/2):s; sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}</div><div class="field"><input type="number" inputmode="decimal"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric"><span>RIR</span></div></div>`; } sets+='</div>'; }
+    if(ex.carico){
+      const typeLabel={warmup:'Riscaldamento',working:'Lavoro',top:'Top set',back_off:'Back-off',drop:'Drop',mini_set:'Mini-set',cluster_group:'Gruppo',failure:'Cedimento'};
+      sets='<div class="sets">';
+      for(let s=1;s<=nSlot(ex);s++){
+        const i=s-1, k=uni?Math.ceil(s/2):s, prescribed=ex.prescriptions&&ex.prescriptions[i], targetReps=ex.repsSerie?.[i]||ex.reps||'', targetLoad=ex.carichiSerie?.[i]||ex.carico||'';
+        const targetType=prescribed?typeLabel[prescribed.set_type]||'Lavoro':'';
+        const targetSummary=[targetType,targetReps?`${targetReps}${ex.unita==='sec'?' sec':''}`:'',targetLoad?`Carico ${targetLoad}`:''].filter(Boolean).join(' · ');
+        sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}${targetSummary?`<small class="set-prescription">${esc(targetSummary)}</small>`:''}</div><div class="field"><input type="number" inputmode="decimal" placeholder="${esc(targetLoad==='PC'?'PC':targetLoad)}"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric" placeholder="${esc(String(targetReps).replace(/s$/i,''))}"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric" placeholder="${prescribed?.target_rir??ex.rir??''}"><span>RIR</span></div></div>`;
+      }
+      sets+='</div>';
+    }
     const cnote = `<div class="cnote"><label class="cnote-l">Le tue note</label><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></div>`;
     const headSum = (ex.cardio||ex.timed) ? ex.tempo : (ex.repsSerie ? (ex.serie+' serie · var.') : (ex.serie+'×'+ex.reps+(uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':'')));
     const sg = ex.carico ? suggSets(ex) : null;
@@ -1683,7 +1694,7 @@
         ${(ex.carico&&ex.rir!=null)?`<div class="rir-hint" hidden><b>RIR ${ex.rir}</b> = a fine serie devono restarti <b>${ex.rir}</b> ripetizioni «in canna». ${ex.rir===0?'Qui si arriva al cedimento: nessuna ripetizione di riserva.':'Se ne avevi di più, il carico era leggero; se eri al limite, era pesante.'} Segnalo a ogni serie: il coach lo usa per calibrare i carichi della settimana dopo.</div>`:''}
         ${suggHTML}
         ${duo}
-        ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()?`<div class="note"><span class="nl">Note</span> ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()}</div>`:''}
+        ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()?`<div class="note"><span class="nl">Note</span> ${esc((ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim())}</div>`:''}
         ${sets}
         ${cnote}
       </div>`;

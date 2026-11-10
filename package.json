@@ -5,9 +5,10 @@
   "scripts": {
     "apk": "CREA_APK.bat",
     "serve": "firebase emulators:start --only hosting --project lippolispt",
-    "deploy:hosting": "firebase deploy --only hosting --project lippolispt",
+    "deploy:hosting": "npm run build:bia-ocr && firebase deploy --only hosting --project lippolispt",
     "supabase:start": "npx supabase start",
     "supabase:test": "npx supabase db reset",
+    "build:bia-ocr": "vite build --config vite.bia.config.mjs && node scripts/copy-bia-wasm.mjs && node scripts/verify-bia-runtime.mjs",
     "test": "node --test test/*.test.cjs",
     "test:unit": "node --test test/*.test.cjs"
   },
@@ -17,11 +18,15 @@
     "@capacitor/core": "^7.0.0",
     "@capacitor/filesystem": "^7.0.0",
     "@capacitor/share": "^7.0.0",
+    "@paddleocr/paddleocr-js": "^0.4.2",
+    "heic2any": "^0.0.4",
+    "pdfjs-dist": "^6.5.438",
     "timer-recupero": "file:./plugin-timer"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.0.0",
-    "firebase-tools": "^15.35.0"
+    "firebase-tools": "^15.35.0",
+    "vite": "^8.3.7"
   }
 }
