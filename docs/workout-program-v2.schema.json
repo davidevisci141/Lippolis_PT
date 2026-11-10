@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lippolispt.web.app/schemas/workout-program-v2.schema.json",
+  "title": "LIPPOLIS PT Workout Program v2",
+  "type": "object",
+  "required": ["schemaVersion", "nome", "settimane"],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "nome": { "type": "string", "maxLength": 80 },
+    "dal": { "$ref": "#/$defs/date" },
+    "al": { "$ref": "#/$defs/date" },
+    "scala_intensita": { "enum": ["RIR", "RPE"], "default": "RIR" },
+    "intensity_scale": { "enum": ["RIR", "RPE"], "default": "RIR" },
+    "periodizzazione": { "enum": ["linear", "dup", "block"], "default": "linear" },
+    "periodization": { "enum": ["linear", "dup", "block"], "default": "linear" },
+    "settings": { "$ref": "#/$defs/settings" },
+    "volume_ranges": { "type": "object", "additionalProperties": { "$ref": "#/$defs/range" } },
+    "progression_rules": { "type": "array", "items": { "type": "object" } },
+    "settimane": { "type": "array", "minItems": 1, "maxItems": 52, "items": { "$ref": "#/$defs/week" } },
+    "legacyBackup": { "description": "JSON sorgente conservato per ripristino; non viene modificato dalla migrazione.", "type": "object" },
+    "calculated": { "description": "Riepiloghi ricalcolati dal server; qualsiasi valore inviato dal browser viene sostituito.", "type": "object", "readOnly": true }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "date": { "anyOf": [{ "type": "string", "format": "date" }, { "const": "" }] },
+    "range": {
+      "type": "object", "required": ["min", "max"], "properties": {
+        "min": { "type": "number", "minimum": 0, "maximum": 200 },
+        "max": { "type": "number", "minimum": 0, "maximum": 200 }
+      }, "additionalProperties": false
+    },
+    "settings": {
+      "type": "object", "properties": {
+        "secondsPerRep": { "type": "number", "minimum": 0 },
+        "amrapReps": { "type": "number", "minimum": 0 },
+        "setupSeconds": { "type": "number", "minimum": 0 },
+        "equipmentChangeSeconds": { "type": "number", "minimum": 0 },
+        "secondaryMuscleWeight": { "type": "number", "minimum": 0, "maximum": 2 },
+        "usefulSetWeights": { "type": "object", "additionalProperties": { "type": "number", "minimum": 0, "maximum": 1 } }
+      }, "additionalProperties": false
+    },
+    "week": {
+      "type": "object", "required": ["giorni"], "properties": {
+        "id": { "type": "string" }, "n": { "type": "integer", "minimum": 1 },
+        "fase": { "type": "string", "maxLength": 80 }, "dal": { "$ref": "#/$defs/date" }, "al": { "$ref": "#/$defs/date" },
+        "dates_are_manual": { "type": "boolean" }, "volume_target": { "type": ["number", "null"], "minimum": 0, "maximum": 1000 },
+        "intensity_target": { "type": ["number", "null"], "minimum": 0, "maximum": 10 },
+        "rule_note": { "type": "string", "maxLength": 500 }, "legacyFields": { "type": "object" },
+        "giorni": { "type": "array", "maxItems": 7, "items": { "$ref": "#/$defs/workout" } }
+      }, "additionalProperties": false
+    },
+    "workout": {
+      "type": "object", "required": ["blocks"], "properties": {
+        "id": { "type": "string" }, "code": { "type": "string", "maxLength": 12 }, "day_code": { "type": "string", "maxLength": 12 },
+        "title": { "type": "string", "maxLength": 120 }, "weekday": { "type": ["integer", "null"], "minimum": 1, "maximum": 7 },
+        "muscle_focus": { "type": "string", "maxLength": 160 }, "available_minutes": { "type": ["number", "null"], "minimum": 1, "maximum": 600 },
+        "client_note": { "type": "string", "maxLength": 2000 }, "trainer_note": { "type": "string", "maxLength": 2000 }, "legacyFields": { "type": "object" },
+        "blocks": { "type": "array", "maxItems": 40, "items": { "$ref": "#/$defs/block" } }
+      }, "additionalProperties": false
+    },
+    "block": {
+      "type": "object", "required": ["method", "exercises"], "properties": {
+        "id": { "type": "string" }, "position": { "type": "integer", "minimum": 1 },
+        "method": { "enum": ["straight", "superset", "giant_set", "drop_set", "rest_pause", "cluster", "myo_reps", "top_back_off", "eccentric", "isometric", "circuit"] },
+        "rest_after_seconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 14400 },
+        "intra_rest_seconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 14400 },
+        "client_note": { "type": "string", "maxLength": 2000 }, "trainer_note": { "type": "string", "maxLength": 1000 },
+        "exercises": { "type": "array", "minItems": 1, "maxItems": 12, "items": { "$ref": "#/$defs/exercise" } }
+      }, "additionalProperties": false
+    },
+    "exercise": {
+      "type": "object", "required": ["name", "sets"], "properties": {
+        "id": { "type": "string" }, "position": { "type": "integer", "minimum": 1 }, "name": { "type": "string", "maxLength": 160 }, "legacyFields": { "type": "object" },
+        "primary_muscles": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 80 } },
+        "secondary_muscles": { "type": "array", "maxItems": 8, "items": { "type": "string", "maxLength": 80 } },
+        "equipment": { "type": "string", "maxLength": 100 }, "avg_setup_seconds": { "type": ["number", "null"], "minimum": 0, "maximum": 3600 },
+        "video_ref": { "type": ["string", "null"], "maxLength": 500 }, "instructions": { "type": "string", "maxLength": 1000 },
+        "sets": { "type": "array", "maxItems": 100, "items": { "$ref": "#/$defs/set" } }
+      }, "additionalProperties": false
+    },
+    "set": {
+      "type": "object", "required": ["set_type", "reps_mode"], "properties": {
+        "id": { "type": "string" }, "position": { "type": "integer", "minimum": 1 }, "round": { "type": "integer", "minimum": 1 },
+        "set_type": { "enum": ["warmup", "working", "top", "back_off", "drop", "mini_set", "cluster_group", "failure"] },
+        "parent_set_id": { "type": ["string", "null"] }, "reps_min": { "type": ["number", "null"], "minimum": 0, "maximum": 1000 },
+        "reps_max": { "type": ["number", "null"], "minimum": 0, "maximum": 1000 }, "reps_mode": { "enum": ["range", "amrap", "time"] }, "reps_text": { "type": "string", "maxLength": 40 },
+        "load_value": { "type": ["number", "null"], "minimum": -1000, "maximum": 100000 },
+        "load_unit": { "enum": ["kg", "percent_1rm", "percent_of_top", "bodyweight"] }, "load_note": { "type": "string", "maxLength": 120 },
+        "target_rir": { "type": ["number", "null"], "minimum": 0, "maximum": 10 }, "tempo": { "type": ["string", "null"], "pattern": "^(\\d|X)([-–](\\d|X)){3}$" },
+        "rest_seconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 14400 }, "intra_rest_seconds": { "type": ["integer", "null"], "minimum": 0, "maximum": 14400 },
+        "client_note": { "type": "string", "maxLength": 2000 }, "trainer_note": { "type": "string", "maxLength": 1000 }, "effort_by_feel": { "type": "boolean" }
+      }, "additionalProperties": false
+    }
+  }
+}
