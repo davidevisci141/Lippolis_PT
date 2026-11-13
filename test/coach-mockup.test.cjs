@@ -27,18 +27,23 @@ test("il mockup mantiene le otto sezioni originali, la scheda cliente e i due ed
 test("salva e rilegge prescrizioni, istruzioni, video privato e superserie", async () => {
   const { mockupToProgram, programToMockup } = await editor;
   const { toAthleteProgram } = await runtime;
+  const { validateProgram } = await import("../supabase/functions/_shared/validation.mjs");
   const program = mockupToProgram(template(exercise, {
-    ...exercise, nome: "Affondi", link: "superserie", videoStoragePath: "coach/video.mp4", descrizione: "Controlla l’appoggio"
+    ...exercise, nome: "Affondi", link: "superserie", videoStoragePath: "coach/video.mp4", descrizione: "Controlla l’appoggio", note: "Alterna i lati"
   }), dates);
-  const day = toAthleteProgram(program).settimane[0].giorni[0];
+  const published = validateProgram(JSON.parse(JSON.stringify(program)), { forPublish: true });
+  const day = toAthleteProgram(published).settimane[0].giorni[0];
   assert.equal(day.esercizi[0].rec, "90");
   assert.equal(day.esercizi[0].prescriptions[0].load_value, 40);
   assert.equal(day.esercizi[0].prescriptions[0].target_rir, 2);
   assert.equal(day.esercizi[0].ss, day.esercizi[1].ss);
   assert.equal(day.esercizi[1].videoStoragePath, "coach/video.mp4");
   assert.equal(day.esercizi[1].instructions, "Controlla l’appoggio");
-  const reopened = programToMockup(program).weeks[0].giorni[0].esercizi;
+  assert.equal(day.esercizi[0].note, "Pausa in basso");
+  assert.equal(day.esercizi[1].note, "Alterna i lati\nControlla l’appoggio");
+  const reopened = programToMockup(published).weeks[0].giorni[0].esercizi;
   assert.equal(reopened[1].link, "superserie");
+  assert.equal(reopened[1].note, "Alterna i lati");
   assert.equal(reopened[0].carico, "40");
   assert.equal(reopened[0].rip, "8-10");
 });

@@ -40,6 +40,8 @@ export function mockupToProgram(template, dates) {
       const original = inputs[i], block = target.blocks[i], exercise = block.exercises[0];
       if (!clean(original.nome) || !Number.isInteger(Number(original.serie)) || Number(original.serie)<1 || Number(original.serie)>100) throw new Error(`Settimana ${wi+1}, ${day.nome}: inserisci nome e numero di serie per ogni esercizio.`);
       exercise.instructions = clean(original.descrizione);
+      exercise.client_note = clean(original.note);
+      block.client_note = "";
       exercise.video_ref = clean(original.video) || null;
       if (exercise.video_ref && !parseExerciseVideo(exercise.video_ref)) throw new Error(`Video non valido: ${original.nome}`);
       exercise.legacyFields = { videoStoragePath: clean(original.videoStoragePath), alternativa: original.link === "alternativa" };
@@ -75,7 +77,7 @@ export function programToMockup(input, id) {
         const item={ nome:exercise.name, muscolo:(exercise.primary_muscles||[]).join(" · "), serie:String(exercise.sets.length),
           tipo:first?.reps_mode==="time"?"tempo":"ripetizioni", rip:textReps(first),
           rec:first?.rest_seconds==null?"":`${String(Math.floor(first.rest_seconds/60)).padStart(2,"0")}:${String(first.rest_seconds%60).padStart(2,"0")}`,
-          rir:first?.target_rir==null?"":String(first.target_rir), tut:first?.tempo||"", carico:textLoad(first), note:block.client_note || first?.client_note || "",
+          rir:first?.target_rir==null?"":String(first.target_rir), tut:first?.tempo||"", carico:textLoad(first), note:exercise.client_note ?? (block.client_note || first?.client_note || ""),
           descrizione:exercise.instructions||"", video:exercise.video_ref||"", videoStoragePath:exercise.legacyFields?.videoStoragePath||"",
           link:exercise.legacyFields?.alternativa?"alternativa":ei?"superserie":undefined };
         item._advanced={sets:clone(exercise.sets),method:block.method,signature:exerciseSignature(item)};

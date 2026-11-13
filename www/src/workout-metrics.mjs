@@ -216,6 +216,7 @@ function importedExercise(raw = {}, position = 1) {
     secondary_muscles: Array.isArray(raw.secondary_muscles) ? raw.secondary_muscles : Array.isArray(raw.muscoli_secondari) ? raw.muscoli_secondari : [],
     equipment: toText(raw.equipment || raw.attrezzo), avg_setup_seconds: numberOrNull(raw.avg_setup_seconds),
     video_ref: raw.video_ref || raw.video || null, instructions: toText(raw.instructions || raw.istruzioni || raw.note),
+    client_note: raw.client_note == null ? undefined : toText(raw.client_note),
     sets: rows ? sets : base.sets
   };
 }
@@ -225,7 +226,7 @@ function unknownImportWarnings(source) {
     program: new Set(["schemaVersion", "schema_version", "nome", "name", "dal", "startDate", "al", "endDate", "settimane", "weeks", "scala_intensita", "intensity_scale", "periodizzazione", "periodization", "settings", "volume_ranges", "progression_rules", "legacyBackup", "calculated"]),
     week: new Set(["id", "n", "number", "fase", "phase", "dal", "startDate", "al", "endDate", "dates_are_manual", "datesAreManual", "volume_target", "intensity_target", "rule_note", "ruleNote", "giorni", "days"]),
     day: new Set(["id", "code", "day_code", "dt", "nome", "name", "titolo", "title", "weekday", "giorno_settimana", "muscle_focus", "focus", "available_minutes", "client_note", "trainer_note", "esercizi", "exercises"]),
-    exercise: new Set(["id", "nome", "name", "serie", "sets", "reps", "ripetizioni", "rec", "recupero", "rest_seconds", "carico", "load", "note", "metodo", "method", "gruppo", "group", "rir", "rpe", "target_rir", "tempo", "tempo_esecuzione", "primary_muscles", "muscoli_primari", "secondary_muscles", "muscoli_secondari", "equipment", "attrezzo", "avg_setup_seconds", "video_ref", "video", "instructions", "istruzioni", "scala_intensita", "intensity_scale"]),
+    exercise: new Set(["id", "nome", "name", "serie", "sets", "reps", "ripetizioni", "rec", "recupero", "rest_seconds", "carico", "load", "note", "client_note", "metodo", "method", "gruppo", "group", "rir", "rpe", "target_rir", "tempo", "tempo_esecuzione", "primary_muscles", "muscoli_primari", "secondary_muscles", "muscoli_secondari", "equipment", "attrezzo", "avg_setup_seconds", "video_ref", "video", "instructions", "istruzioni", "scala_intensita", "intensity_scale"]),
     set: new Set(["id", "tipo", "type", "set_type", "reps", "ripetizioni", "reps_min", "reps_max", "reps_mode", "carico", "load", "load_value", "load_unit", "load_note", "rir", "rpe", "target_rir", "tempo", "tempo_esecuzione", "rec", "recupero", "rest_seconds", "intra_rest", "intra_rest_seconds", "parent_set_id", "round", "giro", "note", "client_note", "trainer_note", "sforzo", "effort_by_feel"])
   };
   const inspect = (node, allowed, path) => { for (const key of Object.keys(node || {})) if (!allowed.has(key)) warnings.push({ path: path ? `${path}.${key}` : key, message: "Campo sconosciuto ignorato durante l’importazione." }); };
@@ -573,7 +574,8 @@ export function toAthleteProgram(input) {
             }));
             const uniqueReps = new Set(repRows), uniqueLoads = new Set(loadRows);
             const firstLoad = rows.map(displayLoad).find(Boolean) || "";
-            const clientNotes = [block.client_note, exercise.instructions, ...rows.map((row) => row.client_note)].filter(Boolean).join(" · ");
+            const notes = [exercise.client_note, block.client_note, exercise.instructions, ...rows.map((row) => row.client_note)];
+            const clientNotes = [...new Set(notes.map(toText).filter(Boolean))].join("\n");
             const old = exercise.legacyFields || {};
             const safeBadge = toText(old.badge).replace(/[^\p{L}\p{N} _-]/gu, "").slice(0, 24);
             const safeTempo = /^\d{1,3}(?:[-–]\d{1,3}){3}$/.test(toText(old.tempo)) ? toText(old.tempo) : "";

@@ -445,15 +445,11 @@
   .program-empty{padding:12px;border-radius:13px;background:var(--surface2);color:var(--muted);font-size:13px;line-height:1.45;}
   @media(max-width:360px){.physical-grid{gap:5px}.physical-metric{padding-inline-start:5px}.physical-metric .pm-value{font-size:14px}.program-day{gap:8px;padding:10px}.program-day .pd-open{padding:8px}}
 
-  /* Scheda esercizio: storico carichi e serie sempre a vista */
-  .exercise-history{width:100%;display:flex;align-items:center;gap:12px;text-align:left;margin-top:12px;padding:13px;border:1px solid var(--line-soft);border-radius:14px;background:var(--surface);color:var(--text);font:inherit;cursor:pointer;box-shadow:var(--shadow-card);}
-  .exercise-history .eh-icon{width:38px;height:38px;flex:0 0 auto;display:grid;place-items:center;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink);}
-  .exercise-history .eh-icon svg{width:20px;height:20px;}
-  .exercise-history .eh-content{flex:1;min-width:0;}
-  .exercise-history .eh-title{display:block;font:800 14px 'Archivo',system-ui,sans-serif;}
-  .exercise-history .eh-copy{display:block;font-size:11px;line-height:1.4;color:var(--muted);margin-top:4px;}
-  .exercise-history .eh-go{color:var(--muted2);display:inline-flex;}
-  .exercise-history .eh-go svg{width:18px;height:18px;}
+  .exercise-history{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:5px;min-height:34px;min-width:34px;padding:4px 8px;border:1px solid var(--line);border-radius:9px;background:var(--surface2);color:var(--accent-ink);font:800 11px 'Manrope',system-ui,sans-serif;cursor:pointer;}
+  .exercise-history svg{width:15px;height:15px;}
+  @media(max-width:390px){.exercise-history{padding-inline:5px}.exercise-history span{display:none}}
+  .coach-note{color:var(--text);}
+  .coach-note p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;}
   .set-labels{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(0,1fr) minmax(56px,.55fr);gap:7px;margin:12px 0 5px;color:var(--muted);font-size:10px;font-weight:700;text-align:center;}
   .add-set-btn{width:100%;margin-top:9px;padding:10px;border:1px solid var(--accent);border-radius:12px;background:var(--surface);color:var(--accent-ink);font:800 13px 'Archivo',system-ui,sans-serif;cursor:pointer;}
   .workout-save-hint{font-size:10.5px;line-height:1.4;color:var(--muted2);margin:8px 2px 0;}
@@ -506,7 +502,7 @@
   .em-cap{padding:11px 14px; font-size:12px; color:var(--muted); font-weight:600; text-align:center;}
 
   /* ---- NOTE DEL CLIENTE ---- */
-  .cnote{margin-top:13px;}
+  .cnote{display:block;margin-top:13px;}
   .cnote-l{display:block; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:10px; letter-spacing:1.3px; text-transform:uppercase; color:var(--accent-ink); margin:0 2px 7px;}
   .cnote-ta{width:100%; min-height:46px; resize:none; background:var(--surface2); border:1px solid var(--line); border-radius:11px; padding:9px 11px; color:var(--text); font-family:'Manrope',system-ui,sans-serif; font-size:12.5px; line-height:1.4; outline:none; transition:.15s;}
   .cnote-ta::placeholder{color:var(--muted2);}
@@ -1809,11 +1805,9 @@
       const rmChip=ex.rm?`<div class="tg">RM <b>${esc(ex.rm)}</b></div>`:'';
       targets=`<div class="tg">Serie <b>${esc(ex.serie)}</b>${uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':''}</div><div class="tg">${ex.unita==='sec'?'Tempo':'Reps'} <b>${esc(ex.reps)}</b></div>${rmChip}${rirChip}${recChip}`;
     }
-    const hasSets=registraSerie(ex), stor = hasSets ? getStorico(ex.nome,ex.id) : null;
+    const hasSets=registraSerie(ex);
     const hasExec = !!(ex.video_ref || ex.video || ex.videoStoragePath || ex.instructions || ex.note);
-    const lastStor=stor&&stor[0];
-    const lastLoads=lastStor?.serie?.slice(0,4).map((s,i)=>`${i+1}: ${Number(s.kg)>0?fmtKgS(Number(s.kg))+' kg':'corpo libero'} × ${s.reps??'—'}`).join(' · ');
-    const historyPanel=hasSets?`<button type="button" class="exercise-history duo-stor"><span class="eh-icon">${I.dumbbell}</span><span class="eh-content"><span class="eh-title">Storico pesi</span><span class="eh-copy">${lastStor?`Ultima volta · ${lastStor.data}: ${esc(lastLoads)}${lastStor.serie.length>4?' · …':''}`:'Nessuna serie registrata. Le serie compariranno qui dopo la conclusione dell’allenamento.'}</span></span><span class="eh-go">${I.chevR}</span></button>`:'';
+    const historyButton=hasSets?`<button type="button" class="exercise-history duo-stor" aria-label="Storico pesi per ${esc(ex.nome)}" title="Storico pesi">${I.chart}<span>Storico</span></button>`:'';
     const duo=hasExec?`<div class="duo"><button class="duo-btn duo-exec"><span class="di">${I.play}</span><span class="dl">Esecuzione</span></button></div>`:'';
     const approvedLoad=(coachSections.loads?.items||[]).findLast(item=>item.versionId===versioneSchedaLocale&&(item.exerciseId===ex.id||item.exerciseName===ex.nome));
     let sets='';
@@ -1831,7 +1825,7 @@
       }
       sets+=`</div><button type="button" class="add-set-btn">+ Aggiungi serie</button><div class="workout-save-hint">I carichi inseriti qui saranno aggiunti allo storico al salvataggio dell’allenamento.</div>`;
     }
-    const cnote = `<div class="cnote"><label class="cnote-l">Le tue note</label><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></div>`;
+    const cnote = `<label class="cnote"><span class="cnote-l">Le tue note</span><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></label>`;
     const headSum = (ex.cardio||ex.timed) ? ex.tempo : (ex.repsSerie ? (ex.serie+' serie · var.') : (ex.serie+'×'+ex.reps+(uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':'')));
     const supportsProgression=hasSets&&ex.unita!=='sec';
     const sg=supportsProgression?suggSets(ex):null;
@@ -1852,6 +1846,7 @@
       <div class="card-top">
         <div class="badge${ex.cardio?' cardio':''}">${esc(ex.badge)||idx+1}</div>
         <div class="ex-main"><div class="ex-name">${esc(ex.nome)}</div><div class="ex-muscle">${[ex.muscolo,ex.equipment].filter(Boolean).map(esc).join(' · ')} <b class="ex-sum">${esc(headSum)}</b></div></div>
+        ${historyButton}
         <button class="flagbtn${st.segnalato?' on':''}" aria-label="Segnala un problema" title="Segnala un problema">${I.flag}</button>
         <button class="chk" aria-label="completato" title="Segna completato">${I.check}</button>
         <span class="card-caret">${I.chevR}</span>
@@ -1859,11 +1854,10 @@
       <div class="card-body">
         <div class="targets">${targets}</div>
         ${suggHTML}
-        ${historyPanel}
         ${approvedLoad?`<div class="note">Carico indicato dal PT: <b>${esc(fmtKgS(Number(approvedLoad.kg)))} kg</b></div>`:''}
         ${ex.alternativa?`<div class="note">Esercizio alternativo</div>`:''}
+        ${coachNoteHTML(ex)}
         ${duo}
-        ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()?`<div class="note"><span class="nl">Note</span> ${esc((ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim())}</div>`:''}
         ${(ex.carico&&ex.rir!=null)?`<div class="rir-hint" hidden><b>RIR ${ex.rir}</b> = a fine serie devono restarti <b>${ex.rir}</b> ripetizioni «in canna». ${ex.rir===0?'Qui si arriva al cedimento: nessuna ripetizione di riserva.':'Se ne avevi di più, il carico era leggero; se eri al limite, era pesante.'} Segnalo a ogni serie: il coach lo usa per calibrare i carichi della settimana dopo.</div>`:''}
         ${sets}
         ${cnote}
@@ -1881,7 +1875,12 @@
     c.querySelector('.flagbtn').onclick=(e)=>{ e.stopPropagation(); openSegnala(ex.nome, st); };
     c.querySelector('.card-top').onclick=()=>c.classList.toggle('open');
     c.querySelectorAll('.tg-timer').forEach(btn=> btn.onclick=()=> startTimer(+btn.dataset.sec, btn.dataset.label));
-    const scEl=c.querySelector('.duo-stor'); if(scEl) scEl.onclick=()=>{ storicoEx=ex.nome; storicoExerciseId=ex.id||null; workoutView='storico'; view.scrollTop=0; renderWorkout(); };
+    const scEl=c.querySelector('.duo-stor');
+    if(scEl)scEl.onclick=(event)=>{
+      event.stopPropagation();
+      if(_saveT)saveStateNow();
+      storicoEx=ex.nome; storicoExerciseId=ex.id||null; workoutView='storico'; view.scrollTop=0; renderWorkout();
+    };
     const execBtn=c.querySelector('.duo-exec'); if(execBtn) execBtn.onclick=()=>openExec(ex);
     const cta=c.querySelector('.cnote-ta'); if(cta){ cta.value=st.note||''; cta.addEventListener('input',e=>{ st.note=e.target.value; saveState(); }); }
     const addSet=c.querySelector('.add-set-btn'); if(addSet) addSet.onclick=(e)=>{ e.stopPropagation(); const count=uni?2:1; for(let n=0;n<count;n++) st.sets.push({kg:'',reps:'',rir:''}); const y=view.scrollTop; saveStateNow(); wkRefresh(); view.scrollTop=y; };
@@ -2057,8 +2056,21 @@
     toastMsg('Allenamento salvato');
     return true;
   }
+  function coachNoteHTML(ex){
+    const note=String(ex?.note||ex?.instructions||'').replace(NOTA_UNILAT_VECCHIA,'').trim();
+    return note?`<div class="note coach-note"><span class="nl">Note del PT</span><p>${esc(note)}</p></div>`:'';
+  }
   function sessioneSalvataHTML(session){
-    return `${session.nota?`<div class="note">${esc(session.nota)}</div>`:''}${(session.esercizi||[]).map(ex=>`<section class="physical-panel"><h3 class="physical-title">${esc(ex.nome)}</h3>${(ex.sets||[]).map((set,i)=>{const f=fmtSerie(ex,set);return `<div class="progmeta">Serie ${esc(savedSetLabel(ex.lati,set,i))} · ${esc(f.kg)} × ${esc(f.r)}${set.rir==null?'':' · RIR '+esc(set.rir)}</div>`;}).join('')||'<div class="progmeta">Nessuna serie registrata</div>'}${ex.note?`<div class="note">${esc(ex.note)}</div>`:''}</section>`).join('')}`;
+    const planned=giorni[giornoCorr]?.esercizi||[];
+    const exercises=(session.esercizi||[]).map(ex=>{
+      const prescription=(ex.exerciseId&&planned.find(item=>item.id===ex.exerciseId))||planned.find(item=>item.nome===ex.nome);
+      const sets=(ex.sets||[]).map((set,i)=>{
+        const f=fmtSerie(ex,set);
+        return `<div class="progmeta">Serie ${esc(savedSetLabel(ex.lati,set,i))} · ${esc(f.kg)} × ${esc(f.r)}${set.rir==null?'':' · RIR '+esc(set.rir)}</div>`;
+      }).join('');
+      return `<section class="physical-panel"><h3 class="physical-title">${esc(ex.nome)}</h3>${coachNoteHTML(prescription)}${sets||'<div class="progmeta">Nessuna serie registrata</div>'}${ex.note?`<div class="note"><span class="nl">Le tue note</span> ${esc(ex.note)}</div>`:''}</section>`;
+    }).join('');
+    return `${session.nota?`<div class="note">${esc(session.nota)}</div>`:''}${exercises}`;
   }
   function savedSetLabel(sides,set,i){
     const side=sides?.[i];
