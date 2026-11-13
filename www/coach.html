@@ -443,6 +443,9 @@
   .wk-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:16px; flex-wrap:wrap;}
   .wk-head h2{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:24px; color:var(--text); margin:0;}
   .wk-actions{display:flex; gap:10px; flex-wrap:wrap;}
+  .wk-actions .btn-remove-week{color:#a03830;border-color:rgba(216,80,70,.4);}
+  .wk-actions .btn-remove-week:not(:disabled):hover{background:#fbe5e3;}
+  .wk-actions .btn-remove-week:disabled{opacity:.5;cursor:not-allowed;}
   .days-empty{background:var(--surface); border:1px solid var(--line-soft); border-radius:16px; padding:42px 20px; text-align:center; box-shadow:var(--shadow-card); color:var(--muted2);}
   .days-empty .ic{color:var(--muted2);} .days-empty .ic svg{width:30px;height:30px;}
   .days-empty p{font-weight:700; font-size:14px; margin:10px 0 0;}
@@ -2269,6 +2272,7 @@
       '<button class="btn btn-primary" id="impBtn">'+I.upload+' Importa</button>';
     const wtabs=p.weeks.map((w,i)=>'<button class="wtab '+(i===progWeek?'on':'')+'" data-wk="'+i+'">'+escapeHTML(w.nome)+'</button>').join('');
     const wk=p.weeks[progWeek];
+    const removeWeekDisabled=p.weeks.length===1 ? ' disabled title="Il programma deve avere almeno una settimana"' : '';
     const meta=[p.livello,p.tipologia].filter(Boolean).join(' · ');
     p.settimane=p.weeks.length; p.esercizi=p.weeks.reduce((n,w)=>n+w.giorni.reduce((a,g)=>a+(g.esercizi||[]).length,0),0);
     let daysHtml = wk.giorni.length===0
@@ -2278,7 +2282,7 @@
       '<div class="sec sec-wide">'+
         (meta?'<div class="prog-meta">'+meta+'</div>':'')+
         '<div class="wtabs-row">'+wtabs+'</div>'+
-        '<div class="wk-head"><h2>'+escapeHTML(wk.nome)+'</h2><div class="wk-actions"><button class="btn btn-ghost" id="copyWk">'+I.copy+' Copia settimana</button><button class="btn btn-ghost" id="addWk">'+I.plus+' Aggiungi settimana</button></div></div>'+
+        '<div class="wk-head"><h2>'+escapeHTML(wk.nome)+'</h2><div class="wk-actions"><button type="button" class="btn btn-ghost btn-remove-week" id="deleteWk"'+removeWeekDisabled+'>'+I.trash+' Elimina settimana</button><button class="btn btn-ghost" id="copyWk">'+I.copy+' Copia settimana</button><button class="btn btn-ghost" id="addWk">'+I.plus+' Aggiungi settimana</button></div></div>'+
         daysHtml+
         '<div class="add-day-row"><button class="btn btn-primary" id="addDay">'+I.plus+' Aggiungi allenamento</button></div>'+
       '</div>';
@@ -2289,6 +2293,20 @@
     document.getElementById('saveMockProgram').onclick=()=>window.CoachDB.saveProgram(p);
     document.getElementById('assignMockProgram').onclick=()=>window.CoachDB.assignProgram(p);
     document.getElementById('impBtn').onclick=openImporta;
+    document.getElementById('deleteWk').onclick=()=>{
+      if(p.weeks.length<=1)return;
+      const count=wk.giorni.length;
+      const detail=count===1?' Verrà eliminato anche l’allenamento contenuto.':count>1?' Verranno eliminati anche i '+count+' allenamenti contenuti.':'';
+      if(!confirm('Eliminare «'+wk.nome+'» dal programma?'+detail))return;
+
+      p.weeks.splice(progWeek,1);
+      p.weeks.forEach((week,index)=>{
+        if(/^Settimana \d+$/i.test(week.nome))week.nome='Settimana '+(index+1);
+      });
+      progWeek=Math.min(progWeek,p.weeks.length-1);
+      renderProgramma();
+      main.querySelector('.wtab.on')?.focus();
+    };
     document.getElementById('copyWk').onclick=()=>{ const src=p.weeks[progWeek]; p.weeks.push({nome:'Settimana '+(p.weeks.length+1), giorni:JSON.parse(JSON.stringify(src.giorni))}); progWeek=p.weeks.length-1; renderProgramma(); toast('Settimana copiata'); };
     document.getElementById('addWk').onclick=()=>{ p.weeks.push({nome:'Settimana '+(p.weeks.length+1), giorni:[]}); progWeek=p.weeks.length-1; renderProgramma(); };
     document.getElementById('addDay').onclick=openNuovoWorkout;
