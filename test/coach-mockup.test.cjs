@@ -14,13 +14,14 @@ const template = (...esercizi) => ({
 
 test("la home PT integra il calendario e mantiene la scheda cliente e i due editor", () => {
   const html = fs.readFileSync(path.join(__dirname, "../www/coach.html"), "utf8");
-  for (const tile of ["priorita", "clienti", "workout", "nutrizione", "impostazioni"]) {
+  for (const tile of ["priorita", "clienti", "workout", "nutrizione"]) {
     assert.match(html, new RegExp(`id:'${tile}'`));
   }
-  assert.doesNotMatch(html, /id:'(?:revisione|abbonamenti|agenda)'/);
+  assert.doesNotMatch(html, /id:'(?:revisione|abbonamenti|agenda|impostazioni)'/);
+  assert.match(html, /id="coachSettings"/);
   assert.match(html, /id="homeCalendar"/);
   assert.match(html, /id="calAdd"/);
-  for (const field of ["copyWk", "addWk", "addDay", "assignMockProgram", "assignPiano", "savePianoDraft", "impBtn", "impPiano", "addEx"]) {
+  for (const field of ["copyWk", "addWk", "addDay", "assignMockProgram", "assignPiano", "savePianoDraft", "pdDelete", "impBtn", "impPiano", "addEx"]) {
     assert.match(html, new RegExp(`id="${field}"`));
   }
   assert.match(html, /coach-mockup\.mjs/);

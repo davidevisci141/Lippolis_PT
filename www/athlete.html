@@ -733,6 +733,7 @@
 
 </style>
 <style>.set-prescription{display:block;margin-top:3px;color:var(--muted);font-size:9px;font-weight:600;line-height:1.25;white-space:normal}</style>
+<link rel="stylesheet" href="chat.css?v=notifications">
 </head>
 <body>
   <div class="phone">
@@ -1057,7 +1058,7 @@
       <div class="co-head">
         <div class="co-av">${esc(iniz)}</div>
         <div class="co-hi"><div class="co-hn" id="chatCoachName">${esc(chatCoachName)}</div></div>
-        ${window.lippolisChat?`<button type="button" class="co-notify" id="athleteChatNotify">${esc(window.lippolisChat.notificationLabel())}</button>`:''}
+        <button type="button" class="co-notify" id="athleteChatNotify" ${window.lippolisAlerts?"":"hidden"}>Notifiche</button>
       </div>`;
 
     if(caso){
@@ -1081,7 +1082,7 @@
     if(th) dipingiThread(th);
     markCoachRead();
     const notify=document.getElementById('athleteChatNotify');
-    if(notify)notify.onclick=async()=>{notify.textContent=await window.lippolisChat.enableChatNotifications();};
+    if(notify)notify.onclick=openNotificationSettings;
 
     const u=document.getElementById('coUrg'); if(u) u.onclick=()=>{ urgSel=null; urgTesto=''; coVista='urgenza'; renderCoach(); };
     const df=document.getElementById('coDif'); if(df) df.onclick=()=>{ difSel=null; difTesto=''; coVista='differita'; renderCoach(); };
@@ -2153,7 +2154,6 @@
   function toSec(t){ const p=String(t).split(':').map(Number); return p.length===2 ? p[0]*60+p[1] : (p[0]||0); }
   function fmtT(s){ const m=Math.floor(s/60), ss=s%60; return m+':'+String(ss).padStart(2,'0'); }
   function ensureAudio(){ try{ if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)(); if(audioCtx.state==='suspended') audioCtx.resume(); }catch(e){} }
-  function ensureNotify(){ try{ if('Notification' in window && Notification.permission==='default') Notification.requestPermission(); }catch(e){} }
   async function requestWake(){ try{ if('wakeLock' in navigator){ wakeLock = await navigator.wakeLock.request('screen'); } }catch(e){} }
   function releaseWake(){ try{ if(wakeLock){ wakeLock.release(); wakeLock=null; } }catch(e){} }
   // keep-alive silenzioso per mantenere vivo l'audio in background (best effort)
@@ -2221,9 +2221,9 @@
   function provaSuono(){ const T=timerNativo(); if(T && T.prova){ try{ const p=T.prova({volume:volTimer/100}); if(p && p.catch) p.catch(()=>{}); return; }catch(e){} }
     _prova.forEach(o=>{ try{o.stop();}catch(e){} }); _prova=[]; suonaSequenza(PREAVVISO,_prova); }
   function riapplicaVolume(){ if(!tmr.running) return; if(tmr.nativo) nativoAvvia(); else scheduleBeep((tmr.endAt-Date.now())/1000); }
-  function notifyDone(){ if(tmr.nativo) return; try{ if('Notification' in window && Notification.permission==='granted'){ const n=new Notification('Recupero terminato', { body:(tmr.label||'Timer')+' · è ora della prossima serie', tag:'lippolis-timer', renotify:true }); setTimeout(()=>{ try{n.close();}catch(e){} },5000); } }catch(e){} try{ if(navigator.vibrate) navigator.vibrate(VIBRA); }catch(e){} }
+  function notifyDone(){ if(tmr.nativo) return; void window.lippolisAlerts?.timerDone(); try{ if(navigator.vibrate) navigator.vibrate(VIBRA); }catch(e){} }
   function avviaCorsa(){ tmr.running=true; tmr.endAt=Date.now()+tmr.sec*1000; tmr.nativo=nativoAvvia(); scheduleBeep(tmr.sec); if(!tmr.nativo && !tmr.keepAlive) keepAliveStart(); requestWake(); clearInterval(tmr.iv); tmr.iv=setInterval(tickTimer,250); }
-  function startTimer(sec,label){ if(!sec||sec<=0) return; ensureAudio(); ensureNotify(); clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); tmr={sec:sec, total:sec, label:label||'Timer', running:false, finished:false, iv:null, endAt:0, nodes:[], keepAlive:null, nativo:false}; avviaCorsa(); updateTimerBar(); }
+  function startTimer(sec,label){ if(!sec||sec<=0) return; ensureAudio(); clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); tmr={sec:sec, total:sec, label:label||'Timer', running:false, finished:false, iv:null, endAt:0, nodes:[], keepAlive:null, nativo:false}; avviaCorsa(); updateTimerBar(); }
   function tickTimer(){ if(!tmr.running) return; const rem=Math.max(0, Math.ceil((tmr.endAt-Date.now())/1000)); tmr.sec=rem; if(rem<=0){ finishTimer(); } updateTimerBar(); }
   function finishTimer(){ clearInterval(tmr.iv); tmr.running=false; tmr.finished=true; tmr.sec=0; if(!tmr.nativo && audioCtx && audioCtx.state==='suspended'){ beepNow(); } notifyDone(); keepAliveStop(); releaseWake(); updateTimerBar(); setTimeout(()=>{ if(tmr.finished) stopTimer(); }, 4500); }
   function stopTimer(){ clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); releaseWake(); if(tmr.nativo){ nativoFerma(); tmr.nativo=false; } tmr.running=false; tmr.finished=false; const bar=document.getElementById('timerBar'); if(bar){ bar.classList.remove('done'); bar.style.display='none'; } }
@@ -2583,6 +2583,12 @@
   function formatBia(value,digits=1){ return value==null||value===''||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString('it-IT',{minimumFractionDigits:digits,maximumFractionDigits:digits}); }
   function formatBiaDate(value){ const d=new Date(value); return Number.isNaN(d.getTime())?'Data non disponibile':new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:'short'}).format(d); }
 
+  function openNotificationSettings(){
+    showTab('profilo');
+    document.getElementById('athleteAlertHeading')?.scrollIntoView({block:'start'});
+    document.querySelector('#athleteAlertSettings button')?.focus({preventScroll:true});
+  }
+
   function renderProfilo(){
     const bk = ultimoBackup ? fmtDataOra(ultimoBackup) : 'mai';
     const giorniDaBk = ultimoBackup ? Math.floor((Date.now()-ultimoBackup)/86400000) : null;
@@ -2638,9 +2644,11 @@
 
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>
-      <div class="pf-row"><div class="t">Notifiche</div><button class="tgl on" onclick="this.classList.toggle('on')"></button></div>
+      <div class="pf-sec" id="athleteAlertHeading">Notifiche</div>
+      <div class="bk-card" id="athleteAlertSettings" aria-labelledby="athleteAlertHeading"></div>
       <div class="pf-link danger" id="pfReset">${I.trash} Cancella tutti i dati</div>`;
 
+    window.lippolisAlerts?.mount(document.getElementById('athleteAlertSettings'));
     const sv=document.getElementById('save');
     sv.onclick=async()=>{
       const first=document.getElementById('pfNome').value.trim(), last=document.getElementById('pfCogn').value.trim(), status=document.getElementById('profileSaveStatus');
@@ -2847,12 +2855,6 @@
   window.addEventListener('beforeunload', saveStateNow);
   document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveStateNow(); });
 
-  // Service worker: file esterno, registrato solo se presente (no-op in locale/mockup).
-  const IN_APP = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-  if(!IN_APP && 'serviceWorker' in navigator && location.protocol.startsWith('http')){
-    window.addEventListener('load', ()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); });
-  }
-
   function gestisciIndietro(){
     const gm=document.getElementById('gModal');
     if(gm && gm.style.display==='flex'){ chiudiGiorno(); return true; }
@@ -2917,6 +2919,7 @@
     applyCoachSections: (value)=>{coachSections=value||{};if(activeTab==='consigli'||(activeTab==='altro'&&altroDetail)||activeTab==='workout'&&workoutView==='detail'&&!view.contains(document.activeElement))renderView();},
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
     openChat: ()=>showTab('coach'),
+    openWorkout: ()=>showTab('workout'),
     isChatOpen: ()=>activeTab==='coach'&&coVista==='home',
     setChatCoach: name=>{
       chatCoachName=String(name);
@@ -2961,6 +2964,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261113-program-v6"></script>
+<script type="module" src="src/athlete.mjs?v=20261113-notifications"></script>
 </body>
 </html>

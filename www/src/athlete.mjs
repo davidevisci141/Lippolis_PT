@@ -2,7 +2,8 @@ import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 import { watchAthleteNutrition } from "./nutrition-athlete.mjs";
 import { toAthleteProgram } from "./workout-metrics.mjs?v=20261113-program-v6";
-import { enableChatNotifications, markChatRead, notificationLabel, notifyChat } from "./chat.mjs";
+import { markChatRead } from "./chat.mjs";
+import { createNotifications } from "./notifications.mjs";
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
 let knownRevision = 0;
@@ -19,6 +20,7 @@ let saveTimer = null;
 let retryCount = 0;
 let currentAccessToken = "";
 let currentUserId = "";
+let alerts;
 
 function badgeText(text, isError = false) {
   if (!badge) return; badge.textContent = text; badge.style.background = isError ? "#b83d35" : ""; badge.classList.add("show");
@@ -145,6 +147,10 @@ function applyRemoteChanges(uid) {
   }
   if (programChanged || !sameSnapshot(merged, localData())) api.applySnapshot(merged);
   sessionStorage.setItem(`lippolis_cloud_boot_${uid}`, `${knownRevision}:${knownProgramVersion}`);
+  if(programChanged&&programVersion){
+    void alerts?.notify("program",{title:"Nuova scheda",body:"Il tuo PT ha pubblicato una scheda.",
+      action:"Apri allenamento",destination:"workout"});
+  }
 }
 let messageRequest = 0, latestMessages = [], markingChat = false;
 async function loadMessages(uid) {
@@ -253,23 +259,45 @@ async function bootstrap(session) {
       catch (error) { badgeText(friendlyAuthError(error), true); return false; }
     }
   };
+  const openNotification = destination => {
+    if(destination==="workout")api.openWorkout?.();
+    else api.openChat?.();
+  };
+  alerts=createNotifications({
+    role:"athlete",uid:user.uid,
+    types:[
+      {id:"chat",label:"Nuovi messaggi",enabled:true},
+      {id:"program",label:"Nuova scheda",enabled:true},
+      {id:"timer",label:"Timer di recupero",detail:"Avviso a fine recupero. Volume e suoneria si regolano nella sezione Timer.",enabled:true}
+    ],
+    onOpen:openNotification
+  });
+  window.lippolisAlerts={
+    mount:alerts.mount,
+    timerDone:()=>alerts.notify("timer",{title:"Recupero terminato",body:"È ora della prossima serie.",
+      destination:"workout",backgroundOnly:true,silent:true})
+  };
+  const settings=document.getElementById("athleteAlertSettings");
+  if(settings)alerts.mount(settings);
+  const chatSettings=document.getElementById("athleteChatNotify");
+  if(chatSettings)chatSettings.hidden=false;
   window.lippolisChat={
     send:async text=>{
       const sent=await window.lippolisCloudSync.sendMessage({tipo:"message",testo:text,meta:{plainText:true}},"thread");
       if(sent)void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));
       return sent;
     },
-    read:()=>readAthleteChat(user.uid).catch(error=>badgeText(friendlyAuthError(error),true)),
-    notificationLabel,enableChatNotifications
+    read:()=>readAthleteChat(user.uid).catch(error=>badgeText(friendlyAuthError(error),true))
   };
   if(api.setChatCoach)void supabase.rpc("athlete_chat_coach_name").then(({data,error})=>{
     if(!error&&data)api.setChatCoach(data);
   });
   document.addEventListener("visibilitychange",()=>{if(!document.hidden)void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));});
   if(typeof navigator!=="undefined")navigator.serviceWorker?.addEventListener("message",event=>{
-    if(event.data?.type==="open-chat")api.openChat?.();
+    if(event.data?.type==="open-chat")openNotification("chat");
+    if(event.data?.type==="open-notification")openNotification(event.data.destination);
   });
-  if(location.hash==="#chat")api.openChat?.();
+  if(location.hash==="#chat"||location.hash==="#workout")openNotification(location.hash.slice(1));
 
   supabase.channel(`athlete-state:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "athlete_states", filter: `user_id=eq.${user.uid}` }, (payload) => {
     applyRemoteState(user.uid, payload.new);
@@ -296,8 +324,10 @@ async function bootstrap(session) {
   });
   supabase.channel(`athlete-messages:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `athlete_id=eq.${user.uid}` }, event=>{
     if(event.eventType==="INSERT"&&event.new?.channel==="thread"&&event.new.sender_id!==user.uid){
-      if(!document.hidden&&!api.isChatOpen?.())badgeText("Nuovo messaggio dal PT");
-      void notifyChat("athlete");
+      if(document.hidden||!api.isChatOpen?.()){
+        void alerts.notify("chat",{title:"Nuovo messaggio",body:"Il tuo PT ti ha scritto.",
+          action:"Apri chat",destination:"chat"});
+      }
     }
     void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));
   }).subscribe(status=>{if(status==="SUBSCRIBED")void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));});

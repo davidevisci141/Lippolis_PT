@@ -3,7 +3,8 @@ import { getAuthorizedSession, friendlyAuthError, logout } from "./auth.mjs";
 import { mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
 import { parseExerciseVideo } from "./exercise-video.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
-import { enableChatNotifications, markChatRead, notificationLabel, notifyChat } from "./chat.mjs";
+import { markChatRead } from "./chat.mjs";
+import { createNotifications } from "./notifications.mjs";
 
 const ui = window.CoachMock, $ = (id) => document.getElementById(id);
 const escape = (v) => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -22,6 +23,7 @@ const checked = ({data,error}) => { if(error) throw error; return data; };
 const sectionRows = new Map(), snapshots = new Map(), stateRevisions = new Map(), published = new Map(), versions = new Map(), drafts = new Map();
 const sectionWrites = new Map();
 let profile, uid, workspaceRevision=0, workspaceSignature="", saveQueue=Promise.resolve(), selectEpoch=0, loadEpoch=0, workspaceLoaded=false;
+let alerts;
 let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}};
 const key = (client,section) => `${client.id}:${section}`;
 const getSection = (client,section) => sectionRows.get(key(client,section))?.content || {};
@@ -63,7 +65,7 @@ function showModal(title, fields, label, onSave) {
 
 function workspacePayload() {
   return {...workspace, programs:ui.programmi.map(p=>({...p,id:p.id ||= crypto.randomUUID()})),
-    mealPlans:ui.pianiAlimentari.map(p=>({...p,id:p.id ||= crypto.randomUUID()})), notifications:ui.notifiche.map(n=>n.on)};
+    mealPlans:ui.pianiAlimentari.map(p=>({...p,id:p.id ||= crypto.randomUUID()}))};
 }
 function saveWorkspace(explicit=false) {
   if(!workspaceLoaded)return Promise.resolve(false);
@@ -165,8 +167,8 @@ function refreshSignals() {
   for(const c of ui.clienti){
     const active=published.get(c.id), end=active?.program?.al||active?.program?.endDate, start=active?.program?.dal||active?.program?.startDate;
     const title=active?.program?.nome||active?.program?.name||"Scheda";
-    if(start)dates.push({date:start,clientName:c.nome,title,kind:"start"});
-    if(end)dates.push({date:end,clientName:c.nome,title,kind:"end"});
+    if(start)dates.push({id:`start:${c.id}:${active.version_id}`,date:start,clientName:c.nome,title,kind:"start"});
+    if(end)dates.push({id:`end:${c.id}:${active.version_id}`,date:end,clientName:c.nome,title,kind:"end"});
     for(const event of items(c,"agenda")){
       dates.push({id:event.id,date:event.date,clientId:c.id,clientName:c.nome,title:event.title,detail:event.detail,kind:"reminder"});
     }
@@ -188,6 +190,14 @@ function refreshSignals() {
     }
   }
   replace(ui.prioritaOggi,priorities);replace(ui.scadenze,dates);
+  checkCalendarAlerts();
+}
+
+function checkCalendarAlerts(){
+  const date=today();
+  const events=ui.calendarEvents(date.slice(0,7)).filter(event=>event.date===date)
+    .map(event=>({id:`${event.kind}:${event.id}`,title:`${event.clientName} · ${ui.calendarKinds[event.kind]} · ${event.title}`}));
+  void alerts?.calendar(date,events);
 }
 
 function clientSelect(id="mockClient") {
@@ -225,6 +235,11 @@ function publishNutrition(plan) {
     await saveSection(c,"nutrition",{plan:structuredClone(plan),publishedAt:new Date().toISOString()});
     plan.clienti=Math.max(1,plan.clienti||0);await saveWorkspace();ui.toast("Piano pubblicato per "+c.nome);
   });
+}
+
+function confirmNutritionDayDeletion(day,remove){
+  showModal("Elimina giornata",`<p>Eliminare «${escape(day.nome)}» dal piano insieme ai suoi pasti e alle note?</p>`,"Elimina",remove);
+  $("mockModalCancel").focus();
 }
 
 function createClient(){
@@ -394,15 +409,17 @@ async function refreshInbox(){
   const previous=new Map(inbox.map(item=>[item.id,item]));
   inbox=ui.clienti.map(c=>({...c,...byId.get(c.id)})).sort((a,b)=>
     Number(!!b.unread)-Number(!!a.unread)||(Date.parse(b.latest_at)||0)-(Date.parse(a.latest_at)||0)||a.nome.localeCompare(b.nome,"it"));
-  if(inboxLoaded&&inbox.some(item=>Number(item.unread||0)>Number(previous.get(item.id)?.unread||0))
-      &&ui.notifiche.find(n=>n.t==="Nuovo messaggio")?.on){
-    if(ui.view!=="chat"&&!document.hidden)ui.toast("Nuovo messaggio da un cliente");
-    void notifyChat("coach");
+  const incoming=inboxLoaded&&inbox.find(item=>Number(item.unread||0)>Number(previous.get(item.id)?.unread||0)
+    &&(document.hidden||ui.view!=="chat"||chatClient!==item.id));
+  if(incoming){
+    void alerts?.notify("chat",{title:"Nuovo messaggio",body:`${incoming.nome} ti ha scritto.`,
+      systemBody:"Un cliente ti ha scritto.",action:"Apri chat",destination:"chat",clientId:incoming.id});
   }
   inboxLoaded=true;
   const total=inbox.reduce((sum,item)=>sum+Number(item.unread||0),0);
   const badge=$("coachChatUnread");
   badge.hidden=!total;badge.textContent=total>99?"99+":String(total);
+  $("coachChat").setAttribute("aria-label",total?`Chat, ${total} non letti`:"Chat");
   paintChatContacts();
 }
 async function refreshCoachThread(){
@@ -458,11 +475,11 @@ function paintChatPanel(){
   void refreshCoachThread().catch(error=>{status.textContent=friendlyAuthError(error);});
 }
 function renderInbox(){
-  ui.main.innerHTML=ui.pageHead("Chat",button("chatNotify",notificationLabel()))+
+  ui.main.innerHTML=ui.pageHead("Chat",button("chatNotify","Impostazioni notifiche"))+
     '<div class="chat-shell" id="chatShell"><aside class="chat-sidebar" aria-label="Conversazioni"><input id="chatSearch" type="search" aria-label="Cerca cliente" placeholder="Cerca cliente…"><div id="chatContacts" class="chat-contacts"></div></aside><section class="chat-panel" id="chatPanel"></section></div>';
   $("back").onclick=()=>ui.go("home");
   $("chatSearch").oninput=paintChatContacts;
-  $("chatNotify").onclick=async event=>{const control=event.currentTarget;control.textContent=await enableChatNotifications();};
+  $("chatNotify").onclick=()=>ui.openNotificationSettings();
   paintChatContacts();
   paintChatPanel();
   void refreshInbox().catch(fail);
@@ -641,6 +658,11 @@ function exerciseAttachments(ex) {
 }
 
 function settings(panel,tab){
+  if(tab==="notifiche"){
+    panel.innerHTML='<h2 class="set-title">Notifiche</h2><div id="coachAlertSettings"></div>';
+    alerts.mount($("coachAlertSettings"));
+    return;
+  }
   if(tab==="generali"){
     panel.innerHTML=`<div class="set-title">Generali</div><div class="set-sec"><div class="set-sec-h">Dati personali</div><div class="avatar-edit">${escape(ui.initials(ui.COACH.name))}</div>
       <div class="fld-row">${field("mockCoachFirst","Nome","text",profile.firstName,true)}${field("mockCoachLast","Cognome","text",profile.lastName,true)}</div>
@@ -796,15 +818,22 @@ async function start(){
     const saved=checked(await supabase.from("coach_workspaces").select("content,revision").eq("coach_id",uid).maybeSingle());
     for(const ex of ui.libreria)ex.id="catalog:"+ex.nome;
     if(saved){
-      workspaceRevision=saved.revision;const {programs,mealPlans,notifications,...rest}=saved.content;
+      workspaceRevision=saved.revision;const {programs,mealPlans,...rest}=saved.content;
       workspace={...workspace,...rest};
       replace(ui.programmi,programs||[]);replace(ui.pianiAlimentari,mealPlans||[]);
-      (notifications||[]).forEach((enabled,i)=>{if(ui.notifiche[i])ui.notifiche[i].on=!!enabled;});
       for(const [id,value] of Object.entries(workspace.exerciseEdits)){
         const found=ui.libreria.find(ex=>ex.id===id);
         if(found)Object.assign(found,value);else ui.libreria.unshift(value);
       }
     }
+    alerts=createNotifications({
+      role:"coach",uid,
+      types:[
+        {id:"chat",label:"Nuovi messaggi",enabled:workspace.notifications?.[2] ?? true},
+        {id:"calendar",label:"Calendario",detail:"Inizio e scadenza schede, avvisi a 7 giorni e promemoria del giorno.",enabled:workspace.notifications?.[0] ?? true}
+      ],
+      onOpen:openNotification,onChange:checkCalendarAlerts
+    });
     await loadDirectory();
     workspaceSignature=JSON.stringify(workspacePayload());workspaceLoaded=true;
     const badge=document.createElement("div");
@@ -812,13 +841,23 @@ async function start(){
     badge.innerHTML='<span class="as-dot"></span><span id="asTxt" role="status">Salvataggio automatico</span>';
     document.body.append(badge);
     $("brand").disabled=false;
+    document.querySelector(".coach-chat-icon").innerHTML=ui.I.chat;
     $("coachChat").disabled=false;
     $("coachChat").onclick=()=>ui.go("chat");
-    ui.go(location.hash==="#chat"?"chat":"home");
+    $("coachSettings").innerHTML=ui.I.gear;
+    $("coachSettings").disabled=false;
+    $("coachSettings").onclick=()=>ui.go("impostazioni");
+    const [destination,clientId]=location.hash.slice(1).split("/");
+    if(destination==="chat"||destination==="calendar")openNotification(destination,clientId);
+    else ui.go("home");
     void refreshInbox().catch(fail);
     const refreshChat=()=>{void refreshInbox().catch(fail);if(ui.view==="chat")void refreshCoachThread().catch(fail);};
-    document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshChat();});
-    navigator.serviceWorker?.addEventListener("message",event=>{if(event.data?.type==="open-chat")ui.go("chat");});
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden){refreshChat();checkCalendarAlerts();}});
+    window.setInterval(checkCalendarAlerts,60000);
+    navigator.serviceWorker?.addEventListener("message",event=>{
+      if(event.data?.type==="open-chat")openNotification("chat");
+      if(event.data?.type==="open-notification")openNotification(event.data.destination,event.data.clientId);
+    });
     let update;
     const reload=()=>{clearTimeout(update);update=setTimeout(async()=>{try{await loadDirectory();if(["home","priorita"].includes(ui.view))ui.render();}catch(error){fail(error);}},300);};
     let feed=supabase.channel("coach-mockup:"+uid);
@@ -835,6 +874,17 @@ async function start(){
     $("mockRetry").onclick=()=>location.reload();
   }
 }
-window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
+function openNotification(destination,clientId){
+  if(destination==="chat"){
+    const client=ui.clienti.find(item=>item.id===clientId);
+    if(client)openCoachChat(client.id);
+    else ui.go("chat");
+  }else if(destination==="calendar"){
+    ui.go("home");
+    ui.renderHomeCalendar(today());
+    $("homeCalendar")?.scrollIntoView({block:"nearest"});
+  }
+}
+window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
 $("coachLogout").onclick=signOutCoach;
 void start();
