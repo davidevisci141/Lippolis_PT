@@ -58,6 +58,17 @@ test("le anteprime BIA vengono archiviate e mostrate insieme agli originali", ()
   assert.match(migration, /\(-preview\)\?/);
 });
 
+test("le foto dei progressi usano il caricamento privato e due selettori per il telefono", () => {
+  const html = read("www/athlete.html");
+  const app = read("www/src/progress-photos.mjs");
+  const rules = read("supabase/migrations/202611130005_athlete_progress_photos.sql");
+  assert.match(html, /id="progressCapture"[^>]*capture="environment"/);
+  assert.match(html, /id="progressFile"[^>]*accept="image\/\*/);
+  assert.match(app, /-athlete-progress\.jpg/);
+  assert.match(rules, /private\.can_read_athlete\(\(select auth\.uid\(\)\), private\.athlete_progress_photo_owner\(name\)\)/);
+  assert.match(rules, /private\.athlete_progress_photo_owner\(name\) = \(select auth\.uid\(\)\)/);
+});
+
 test("BIA salva il valore letto dal referto e valida i controlli sul server", () => {
   const api = read("supabase/functions/admin-api/index.ts");
   assert.match(api, /const bodyFatMassKg = values\.bodyFatMassKg/);

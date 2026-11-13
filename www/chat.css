@@ -40,6 +40,22 @@
 .app-alert p{margin:4px 0 0;color:var(--muted,#4f6961);font-size:.85rem}
 .app-alert button{flex:none}
 .app-alert .app-alert-action{background:var(--accent,#12c7a2);color:var(--on-accent,#04231b);border-color:transparent}
+.progress-copy{margin:7px 0;color:var(--muted);font-size:13px;}
+.progress-actions{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}
+.progress-actions .btn-accent,.progress-actions .bk-b{flex:1 1 140px;width:auto;margin:0;min-height:42px;}
+.progress-draft{padding-top:12px;border-top:1px solid var(--line-soft);}
+.progress-draft img{display:block;width:100%;max-height:340px;object-fit:contain;background:var(--surface2);border-radius:10px;}
+.progress-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr));gap:12px;margin-top:10px;}
+.progress-photo{min-width:0;border:1px solid var(--line-soft);border-radius:12px;overflow:hidden;background:var(--surface);}
+.progress-photo-open{display:grid;place-items:center;width:100%;height:clamp(160px,24vw,235px);border:0;background:var(--surface2);cursor:pointer;color:var(--muted);}
+.progress-photo-open img{display:block;width:100%;height:100%;object-fit:contain;font-size:12px;}
+.progress-photo-open:focus-visible{outline-offset:-3px;}
+.progress-photo-info{display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;padding:9px;font-size:12px;color:var(--text);overflow-wrap:anywhere;}
+.progress-photo-heading{margin-bottom:12px;font:800 18px 'Archivo',system-ui,sans-serif;}
+.progress-coach-header{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.progress-coach-header h2{margin:0;}
+.progress-coach-files{margin-top:20px;}
+.progress-preview-blur img{filter:blur(14px);}
 @media(max-width:680px){
   .chat-shell{display:block;min-height:380px;height:calc(100dvh - 150px)}
   .chat-sidebar,.chat-panel{height:100%}.chat-shell:not(.has-chat) .chat-panel,.chat-shell.has-chat .chat-sidebar{display:none}

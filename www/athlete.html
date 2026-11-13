@@ -335,21 +335,7 @@
   .pf-link svg{width:19px;height:19px;}
   .pf-link.danger{color:var(--danger);} .pf-link.danger svg{color:var(--danger);}
 
-  /* ---- PROGRESSI ---- */
-  .pg-toggle{display:flex; align-items:center; justify-content:space-between; background:var(--surface); border:1px solid var(--line-soft); border-radius:14px; padding:12px 14px; box-shadow:var(--shadow-card); margin-bottom:18px;}
-  .pg-toggle .t{font-size:14px; font-weight:700; color:var(--text);}
-  .pentry{margin-bottom:22px;}
-  .pe-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
-  .pdate{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:17px; color:var(--text);}
-  .pdel{background:transparent; color:var(--danger); border:1px solid rgba(216,80,70,.4); border-radius:9px; padding:6px 12px; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:12px; cursor:pointer;}
-  .pshots{display:flex; gap:8px;}
-  .pslot{flex:1; min-width:0;}
-  .pslot .ph{position:relative; height:128px; border-radius:12px; background:var(--surface2); border:1px solid var(--line-soft); overflow:hidden; display:grid; place-items:center;}
-  .pslot .ph svg{height:96px; width:auto;}
-  .pslot .faceblur{position:absolute; top:20px; left:50%; transform:translateX(-50%); width:30px; height:24px; border-radius:5px; background-image:repeating-conic-gradient(#9298a0 0 25%, #b7bcc2 0 50%); background-size:5px 5px;}
-  .pslot .plab{text-align:center; font-size:11px; color:var(--muted); font-weight:600; margin-top:7px;}
-  .fab{position:absolute; right:18px; bottom:calc(86px + env(safe-area-inset-bottom, 0px)); width:56px;height:56px;border-radius:50%; background:var(--accent); color:var(--on-accent); display:grid;place-items:center; box-shadow:0 10px 22px rgba(var(--accent-rgb),.5); cursor:pointer; z-index:5; border:0;}
-  .fab svg{width:26px;height:26px;}
+  .pdel{background:transparent;color:var(--danger-ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;}
 
   /* ---- METRICHE ---- */
   .metric{margin-bottom:24px;}
@@ -753,7 +739,7 @@
 
 </style>
 <style>.set-prescription{display:block;margin-top:3px;color:var(--muted);font-size:9px;font-weight:600;line-height:1.25;white-space:normal}</style>
-<link rel="stylesheet" href="chat.css?v=notifications">
+<link rel="stylesheet" href="chat.css?v=progress-photos">
 </head>
 <body>
   <div class="phone">
@@ -777,7 +763,6 @@
       <button class="btn-accent" type="button">Attiva notifiche</button>
     </section>
     <div class="view" id="view"></div>
-    <div class="fab" id="fab" style="display:none"></div>
     <div class="timerbar" id="timerBar" style="display:none"></div>
     <div class="exec-modal" id="execModal" style="display:none"></div>
     <div class="sg-modal" id="sgModal" style="display:none"></div>
@@ -910,7 +895,6 @@
     check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>',
-    silhouette:'<svg viewBox="0 0 60 110" fill="#b4b9bf"><circle cx="30" cy="16" r="11"/><path d="M10 110 C10 70 16 32 30 32 C44 32 50 70 50 110 Z"/></svg>',
     play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
     pause:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
     close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
@@ -946,7 +930,6 @@
   let altroDetail = null;
   let altroStoricoEx = null;
   let metricheTab = 'peso';
-  let oscuraVolto = true;
   let progressi = [];
   let sessioni = [];          // storico reale: {id, ts, giorno, dt, titolo, esercizi:[{nome, sets:[{kg,reps,rir}], fatto, note}]}
   let profilo = {nome:'', cognome:''};
@@ -1021,9 +1004,6 @@
 
   const view = document.getElementById('view');
   const tabbarEl = document.getElementById('tabbar');
-  const fab = document.getElementById('fab');
-  fab.innerHTML = I.plus;
-  fab.onclick = ()=>addProgresso();
 
   // ====== ASSISTENTE AI (chat) ======
 
@@ -1222,7 +1202,6 @@
   }
   function showTab(id){ giornoSel=null; valoriOpen=false; pesataOpen=false; pesataDraft=''; activeTab=id; altroDetail=null; altroStoricoEx=null; docAperto=null; coVista='home'; if(id==='workout'){ workoutView='list'; } view.scrollTop=0; renderView(); renderNav(); }
   function renderView(){
-    fab.style.display='none';
     if(activeTab==='workout') renderWorkout();
     else if(activeTab==='consigli') renderConsigli();
     else if(activeTab==='coach') renderCoach();
@@ -2365,28 +2344,160 @@
   }
 
   // ====== PROGRESSI ======
-  function renderProgressi(){
-    if(Object.hasOwn(coachSections,'progress'))return coachFiles('progress','Progressi fisici');
-    fab.style.display='grid';
-    let html=`<div class="dhead"><div class="back" id="back">${I.chevL}</div><h2>Progressi fisici</h2></div>
-      <div class="pg-toggle"><div class="t">Oscura il volto nelle foto</div><button class="tgl ${oscuraVolto?'on':''}" id="blurTgl"></button></div>`;
-    if(progressi.length===0){
-      html+=`<div class="empty"><div class="ic">${I.camera}</div><h2>Nessuna foto</h2><p>Tocca il + in basso per caricare le tue foto di progresso.</p></div>`;
-    } else {
-      progressi.forEach((p,i)=>{
-        const slots=['Foto frontale','Foto laterale','Foto di spalle'].map(lbl=>`<div class="pslot"><div class="ph">${I.silhouette}${oscuraVolto?'<span class="faceblur"></span>':''}</div><div class="plab">${lbl}</div></div>`).join('');
-        html+=`<div class="pentry"><div class="pe-head"><div class="pdate">${p.data}</div><button class="pdel" data-i="${i}">Elimina</button></div><div class="pshots">${slots}</div></div>`;
-      });
-    }
-    view.innerHTML=html;
-    document.getElementById('back').onclick=()=>{ altroDetail=null; view.scrollTop=0; renderView(); };
-    document.getElementById('blurTgl').onclick=()=>{ oscuraVolto=!oscuraVolto; renderProgressi(); };
-    view.querySelectorAll('.pdel').forEach(b=> b.onclick=()=>{ progressi.splice(+b.dataset.i,1); renderProgressi(); });
+  let progressPhotoOwner='', progressDraft=null, progressSaving=false;
+  const progressPhotoDate=new Intl.DateTimeFormat('it-IT',{dateStyle:'medium'});
+  function clearProgressDraft(){
+    if(progressDraft?.url)URL.revokeObjectURL(progressDraft.url);
+    progressDraft=null;
   }
-  function addProgresso(){
-    const mesi=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'], o=new Date();
-    progressi.unshift({data:`${o.getDate()} ${mesi[o.getMonth()]} ${o.getFullYear()}`});
-    view.scrollTop=0; renderProgressi();
+  function renderProgressi(){
+    coachSectionPage('Progressi fisici',`
+      <section class="physical-panel">
+        <h3 class="physical-title">Aggiungi una foto</h3>
+        <p class="progress-copy">Le foto che condividi sono visibili al tuo PT.</p>
+        <div class="progress-actions">
+          <button type="button" class="btn-accent" id="progressCamera">Scatta foto</button>
+          <button type="button" class="bk-b" id="progressGallery">Scegli dalla galleria</button>
+        </div>
+        <input type="file" id="progressCapture" accept="image/*" capture="environment" hidden>
+        <input type="file" id="progressFile" accept="image/*,.heic,.heif" hidden>
+        <div class="progress-draft" id="progressDraft" hidden></div>
+        <p class="progress-copy" id="progressFeedback" role="status"></p>
+      </section>
+      <section class="physical-panel">
+        <h3 class="physical-title">Le tue foto</h3>
+        <div id="athleteProgressPhotos"><p class="progress-copy">Caricamento foto…</p></div>
+      </section>
+      <section class="physical-panel" id="coachProgressPhotos" hidden>
+        <h3 class="physical-title">Foto aggiunte dal PT</h3>
+        <div class="progress-grid"></div>
+      </section>`);
+    const owner=progressPhotoOwner;
+    const camera=document.getElementById('progressCamera'), gallery=document.getElementById('progressGallery');
+    const capture=document.getElementById('progressCapture'), file=document.getElementById('progressFile');
+    const draft=document.getElementById('progressDraft'), feedback=document.getElementById('progressFeedback');
+    const own=document.getElementById('athleteProgressPhotos');
+    const shared=document.getElementById('coachProgressPhotos');
+    const photosModule=()=>import('./src/progress-photos.mjs');
+    const signed=async path=>{
+      const [{getCoachFile},{PHOTO_BUCKET}]=await Promise.all([import('./src/athlete-coach-sections.mjs'),photosModule()]);
+      return getCoachFile(PHOTO_BUCKET,path);
+    };
+    function paintDraft(){
+      const current=progressDraft;
+      draft.hidden=!current?.blob;
+      draft.replaceChildren();
+      camera.disabled=gallery.disabled=!owner||progressSaving;
+      if(!current?.blob)return;
+      draft.innerHTML='<img alt="Anteprima della foto da condividere"><div class="progress-actions"><button type="button" class="btn-accent">Condividi con il PT</button><button type="button" class="bk-b">Annulla</button></div>';
+      draft.querySelector('img').src=current.url;
+      const [save,cancel]=draft.querySelectorAll('button');
+      save.disabled=cancel.disabled=progressSaving;
+      cancel.onclick=()=>{clearProgressDraft();feedback.textContent='';paintDraft();};
+      save.onclick=async()=>{
+        progressSaving=true;
+        feedback.textContent='Caricamento foto…';
+        paintDraft();
+        try{
+          const {saveProgressPhoto}=await photosModule();
+          await saveProgressPhoto(owner,current.name,current.blob);
+          if(progressDraft===current)clearProgressDraft();
+          if(feedback.isConnected)feedback.textContent='Foto condivisa con il PT.';
+        }catch{
+          if(feedback.isConnected)feedback.textContent='Caricamento non riuscito. Riprova.';
+        }finally{
+          progressSaving=false;
+          const liveDraft=document.getElementById('progressDraft');
+          if(draft.isConnected){paintDraft();if(!progressDraft)void loadOwnPhotos();}
+          else if(liveDraft)renderProgressi();
+        }
+      };
+    }
+    async function selectPhoto(input){
+      const selected=input.files[0];
+      input.value='';
+      if(!selected||progressSaving)return;
+      clearProgressDraft();
+      const current={name:crypto.randomUUID()};
+      progressDraft=current;
+      paintDraft();
+      feedback.textContent='Preparazione foto…';
+      try{
+        const {prepareProgressPhoto}=await photosModule();
+        const blob=await prepareProgressPhoto(selected);
+        if(progressDraft!==current)return;
+        current.blob=blob;
+        current.url=URL.createObjectURL(blob);
+        feedback.textContent='';
+      }catch(error){
+        if(progressDraft!==current)return;
+        clearProgressDraft();
+        feedback.textContent=error.message||'Foto non leggibile.';
+      }
+      if(draft.isConnected)paintDraft();
+      else if(document.getElementById('progressDraft'))renderProgressi();
+    }
+    function paintGallery(host,photos,owned){
+      host.className='progress-grid';
+      host.replaceChildren();
+      for(const photo of photos){
+        const card=document.createElement('article');
+        card.className='progress-photo';
+        card.innerHTML='<button type="button" class="progress-photo-open" aria-label="Apri foto"><img alt="" loading="lazy"></button><div class="progress-photo-info"></div>';
+        const info=card.querySelector('.progress-photo-info'), image=card.querySelector('img');
+        const date=Number.isFinite(photo.date.getTime())?progressPhotoDate.format(photo.date):'Foto di progresso';
+        info.textContent=photo.title?photo.title+' · '+date:date;
+        image.alt=photo.title||'Foto di progresso del '+date;
+        card.querySelector('.progress-photo-open').onclick=async()=>{
+          try{const url=await signed(photo.path);if(card.isConnected)location.assign(url);}
+          catch{if(card.isConnected)feedback.textContent='Foto non disponibile. Riprova.';}
+        };
+        if(owned){
+          const remove=document.createElement('button');
+          remove.type='button';
+          remove.className='pdel';
+          remove.textContent='Elimina';
+          remove.onclick=async()=>{
+            if(!confirm('Eliminare questa foto anche dalla vista del PT?'))return;
+            remove.disabled=true;
+            try{
+              const {deleteProgressPhoto}=await photosModule();
+              await deleteProgressPhoto(photo.path);
+              if(card.isConnected){
+                card.remove();
+                if(!host.children.length){host.className='';host.textContent='Nessuna foto condivisa.';}
+              }
+            }catch{feedback.textContent='Eliminazione non riuscita. Riprova.';remove.disabled=false;}
+          };
+          info.append(remove);
+        }
+        host.append(card);
+        signed(photo.path).then(url=>{if(card.isConnected)image.src=url;}).catch(()=>{image.alt='Anteprima non disponibile';});
+      }
+    }
+    async function loadOwnPhotos(){
+      if(!owner){own.textContent='Connessione all’account in corso…';return;}
+      try{
+        const {listProgressPhotos}=await photosModule();
+        const photos=await listProgressPhotos(owner);
+        if(!own.isConnected)return;
+        if(photos.length)paintGallery(own,photos,true);
+        else{own.className='';own.textContent='Nessuna foto condivisa.';}
+      }catch{
+        if(own.isConnected)own.textContent='Impossibile caricare le foto. Riapri questa sezione per riprovare.';
+      }
+    }
+    camera.onclick=()=>capture.click();
+    gallery.onclick=()=>file.click();
+    capture.onchange=()=>void selectPhoto(capture);
+    file.onchange=()=>void selectPhoto(file);
+    paintDraft();
+    void loadOwnPhotos();
+    const coachPhotos=coachSections.progress?.items||[];
+    if(coachPhotos.length){
+      shared.hidden=false;
+      paintGallery(shared.querySelector('.progress-grid'),coachPhotos.map(photo=>({...photo,date:new Date(photo.date+'T12:00:00')})),false);
+    }
   }
 
   // ====== METRICHE ======
@@ -2920,6 +3031,10 @@
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
     openChat: ()=>showTab('coach'),
     openWorkout: ()=>showTab('workout'),
+    setProgressPhotoOwner: uid=>{
+      progressPhotoOwner=uid;
+      if(activeTab==='altro'&&altroDetail==='Progressi fisici')renderProgressi();
+    },
     isChatOpen: ()=>activeTab==='coach'&&coVista==='home',
     setChatCoach: name=>{
       chatCoachName=String(name);
@@ -2964,6 +3079,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261113-athlete-profile"></script>
+<script type="module" src="src/athlete.mjs?v=20261113-progress-photos"></script>
 </body>
 </html>

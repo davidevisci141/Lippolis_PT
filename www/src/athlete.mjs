@@ -178,6 +178,7 @@ async function readAthleteChat(uid) {
 async function bootstrap(session) {
   if (!api) throw new Error("Area atleta non inizializzata."); const { user, profile } = session; const storedUid = sessionStorage.getItem("lippolis_uid");
   currentUserId = user.uid;
+  api.setProgressPhotoOwner?.(user.uid);
   const { data: { session: authSession }, error: authSessionError } = await supabase.auth.getSession();
   if (authSessionError) throw authSessionError;
   currentAccessToken = authSession?.access_token || "";

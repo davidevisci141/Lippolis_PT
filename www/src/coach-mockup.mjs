@@ -5,6 +5,7 @@ import { parseExerciseVideo } from "./exercise-video.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
 import { markChatRead } from "./chat.mjs";
 import { createNotifications } from "./notifications.mjs";
+import { listProgressPhotos, PHOTO_BUCKET } from "./progress-photos.mjs";
 
 const ui = window.CoachMock, $ = (id) => document.getElementById(id);
 const escape = (v) => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -325,11 +326,17 @@ function listFiles(c, section, title) {
     `<div class="pentry"><div class="pe-head"><div class="pdate">${displayDate(date)}</div></div><div class="pshots">${entries.map(({it,i})=>`<div class="pslot"><div class="ph" data-photo-slot="${i}"></div><div class="plab">${escape(it.title)}</div>${button("mockFile"+i,"Apri")}${button("mockRemoveFile"+i,"Elimina")}</div>`).join("")}</div></div>`).join("");
   const rows=list.map((it,i)=>row(it.title,displayDate(it.date),button("mockFile"+i,"Apri")+button("mockRemoveFile"+i,"Elimina"))).join("");
   const previewControl=photos?`<div class="pg-toggle"><div class="t">Oscura le anteprime</div><button class="tgl ${workspace.preferences.blurPhotos?"on":""}" id="mockBlurPhotos" aria-label="Oscura le anteprime"></button></div>`:"";
-  drawClient(c,title,previewControl+(photos?gallery:rows||"")+(list.length?"":empty(photos?"Nessuna foto":"Nessun documento")),button("mockAddFile",photos?"Aggiungi foto":"Aggiungi documento",true));
+  const progress=photos?`<section class="weight-panel"><div class="progress-coach-header"><h2>Foto del cliente</h2>${button("mockRefreshAthletePhotos","Aggiorna")}</div><div id="mockAthletePhotos"><p class="progress-copy">Caricamento foto…</p></div></section>
+    <section class="progress-coach-files"><h2 class="progress-photo-heading">Foto aggiunte dal PT</h2>${gallery||'<p class="progress-copy">Nessuna foto aggiunta dal PT.</p>'}</section>`:"";
+  drawClient(c,title,previewControl+(photos?progress:rows||empty("Nessun documento")),button("mockAddFile",photos?"Aggiungi foto":"Aggiungi documento",true));
   if(photos)$("mockBlurPhotos").onclick=()=>{
     workspace.preferences.blurPhotos=!workspace.preferences.blurPhotos;
     ui.scheduleSave();listFiles(c,section,title);
   };
+  if(photos){
+    $("mockRefreshAthletePhotos").onclick=()=>loadAthleteProgressPhotos(c);
+    void loadAthleteProgressPhotos(c);
+  }
   if(photos&&list.length){
     list.forEach((it,i)=>{
       const slot=ui.main.querySelector('[data-photo-slot="'+i+'"]');
@@ -358,6 +365,29 @@ function listFiles(c, section, title) {
       try{await saveSection(c,section,{items:items(c,section).filter(x=>x.id!==it.id)});await supabase.storage.from("coach-client-files").remove([it.path]);listFiles(c,section,title);}catch(error){fail(error);}
     };
   });
+}
+async function loadAthleteProgressPhotos(client){
+  const host=$("mockAthletePhotos"), refresh=$("mockRefreshAthletePhotos");
+  if(!host||refresh.disabled)return;
+  refresh.disabled=true;
+  try{
+    const photos=await listProgressPhotos(client.id);
+    if(!host.isConnected)return;
+    host.className=photos.length?"progress-grid":"";
+    host.innerHTML=photos.map((photo,index)=>`<article class="progress-photo"><button type="button" class="progress-photo-open${workspace.preferences.blurPhotos?" progress-preview-blur":""}" data-progress-open="${index}" aria-label="Apri foto del ${displayDate(photo.date)}"><img loading="lazy" alt="Foto del ${displayDate(photo.date)}"></button><div class="progress-photo-info">${displayDate(photo.date)}</div></article>`).join("")||'<p class="progress-copy">Il cliente non ha ancora condiviso foto.</p>';
+    host.querySelectorAll("[data-progress-open]").forEach(button=>{
+      const photo=photos[Number(button.dataset.progressOpen)];
+      const image=button.querySelector("img");
+      signed(PHOTO_BUCKET,photo.path).then(url=>{if(button.isConnected)image.src=url;})
+        .catch(()=>{image.alt="Anteprima non disponibile";});
+      button.onclick=()=>openFile(PHOTO_BUCKET,photo.path).catch(fail);
+    });
+  }catch{
+    if(host.isConnected){
+      host.innerHTML='<p class="progress-copy">Impossibile caricare le foto.</p>'+button("mockRetryAthletePhotos","Riprova");
+      $("mockRetryAthletePhotos").onclick=()=>loadAthleteProgressPhotos(client);
+    }
+  }finally{refresh.disabled=false;}
 }
 function questionnaire(c){
   const list=items(c,"questionnaires");
@@ -937,6 +967,9 @@ async function start(){
       if((event.new?.user_id||event.old?.user_id)===ui.currentClient?.id)refreshSelectedClient();
     });
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSelectedClient();});
+    document.addEventListener("visibilitychange",()=>{
+      if(!document.hidden&&$("mockAthletePhotos")&&ui.currentClient)void loadAthleteProgressPhotos(ui.currentClient);
+    });
     feed.on("postgres_changes",{event:"*",schema:"public",table:"profiles"},async()=>{
       try{await loadDirectory();refreshChat();if(["home","clienti"].includes(ui.view))ui.render();}catch(error){fail(error);}
     }).on("postgres_changes",{event:"*",schema:"public",table:"messages"},event=>{
