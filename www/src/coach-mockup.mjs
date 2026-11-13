@@ -80,6 +80,26 @@ function saveWorkspace(explicit=false) {
   return task.catch(error=>{setSaveStatus("Salvataggio non riuscito");fail(error);return false;});
 }
 function setSaveStatus(message){const status=$("asTxt");if(status)status.textContent=message;}
+
+async function signOutCoach() {
+  const headerButton = $("coachLogout");
+  if (headerButton.disabled) return;
+  const settingsButton = $("mockLogout");
+  headerButton.disabled = true;
+  if (settingsButton) settingsButton.disabled = true;
+  ui.main.inert = true;
+  try {
+    const saved = !workspaceLoaded || await saveWorkspace();
+    if (saved || window.confirm("Le ultime modifiche non sono state salvate. Vuoi uscire comunque?")) {
+      await logout();
+    }
+  } finally {
+    ui.main.inert = false;
+    headerButton.disabled = false;
+    if (settingsButton) settingsButton.disabled = false;
+  }
+}
+
 async function saveSection(client,section,content) {
   const id=key(client,section), previous=sectionRows.get(id);
   const revision=checked(await supabase.rpc("save_coach_client_section",{p_athlete:client.id,p_section:section,p_expected:previous?.revision||0,p_content:content}));
@@ -568,7 +588,7 @@ function settings(panel,tab){
         profile=profileFromRow(row);updateIdentity();ui.toast("Profilo salvato");
       }catch(error){fail(error);}
     };
-    $("mockLogout").onclick=async()=>{if(await saveWorkspace())await logout();};
+    $("mockLogout").onclick=signOutCoach;
     $("mockCoachPassword").onclick=()=>showModal("Cambia password",field("mockNewPassword","Nuova password","password","",true)+field("mockConfirmPassword","Ripeti la password","password","",true),"Salva password",async()=>{
       const password=val("mockNewPassword");if(password.length<12||password!==val("mockConfirmPassword"))throw new Error("Usa almeno 12 caratteri e ripeti la stessa password.");
       checked(await supabase.auth.updateUser({password}));ui.toast("Password aggiornata");
@@ -667,6 +687,7 @@ async function start(){
     const session=await getAuthorizedSession({requireRole:"coach"});
     if(session.reason){ location.replace("index.html");return; }
     profile=session.profile;uid=session.user.uid;updateIdentity();
+    $("coachLogout").disabled=false;
     const saved=checked(await supabase.from("coach_workspaces").select("content,revision").eq("coach_id",uid).maybeSingle());
     for(const ex of ui.libreria)ex.id="catalog:"+ex.nome;
     if(saved){
@@ -697,4 +718,5 @@ async function start(){
   }
 }
 window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,subscriptions,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes};
+$("coachLogout").onclick=signOutCoach;
 void start();
