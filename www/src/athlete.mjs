@@ -1,12 +1,17 @@
 import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
-import { toAthleteProgram } from "./workout-metrics.mjs?v=20261110-program-v4";
+import { watchAthleteNutrition } from "./nutrition-athlete.mjs";
+import { toAthleteProgram } from "./workout-metrics.mjs?v=20261113-program-v5";
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
 let knownRevision = 0;
 let knownProgramVersion = "";
 let cloudReady = false;
 let pendingSnapshot = null;
+let pendingRemoteState = null;
+let pendingRemoteProgram;
+let programEventSequence = 0;
+let stopNutritionWatch = null;
 let saving = false;
 let saveTimer = null;
 let retryCount = 0;
@@ -19,7 +24,7 @@ function badgeText(text, isError = false) {
 }
 function localData() { try { return JSON.parse(localStorage.getItem(api.storageKey) || "null") || api.snapshot(); } catch { return api.snapshot(); } }
 function saveLocal(data) { localStorage.setItem(api.storageKey, JSON.stringify({ ...data, salvato: Number(data.salvato || Date.now()) })); }
-function sanitizeSnapshot(value) { const clean = structuredClone(value || {}); delete clean.PROGRAMMA; delete clean.thread; delete clean.diario; delete clean.differite; delete clean.app; delete clean.esportato; clean.v = 1; return clean; }
+function sanitizeSnapshot(value) { const clean = structuredClone(value || {}); delete clean.PROGRAMMA; delete clean.versioneSchedaLocale; delete clean.thread; delete clean.diario; delete clean.differite; delete clean.app; delete clean.esportato; clean.v = 1; return clean; }
 function stableValue(value) { if (Array.isArray(value)) return value.map(stableValue); if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stableValue(value[key])])); return value; }
 function sameSnapshot(a, b) { return JSON.stringify(stableValue(sanitizeSnapshot(a))) === JSON.stringify(stableValue(sanitizeSnapshot(b))); }
 function mergeArray(current, incoming) {
@@ -93,6 +98,51 @@ function mergeRemote(remoteState, currentProgram, profile, preferLocal = false) 
   merged.profilo = { ...(merged.profilo || {}), nome: profile.firstName || merged.profilo?.nome || "", cognome: profile.lastName || merged.profilo?.cognome || "" };
   merged.salvato = Math.max(Number(local.salvato || 0), Number(remoteState?.salvato || 0)); return merged;
 }
+function recordRemoteState(value) {
+  if (Number(value?.revision || 0) > Number(pendingRemoteState?.revision || 0)) pendingRemoteState = value;
+}
+function applyRemoteState(uid, value) {
+  if (Number(value?.revision || 0) <= knownRevision) return;
+  recordRemoteState(value);
+  applyRemoteChanges(uid);
+}
+async function refreshRemoteState(uid) {
+  const { data, error } = await supabase.from("athlete_states").select("snapshot, revision").eq("user_id", uid).maybeSingle();
+  if (error) throw error;
+  applyRemoteState(uid, data);
+}
+async function refreshRemoteProgram(uid) {
+  const sequence = ++programEventSequence;
+  const { data, error } = await supabase.from("programs").select("program, version_id").eq("athlete_id", uid).maybeSingle();
+  if (sequence !== programEventSequence) return;
+  if (error) throw error;
+  pendingRemoteProgram = data || false;
+  applyRemoteChanges(uid);
+}
+function applyRemoteChanges(uid) {
+  if (!cloudReady || saving || (!pendingRemoteState && pendingRemoteProgram === undefined)) return;
+  api.flushPendingSave?.();
+  if (pendingSnapshot) return;
+
+  const state = pendingRemoteState;
+  const program = pendingRemoteProgram;
+  pendingRemoteState = null;
+  pendingRemoteProgram = undefined;
+  const stateRevision = Number(state?.revision || 0);
+  const programVersion = program?.version_id || "";
+  const stateChanged = state !== null && stateRevision >= knownRevision;
+  const programChanged = program !== undefined && programVersion !== knownProgramVersion;
+  if (!stateChanged && !programChanged) return;
+
+  const merged = mergeRemote(stateChanged ? state.snapshot : null, programChanged ? program : null, window.__LIPPOLIS_PROFILE__ || {});
+  if (stateChanged) knownRevision = stateRevision;
+  if (programChanged) {
+    knownProgramVersion = programVersion;
+    window.__LIPPOLIS_PROGRAM_VERSION__ = programVersion;
+  }
+  if (programChanged || !sameSnapshot(merged, localData())) api.applySnapshot(merged);
+  sessionStorage.setItem(`lippolis_cloud_boot_${uid}`, `${knownRevision}:${knownProgramVersion}`);
+}
 async function loadMessages(uid) {
   const { data, error } = await supabase.from("messages").select("*").eq("athlete_id", uid).order("created_at").limit(200); if (error) throw error;
   api.applyMessages(data.map((item) => ({ id: item.id, ts: new Date(item.created_at).getTime(), from: item.sender_id === uid ? "atleta" : "coach", tipo: item.type || "messaggio", testo: item.text, meta: item.metadata || null, channel: item.channel || "thread", letto: true })));
@@ -124,7 +174,8 @@ async function bootstrap(session) {
   const preferLocal = Number(local.salvato || 0) >= Number(remote.salvato || 0);
   const merged = mergeRemote(remote, programDoc || false, profile, preferLocal);
   const programChanged = JSON.stringify(merged.PROGRAMMA ?? null) !== JSON.stringify(local.PROGRAMMA ?? null);
-  if (sessionStorage.getItem(markerKey) !== marker || !sameSnapshot(merged, local) || programChanged) api.applySnapshot(merged);
+  const versionChanged = String(local.versioneSchedaLocale || "") !== knownProgramVersion;
+  if (sessionStorage.getItem(markerKey) !== marker || !sameSnapshot(merged, local) || programChanged || versionChanged) api.applySnapshot(merged);
   sessionStorage.setItem(markerKey, marker);
   if (!sameSnapshot(merged, remote)) pendingSnapshot = mergeQueuedSnapshot(remote, merged);
 
@@ -182,60 +233,92 @@ async function bootstrap(session) {
   };
 
   supabase.channel(`athlete-state:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "athlete_states", filter: `user_id=eq.${user.uid}` }, (payload) => {
-    const value = payload.new || {}; const revision = Number(value.revision || 0); if (revision <= knownRevision) return;
-    if (saving || pendingSnapshot) return badgeText("Conflitto: dati aggiornati su un altro dispositivo", true);
-    knownRevision = revision; api.applySnapshot(mergeRemote(value.snapshot, null, profile)); sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`);
-  }).subscribe();
+    applyRemoteState(user.uid, payload.new);
+  }).subscribe((status) => {
+    if (status === "SUBSCRIBED") void refreshRemoteState(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
+  });
   supabase.channel(`athlete-profile:${user.uid}`).on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.uid}` }, async (payload) => {
     if (payload.new?.status === "active") return;
+    stopNutritionWatch?.();
     await supabase.auth.signOut(); alert("Il tuo accesso non è più attivo."); location.replace("index.html");
   }).subscribe();
   supabase.channel(`athlete-program:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "programs", filter: `athlete_id=eq.${user.uid}` }, (payload) => {
-    const value = payload.new || null; const version = value?.version_id || ""; if (version === knownProgramVersion) return;
-    if (pendingSnapshot) return badgeText("Nuova scheda disponibile: salva o ricarica", true);
-    knownProgramVersion = version; window.__LIPPOLIS_PROGRAM_VERSION__ = version; api.applySnapshot(mergeRemote(null, value || false, profile)); sessionStorage.setItem(markerKey, `${knownRevision}:${knownProgramVersion}`);
-  }).subscribe();
+    if (payload.eventType === "DELETE") {
+      void refreshRemoteProgram(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
+      return;
+    }
+    if (!payload.new?.program) return;
+    programEventSequence++;
+    pendingRemoteProgram = payload.new;
+    applyRemoteChanges(user.uid);
+  }).subscribe((status) => {
+    if (status === "SUBSCRIBED") void refreshRemoteProgram(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
+  });
   supabase.channel(`athlete-messages:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `athlete_id=eq.${user.uid}` }, () => loadMessages(user.uid).catch((error) => badgeText(friendlyAuthError(error), true))).subscribe();
-  await loadMessages(user.uid); cloudReady = true; if (pendingSnapshot) flush(user.uid); else if (!stateDoc) window.lippolisCloudSync.queue(api.snapshot()); return true;
+  cloudReady = true;
+  if (pendingSnapshot) void flush(user.uid);
+  else if (!stateDoc) window.lippolisCloudSync.queue(api.snapshot());
+  applyRemoteChanges(user.uid);
+  void loadMessages(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
+  stopNutritionWatch = watchAthleteNutrition(user.uid, (value) => api.applyNutrition(value));
+  return true;
 }
 
 async function flush(uid) {
   if (!cloudReady || saving || !pendingSnapshot) return;
   clearTimeout(saveTimer); const snapshot = pendingSnapshot; pendingSnapshot = null; saving = true; badgeText("Sincronizzazione…");
-  let working = snapshot, failure = null;
+  const remoteRevision = Number(pendingRemoteState?.revision || 0);
+  const reconciledState = remoteRevision >= knownRevision ? pendingRemoteState : null;
+  if (reconciledState) knownRevision = remoteRevision;
+  let working = reconciledState ? mergeQueuedSnapshot(reconciledState.snapshot, snapshot) : snapshot;
+  let needsReconciliation = Boolean(reconciledState);
+  let failure = null;
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
       const { data, error } = await supabase.rpc("save_athlete_state", { p_expected_revision: knownRevision, p_snapshot: working });
-      if (!error) { knownRevision = Number(data); retryCount = 0; sessionStorage.setItem(`lippolis_cloud_boot_${uid}`, `${knownRevision}:${knownProgramVersion}`); badgeText("Salvato e sincronizzato"); failure = null; break; }
+      if (!error) {
+        knownRevision = Number(data);
+        if (needsReconciliation) recordRemoteState({ revision: knownRevision, snapshot: working });
+        retryCount = 0;
+        sessionStorage.setItem(`lippolis_cloud_boot_${uid}`, `${knownRevision}:${knownProgramVersion}`);
+        badgeText("Salvato e sincronizzato");
+        failure = null;
+        break;
+      }
       if (error.code !== "40001" && !/STATE_CONFLICT/.test(error.message || "")) throw error;
       const { data: latest, error: readError } = await supabase.from("athlete_states").select("snapshot, revision").eq("user_id", uid).maybeSingle();
       if (readError) throw readError;
       knownRevision = Number(latest?.revision || 0);
+      recordRemoteState(latest);
       working = mergeQueuedSnapshot(latest?.snapshot, mergeQueuedSnapshot(working, pendingSnapshot));
+      needsReconciliation = true;
       pendingSnapshot = null; failure = error;
     }
     if (failure) throw failure;
   } catch (error) {
-    pendingSnapshot = mergeQueuedSnapshot(pendingSnapshot, working);
+    pendingSnapshot = mergeQueuedSnapshot(working, pendingSnapshot);
     retryCount = Math.min(retryCount + 1, 6);
     const conflict = error.code === "40001" || /STATE_CONFLICT/.test(error.message || "");
     badgeText(conflict ? "Sincronizzazione in conflitto: riprovo" : "Offline: dati in coda per la sincronizzazione", true);
   } finally {
     saving = false;
     if (pendingSnapshot) scheduleFlush(uid, retryCount ? Math.min(30000, 800 * 2 ** retryCount) : 150);
+    else applyRemoteChanges(uid);
   }
 }
 
 async function logoutAfterSync(uid) {
-  for (let attempt = 0; pendingSnapshot && attempt < 3; attempt++) {
+  api.flushPendingSave?.();
+  for (let attempt = 0; (pendingSnapshot || saving) && attempt < 3; attempt++) {
     if (!saving) await flush(uid);
-    if (pendingSnapshot) await new Promise((resolve) => setTimeout(resolve, 500));
+    if (pendingSnapshot || saving) await new Promise((resolve) => setTimeout(resolve, 500));
   }
   if (pendingSnapshot || saving) {
     badgeText("Dati ancora in attesa: riconnettiti e riprova a uscire", true);
     alert("Non riesco a sincronizzare le ultime modifiche. Restano salvate su questo dispositivo: riconnettiti e riprova a uscire.");
     return false;
   }
+  stopNutritionWatch?.();
   await logout(); return true;
 }
 

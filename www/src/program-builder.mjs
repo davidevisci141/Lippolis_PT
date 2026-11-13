@@ -1,11 +1,13 @@
 import {
   DEFAULT_VOLUME_RANGES, calculateAverageRir, calculateUsefulSets,
   calculateVolume, calculateWeekBars, estimateWorkout, convertLegacyProgram, validateV2Program, inspectProgramDates, calendarDay, formatCalendarDay
-} from "./workout-metrics.mjs?v=20261110-program-v4";
+} from "./workout-metrics.mjs?v=20261113-program-v5";
+import { EXERCISE_VIDEO_ERROR, parseExerciseVideo } from "./exercise-video.mjs";
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const uid = (prefix) => `${prefix}-${crypto.randomUUID()}`;
 const parseNumber = (value) => value === "" || value == null ? null : Number(String(value).replace(",", "."));
+const exerciseKey = (value) => String(value ?? "").trim().toLocaleLowerCase("it");
 const methodNames = {
   straight: "Esercizio singolo", superset: "Superset", giant_set: "Giant set", drop_set: "Drop set",
   rest_pause: "Rest-pause", cluster: "Cluster", myo_reps: "Myo-reps", top_back_off: "Top set + back-off",
@@ -135,6 +137,7 @@ function methodBlock(method, position) {
 export class ProgramBuilder {
   constructor(root, { onChange = () => {} } = {}) {
     this.root = root; this.onChange = onChange; this.program = freshProgram(); this.weekIndex = 0; this.dayIndex = 0; this.scale = "RIR"; this.openBlocks = new Set(); this.activeToolPanel = "volume";
+    this.dayLayout = "columns";
     this.root.addEventListener("click", (event) => this.#click(event));
     this.root.addEventListener("input", (event) => this.#input(event));
     this.root.addEventListener("change", (event) => this.#change(event));
@@ -165,44 +168,107 @@ export class ProgramBuilder {
     this.setProgram(result.program); this.#notify(); return result;
   }
   render() {
+    const weekScroll = this.root.querySelector(".pb-week-list")?.scrollLeft ?? 0;
+    const dayScroll = this.root.querySelector(".pb-day-list")?.scrollLeft ?? 0;
     const weeks = this.program.settimane || [], week = weeks[this.weekIndex] || { giorni: [] }, days = week.giorni || [], day = days[this.dayIndex] || { blocks: [] };
     const bars = calculateWeekBars(this.program, this.program.settings);
     const exerciseCatalog = new Map();
     const muscleCatalog = new Set();
     for (const sourceWeek of weeks) for (const sourceDay of sourceWeek.giorni || []) for (const sourceBlock of sourceDay.blocks || []) for (const exercise of sourceBlock.exercises || []) {
-      const name = String(exercise.name || "").trim(); if (name && !exerciseCatalog.has(name.toLocaleLowerCase())) exerciseCatalog.set(name.toLocaleLowerCase(), exercise);
+      const name = exerciseKey(exercise.name);
+      if (name && !exerciseCatalog.has(name)) exerciseCatalog.set(name, exercise);
       for (const muscle of [...(exercise.primary_muscles || []), ...(exercise.secondary_muscles || [])]) if (String(muscle || "").trim()) muscleCatalog.add(String(muscle).trim());
     }
     this.root.innerHTML = `<div class="pb-layout">
       <section class="pb-main">
-        <div class="pb-section-head"><div><b>Programmazione</b><span class="sub">Settimane e sedute della scheda</span></div><button type="button" class="secondary" data-action="add-week">+ Settimana</button></div>
+        <div class="pb-section-head"><div><b>Programmazione</b></div><button type="button" class="secondary" data-action="add-week">+ Settimana</button></div>
         <div class="pb-week-list">${weeks.map((item, index) => `<button type="button" class="pb-week${index === this.weekIndex ? " on" : ""}" data-action="select-week" data-w="${index}"><b>Sett. ${esc(item.n || index + 1)}</b><small>${esc(item.fase || "Fase non impostata")}</small><small>Volume · ${bars[index].usefulSets} serie</small><span class="pb-bars pb-volume-bar"><i style="width:${Math.round(bars[index].volume * 100)}%"></i></span><small>Intensità · ${bars[index].scale} ${bars[index].meanIntensity == null ? "—" : bars[index].meanIntensity.toFixed(1)}</small><span class="pb-bars pb-intensity-bar"><i style="width:${Math.round(bars[index].intensity * 100)}%"></i></span></button>`).join("")}</div>
         <details class="pb-details"><summary>Dettagli settimana${week.rule_note ? " · nota compilata" : ""}</summary><div class="pb-row"><label>Fase<input class="field" data-field="week.fase" value="${esc(week.fase)}" maxlength="80"></label><label>Dal settimana<input class="field" type="date" data-field="week.dal" value="${esc(week.dal)}" ${week.dates_are_manual ? "" : "disabled"}></label><label>Al settimana<input class="field" type="date" data-field="week.al" value="${esc(week.al)}" ${week.dates_are_manual ? "" : "disabled"}></label><label>Target volume (serie)<input class="field" type="number" min="0" max="1000" data-field="week.volume_target" value="${esc(week.volume_target)}" placeholder="Calcolato"></label><label>Target intensità ${this.scale}<input class="field" type="number" min="0" max="10" step="0.5" data-field="week.intensity_target" value="${esc(week.intensity_target)}" placeholder="Calcolata"></label><label class="pb-check"><input type="checkbox" data-field="week.dates_are_manual" ${week.dates_are_manual ? "checked" : ""}> Date manuali</label><div class="pb-inline-actions"><button type="button" class="secondary" data-action="duplicate-week">Duplica</button><button type="button" class="secondary" data-action="move-week-up">↑</button><button type="button" class="secondary" data-action="move-week-down">↓</button><button type="button" class="secondary danger" data-action="delete-week">Elimina</button></div></div><label>Regola / nota della settimana<textarea class="field pb-note" rows="2" data-field="week.rule_note" maxlength="500">${esc(week.rule_note)}</textarea></label></details><div class="pb-date-warnings" id="pbDateWarnings" role="status"></div>
-        <div class="pb-section-head pb-day-head"><div><b>Sedute</b><span class="sub">${esc(week.fase || `Settimana ${this.weekIndex + 1}`)}</span></div><button type="button" class="secondary" data-action="add-day">+ Seduta</button></div>
-        <div class="pb-day-list">${days.map((item, index) => `<button type="button" class="pb-day${index === this.dayIndex ? " on" : ""}" data-action="select-day" data-d="${index}"><b>${esc(item.code || item.day_code || String.fromCharCode(65 + index))}</b><span>${esc(item.title || "Seduta")}</span></button>`).join("")}</div>
+        <div class="pb-section-head pb-day-head">
+          <div><b>Settimana ${esc(week.n || this.weekIndex + 1)}</b>${week.fase ? `<span class="sub">${esc(week.fase)}</span>` : ""}</div>
+          <div class="pb-week-actions">
+            <div class="pb-day-layout" role="group" aria-label="Vista sedute">
+              ${[["columns", "Colonne"], ["rows", "Righe"]].map(([mode, label]) => `<button type="button" data-action="set-day-layout" data-layout="${mode}" aria-pressed="${this.dayLayout === mode}">${label}</button>`).join("")}
+            </div>
+            <button type="button" class="secondary" data-action="duplicate-week">Copia settimana</button>
+            <button type="button" class="secondary" data-action="add-day">+ Seduta</button>
+          </div>
+        </div>
+        <div class="pb-day-list" data-layout="${this.dayLayout}">${days.map((item, index) => this.#renderDayCard(item, index)).join("") || `<div class="pb-empty">Nessuna seduta in questa settimana.</div>`}</div>
+        ${days.length ? `
+        <section class="pb-day-editor" aria-label="Editor seduta selezionata" tabindex="-1">
         <details class="pb-details"><summary>Dettagli seduta · ${esc(day.title || "Seduta")}</summary><div class="pb-row pb-day-settings"><label>Nome seduta<input class="field" data-field="day.title" value="${esc(day.title)}" maxlength="120"></label><label>Giorno settimana<select class="field" data-field="day.weekday"><option value="">Non assegnato</option>${["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"].map((name, index) => `<option value="${index + 1}" ${Number(day.weekday) === index + 1 ? "selected" : ""}>${name}</option>`).join("")}</select></label><label>Gruppi muscolari<input class="field" list="pbMuscleLibrary" data-field="day.muscle_focus" value="${esc(day.muscle_focus)}" maxlength="160" placeholder="Per esempio: Petto, tricipiti"></label><label>Durata massima (min)<input class="field" type="number" min="1" max="600" data-field="day.available_minutes" value="${esc(day.available_minutes)}" placeholder="Facoltativa"></label><div class="pb-inline-actions"><button type="button" class="secondary" data-action="duplicate-day">Duplica seduta</button><button type="button" class="secondary danger" data-action="delete-day">Elimina seduta</button></div></div></details>
         <div class="pb-stats" id="pbStats"></div>
         <div class="pb-section-head pb-block-head"><div><b>Esercizi e metodi</b><span class="sub">Aggiungi un blocco; prescrizioni editabili per ogni serie</span></div></div>
         <div class="pb-methods">${Object.entries(methodNames).map(([method, title]) => `<button type="button" class="secondary" data-action="add-block" data-method="${method}">+ ${esc(title)}</button>`).join("")}</div>
-        <div class="pb-blocks">${(day.blocks || []).map((block, blockIndex) => this.#renderBlock(block, blockIndex, exerciseCatalog)).join("") || `<div class="pb-empty">Aggiungi il primo esercizio o un blocco avanzato.</div>`}</div>
+        <div class="pb-blocks">${(day.blocks || []).map((block, blockIndex) => this.#renderBlock(block, blockIndex)).join("") || `<div class="pb-empty">Aggiungi il primo esercizio o un blocco avanzato.</div>`}</div>
         <details class="pb-notes" ${day.client_note || day.trainer_note ? "data-has-note" : ""}><summary>Note seduta${day.client_note || day.trainer_note ? " · compilate" : ""}</summary><label>Nota visibile all'atleta<textarea class="field pb-note" rows="2" data-field="day.client_note" maxlength="2000">${esc(day.client_note)}</textarea></label><label>Nota tecnica, solo PT<textarea class="field pb-note" rows="2" data-field="day.trainer_note" maxlength="2000">${esc(day.trainer_note)}</textarea></label></details>
+        </section>` : ""}
         <datalist id="pbExerciseLibrary">${[...exerciseCatalog.values()].map((exercise) => `<option value="${esc(exercise.name)}"></option>`).join("")}</datalist><datalist id="pbMuscleLibrary">${[...muscleCatalog].sort().map((muscle) => `<option value="${esc(muscle)}"></option>`).join("")}</datalist>
       </section><aside class="pb-aside"><div class="pb-tool-tabs" role="group" aria-label="Strumenti della scheda">${[["library", "Libreria"], ["volume", "Volume"], ["progression", "Progressione"]].map(([panel, label]) => `<button type="button" class="pb-tool-tab${this.activeToolPanel === panel ? " on" : ""}" aria-pressed="${this.activeToolPanel === panel}" data-action="select-tool-panel" data-panel="${panel}">${label}</button>`).join("")}</div>
-        <section class="card pb-tool-panel" id="pbToolLibrary" aria-label="Libreria esercizi" ${this.activeToolPanel === "library" ? "" : "hidden"}><h3>Libreria esercizi</h3>${exerciseCatalog.size ? [...exerciseCatalog.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "it")).map((exercise) => `<div class="pb-library-item"><b>${esc(exercise.name)}</b><small>${esc([...(exercise.primary_muscles || []), ...(exercise.secondary_muscles || []), exercise.equipment].filter(Boolean).join(" · ") || "Muscoli e attrezzo da impostare")}</small></div>`).join("") : `<p class="sub">Gli esercizi compariranno qui quando li aggiungi a una scheda. Puoi cercarli nei campi esercizio.</p>`}</section>
+        <section class="card pb-tool-panel" id="pbToolLibrary" aria-label="Libreria esercizi" ${this.activeToolPanel === "library" ? "" : "hidden"}><h3>Libreria esercizi</h3>${exerciseCatalog.size ? [...exerciseCatalog.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "it")).map((exercise) => `<div class="pb-library-item"><b>${esc(exercise.name)}</b><small>${esc([...(exercise.primary_muscles || []), ...(exercise.secondary_muscles || []), exercise.equipment, parseExerciseVideo(exercise.video_ref) && "Video"].filter(Boolean).join(" · ") || "Muscoli e attrezzo da impostare")}</small></div>`).join("") : `<p class="sub">Scrivi il nome di un esercizio personalizzato. Potrai riutilizzarlo nei campi esercizio della scheda.</p>`}</section>
         <section class="card pb-tool-panel" id="pbToolVolume" aria-label="Volume settimanale" ${this.activeToolPanel === "volume" ? "" : "hidden"}><h3>Volume settimana</h3><div id="pbVolume"></div><p class="sub">Range iniziali modificabili; sono un riferimento generale, non una prescrizione clinica.</p><div class="pb-ranges"><div class="pb-range-head"><span>Muscolo</span><span>Min</span><span>Max</span></div>${Object.entries({ ...DEFAULT_VOLUME_RANGES, ...(this.program.volume_ranges || {}) }).map(([muscle, range]) => `<div><span>${esc(muscle)}</span><input class="field" type="number" min="0" max="200" data-field="volume.min" data-muscle="${esc(muscle)}" aria-label="Minimo ${esc(muscle)}" value="${esc(range.min)}"><input class="field" type="number" min="0" max="200" data-field="volume.max" data-muscle="${esc(muscle)}" aria-label="Massimo ${esc(muscle)}" value="${esc(range.max)}"></div>`).join("")}</div></section>
         <section class="card pb-tool-panel" id="pbToolProgression" aria-label="Progressione e periodizzazione" ${this.activeToolPanel === "progression" ? "" : "hidden"}><h3>Progressione</h3><p class="sub">I valori sono registrati internamente come RIR. La vista ${this.scale} cambia solo la rappresentazione.</p><label>Periodizzazione<select class="field" data-field="program.periodization"><option value="linear" ${(this.program.periodizzazione || this.program.periodization) === "linear" ? "selected" : ""}>Lineare</option><option value="dup" ${(this.program.periodizzazione || this.program.periodization) === "dup" ? "selected" : ""}>Ondulata (DUP)</option><option value="block" ${(this.program.periodizzazione || this.program.periodization) === "block" ? "selected" : ""}>A blocchi</option></select></label></section>
       </aside>
     </div>`;
     this.root.querySelectorAll(".pb-block[data-block-id]").forEach((block) => block.addEventListener("toggle", () => { if (block.open) this.openBlocks.add(block.dataset.blockId); else this.openBlocks.delete(block.dataset.blockId); }));
+    this.root.querySelectorAll('[data-field="exercise.video_ref"][aria-invalid="true"]').forEach((field) => field.setCustomValidity(EXERCISE_VIDEO_ERROR));
+    this.#restoreStrip(".pb-week-list", ".pb-week.on", weekScroll);
+    this.#restoreStrip(".pb-day-list", ".pb-day.on", dayScroll);
     this.#renderSummary();
   }
-  #renderBlock(block, blockIndex, exerciseCatalog = new Map()) {
+  #restoreStrip(selector, selected, previousScroll) {
+    const strip = this.root.querySelector(selector);
+    if (!strip || strip.scrollWidth <= strip.clientWidth) return;
+    strip.scrollLeft = previousScroll;
+    const current = strip.querySelector(selected);
+    if (!current) return;
+    const bounds = strip.getBoundingClientRect();
+    const item = current.getBoundingClientRect();
+    if (item.right > bounds.right) strip.scrollLeft += item.right - bounds.right;
+    if (item.left < bounds.left) strip.scrollLeft += item.left - bounds.left;
+  }
+  #renderDayCard(day, index) {
+    const selected = index === this.dayIndex;
+    const exercises = (day.blocks || []).flatMap((block) => block.exercises || []);
+    const names = exercises.map((exercise) => String(exercise.name ?? "").trim()).filter(Boolean);
+    const exercisesLabel = exercises.length === 1 ? "1 esercizio" : `${exercises.length} esercizi`;
+    return `<button type="button" class="pb-day${selected ? " on" : ""}" aria-pressed="${selected}" data-action="select-day" data-d="${index}">
+      <span class="pb-day-card-head">
+        <b>${esc(day.code || day.day_code || String.fromCharCode(65 + index))}</b>
+        <span><strong>${esc(day.title || "Seduta")}</strong><small>${exercisesLabel}${day.available_minutes ? ` · ${esc(day.available_minutes)} min` : ""}</small></span>
+      </span>
+      <span class="pb-day-card-preview">${names.length ? names.slice(0, 3).map((name) => `<span>${esc(name)}</span>`).join("") : "<span>Da programmare</span>"}${names.length > 3 ? `<span>+${names.length - 3} esercizi</span>` : ""}</span>
+    </button>`;
+  }
+  #renderExerciseMedia(exercise, blockIndex, exerciseIndex) {
+    const fieldAttributes = `data-b="${blockIndex}" data-e="${exerciseIndex}"`;
+    const video = parseExerciseVideo(exercise.video_ref);
+    const invalid = Boolean(exercise.video_ref && !video);
+    const hintId = `pbVideoHint-${blockIndex}-${exerciseIndex}`;
+    return `<details class="pb-exercise-media" ${invalid ? "open" : ""}>
+      <summary>Esecuzione <small data-video-status>${video ? "Video collegato" : ""}</small></summary>
+      <label>Istruzioni visibili all’atleta<textarea class="field pb-note" data-field="exercise.instructions" ${fieldAttributes} maxlength="1000" rows="3" placeholder="Posizione, movimento e indicazioni tecniche…">${esc(exercise.instructions)}</textarea></label>
+      <label>Link video facoltativo<input class="field" type="url" inputmode="url" spellcheck="false" autocomplete="off" data-field="exercise.video_ref" ${fieldAttributes} maxlength="500" value="${esc(exercise.video_ref)}" placeholder="https://…" aria-invalid="${invalid}" aria-describedby="${hintId}"></label>
+      <p class="pb-video-feedback" id="${hintId}" data-invalid="${invalid}" aria-live="polite">${invalid ? EXERCISE_VIDEO_ERROR : "YouTube, Vimeo o link diretto a un file MP4/WebM."}</p>
+    </details>`;
+  }
+  #renderBlockCopyMenu(blockIndex) {
+    const days = this.program.settimane[this.weekIndex].giorni;
+    if (days.length < 2) return "";
+    return `<details class="pb-method-menu pb-copy-menu">
+      <summary class="pb-method-tag">Copia in…</summary>
+      <div>${days.map((day, index) => index === this.dayIndex ? "" : `<button type="button" class="secondary" data-action="copy-block-to-day" data-b="${blockIndex}" data-d="${index}">${esc(day.title || `Seduta ${index + 1}`)}</button>`).join("")}</div>
+    </details>`;
+  }
+  #renderBlock(block, blockIndex) {
     const exercises = block.exercises || [], multi = multiExerciseMethods.has(block.method);
     const addSetLabel = block.method === "drop_set" ? "+ Drop" : ["rest_pause", "cluster", "myo_reps"].includes(block.method) ? "+ Mini-serie" : multi ? "+ Giro" : "+ Serie";
     const exerciseNames = exercises.map((exercise) => String(exercise.name || "").trim()).filter(Boolean).join(" + ") || "Esercizi da assegnare";
     const totalRows = exercises.reduce((sum, exercise) => sum + (exercise.sets || []).length, 0);
-    return `<details class="pb-block" data-block-id="${esc(block.id)}" ${this.openBlocks.has(block.id) ? "open" : ""}><summary class="pb-block-summary"><span class="pb-method-tag">${esc(methodNames[block.method] || block.method)}</span><b>Blocco ${blockIndex + 1} · ${esc(exerciseNames)}</b><small>${exercises.length} esercizi · ${totalRows} serie</small></summary><div class="pb-block-content"><header><div class="pb-block-ident">${exercises.length === 1 ? `<label class="pb-block-name"><span class="sr-only">Nome esercizio</span><input class="field" list="pbExerciseLibrary" data-field="exercise.name" data-b="${blockIndex}" data-e="0" value="${esc(exercises[0].name)}" maxlength="160" placeholder="Cerca o scrivi esercizio" required></label>` : `<b>Blocco ${blockIndex + 1} · ${exercises.length} esercizi</b>`}</div><div class="pb-inline-actions pb-block-actions"><details class="pb-method-menu"><summary class="pb-method-tag" aria-label="Cambia metodo del blocco">${esc(methodNames[block.method] || block.method)} ▾</summary><div>${Object.entries(methodNames).map(([method, label]) => `<button type="button" class="secondary" data-action="set-method" data-method="${method}" data-b="${blockIndex}">${esc(label)}</button>`).join("")}</div></details><button type="button" class="secondary" data-action="add-set" data-b="${blockIndex}" data-e="0" aria-label="Aggiungi serie o giro">${addSetLabel}</button><button type="button" class="secondary" data-action="move-block-up" data-b="${blockIndex}" aria-label="Sposta blocco ${blockIndex + 1} su">↑</button><button type="button" class="secondary" data-action="move-block-down" data-b="${blockIndex}" aria-label="Sposta blocco ${blockIndex + 1} giù">↓</button><button type="button" class="secondary" data-action="duplicate-block" data-b="${blockIndex}" aria-label="Duplica blocco ${blockIndex + 1}">⧉</button><button type="button" class="secondary danger" data-action="delete-block" data-b="${blockIndex}" aria-label="Elimina blocco ${blockIndex + 1}">×</button></div></header>
+    return `<details class="pb-block" data-block-id="${esc(block.id)}" ${this.openBlocks.has(block.id) ? "open" : ""}><summary class="pb-block-summary"><span class="pb-method-tag">${esc(methodNames[block.method] || block.method)}</span><b>Blocco ${blockIndex + 1} · ${esc(exerciseNames)}</b><small>${exercises.length} esercizi · ${totalRows} serie</small></summary><div class="pb-block-content"><header><div class="pb-block-ident">${exercises.length === 1 ? `<label class="pb-block-name"><span class="sr-only">Nome esercizio</span><input class="field" list="pbExerciseLibrary" data-field="exercise.name" data-b="${blockIndex}" data-e="0" value="${esc(exercises[0].name)}" maxlength="160" placeholder="Cerca o scrivi esercizio" required></label>` : `<b>Blocco ${blockIndex + 1} · ${exercises.length} esercizi</b>`}</div><div class="pb-inline-actions pb-block-actions"><details class="pb-method-menu"><summary class="pb-method-tag" aria-label="Cambia metodo del blocco">${esc(methodNames[block.method] || block.method)} ▾</summary><div>${Object.entries(methodNames).map(([method, label]) => `<button type="button" class="secondary" data-action="set-method" data-method="${method}" data-b="${blockIndex}">${esc(label)}</button>`).join("")}</div></details><button type="button" class="secondary" data-action="add-set" data-b="${blockIndex}" data-e="0" aria-label="Aggiungi serie o giro">${addSetLabel}</button><button type="button" class="secondary" data-action="move-block-up" data-b="${blockIndex}" aria-label="Sposta blocco ${blockIndex + 1} su">↑</button><button type="button" class="secondary" data-action="move-block-down" data-b="${blockIndex}" aria-label="Sposta blocco ${blockIndex + 1} giù">↓</button><button type="button" class="secondary" data-action="duplicate-block" data-b="${blockIndex}" aria-label="Duplica blocco ${blockIndex + 1}">⧉</button>${this.#renderBlockCopyMenu(blockIndex)}<button type="button" class="secondary danger" data-action="delete-block" data-b="${blockIndex}" aria-label="Elimina blocco ${blockIndex + 1}">×</button></div></header>
       ${exercises.map((exercise, exerciseIndex) => `<div class="pb-exercise"><div class="pb-ex-head">${multi ? `<label>Esercizio ${exerciseIndex + 1}<input class="field" list="pbExerciseLibrary" data-field="exercise.name" data-b="${blockIndex}" data-e="${exerciseIndex}" value="${esc(exercise.name)}" maxlength="160" placeholder="Cerca o scrivi esercizio" required></label>` : ""}<div class="pb-ex-summary">${esc([...(exercise.primary_muscles || []), ...(exercise.secondary_muscles || []), exercise.equipment].filter(Boolean).join(" · ") || "Muscoli e attrezzo non impostati")}</div><details class="pb-exercise-meta"><summary>Modifica muscoli e attrezzo</summary><label>Attrezzo<input class="field" data-field="exercise.equipment" data-b="${blockIndex}" data-e="${exerciseIndex}" value="${esc(exercise.equipment)}" maxlength="100" placeholder="Bilanciere, manubri…"></label><label>Muscolo principale<input class="field" data-field="exercise.primary_muscles" data-b="${blockIndex}" data-e="${exerciseIndex}" value="${esc((exercise.primary_muscles || []).join(", "))}" maxlength="160" placeholder="Petto"></label><label>Secondari<input class="field" data-field="exercise.secondary_muscles" data-b="${blockIndex}" data-e="${exerciseIndex}" value="${esc((exercise.secondary_muscles || []).join(", "))}" maxlength="160" placeholder="Tricipiti"></label></details>${multi ? `<button type="button" class="secondary danger pb-remove-exercise" data-action="remove-exercise" data-b="${blockIndex}" data-e="${exerciseIndex}" aria-label="Rimuovi esercizio ${exerciseIndex + 1}">×</button>` : ""}</div>
+        ${this.#renderExerciseMedia(exercise, blockIndex, exerciseIndex)}
         <div class="pb-set-table"><div class="pb-set-row pb-set-labels"><span>Serie</span><span>Tipo</span><span>Reps</span><span>Carico</span><span>${this.scale}</span><span>Tempo</span><span>Rec.</span><span></span></div>${(exercise.sets || []).map((set, setIndex) => `<div class="pb-set-row${["drop", "mini_set", "cluster_group"].includes(set.set_type) ? " pb-set-special" : ""}"><span class="pb-row-number">${["drop", "mini_set", "cluster_group"].includes(set.set_type) ? "↳ " : ""}${setIndex + 1}</span><select class="field" data-field="set.set_type" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" aria-label="Tipo serie">${Object.entries(typeNames).map(([value, label]) => `<option value="${value}" ${set.set_type === value ? "selected" : ""}>${esc(label)}</option>`).join("")}</select><input class="field" data-field="set.reps" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" value="${esc(repsText(set))}" placeholder="Reps / AMRAP / sec" aria-label="Ripetizioni o durata"><div class="pb-load-cell"><input class="field" data-field="set.load" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" value="${esc(set.load_unit === "bodyweight" ? "PC" : set.load_value == null ? (set.load_note || "") : `${set.load_value}${set.load_unit.startsWith("percent") ? "%" : ""}`)}" placeholder="kg / % / PC" aria-label="Carico"><label><input type="checkbox" data-field="set.effort_by_feel" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" ${set.effort_by_feel ? "checked" : ""}> A sensazione</label></div><input class="field" type="number" step="0.5" min="${this.scale === "RPE" ? 1 : 0}" max="10" data-field="set.intensity" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" value="${set.target_rir == null ? "" : this.scale === "RPE" ? 10 - Number(set.target_rir) : set.target_rir}" aria-label="Intensità ${this.scale}"><input class="field" data-field="set.tempo" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" value="${esc(set.tempo)}" placeholder="4 valori" aria-label="Tempo"><input class="field" data-field="set.rest_seconds" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" value="${esc(set.rest_seconds)}" placeholder="s" aria-label="Recupero in secondi"><button type="button" class="secondary danger pb-delete-set" data-action="delete-set" data-b="${blockIndex}" data-e="${exerciseIndex}" data-s="${setIndex}" aria-label="Elimina serie">×</button></div>`).join("")}</div>
       </div>`).join("")}
       <details class="pb-notes" ${block.client_note || block.trainer_note ? "data-has-note" : ""}><summary>Note blocco${block.client_note || block.trainer_note ? " · compilate" : ""}</summary><label>Nota visibile all'atleta<textarea class="field pb-note" rows="2" data-field="block.client_note" data-b="${blockIndex}" maxlength="1000">${esc(block.client_note)}</textarea></label><label>Nota tecnica, solo PT<textarea class="field pb-note" rows="2" data-field="block.trainer_note" data-b="${blockIndex}" maxlength="1000">${esc(block.trainer_note)}</textarea></label></details>${multi ? `<button type="button" class="secondary" data-action="add-exercise" data-b="${blockIndex}">+ Aggiungi esercizio al blocco</button>` : ""}
@@ -260,14 +326,44 @@ export class ProgramBuilder {
     const button = event.target.closest("[data-action]"); if (!button) return;
     const action = button.dataset.action, week = this.program.settimane[this.weekIndex], day = this.#currentDay(), bi = Number(button.dataset.b), ei = Number(button.dataset.e), si = Number(button.dataset.s);
     if (action === "select-tool-panel") { if (["library", "volume", "progression"].includes(button.dataset.panel)) { this.activeToolPanel = button.dataset.panel; this.render(); } return; }
-    if (action === "select-week") { this.weekIndex = Number(button.dataset.w); this.dayIndex = 0; this.#openFirstBlock(); this.render(); return; }
-    if (action === "select-day") { this.dayIndex = Number(button.dataset.d); this.#openFirstBlock(); this.render(); return; }
-    if (action === "add-week") {
-      const duplicate = week && confirm("Vuoi copiare la settimana selezionata? Annulla per aggiungerne una vuota.");
-      const next = duplicate ? changeIds(week) : { id: uid("week"), n: this.program.settimane.length + 1, fase: "", dal: "", al: "", dates_are_manual: false, volume_target: null, intensity_target: null, rule_note: "", giorni: [blankDay(this.program.settimane.length, 0)] };
-      next.n = this.program.settimane.length + 1; next.dates_are_manual = false; this.program.settimane.push(next); this.weekIndex = this.program.settimane.length - 1; this.dayIndex = 0; this.#renumberWeeks(); this.#notify(true); return;
+    if (action === "set-day-layout") {
+      this.dayLayout = button.dataset.layout === "rows" ? "rows" : "columns";
+      this.render();
+      this.root.querySelector('.pb-day-layout [aria-pressed="true"]')?.focus({ preventScroll: true });
+      return;
     }
-    if (action === "duplicate-week") { const copy = changeIds(week); copy.n = this.program.settimane.length + 1; copy.fase = `${copy.fase || `Fase ${copy.n}`} (copia)`; copy.dates_are_manual = false; this.program.settimane.splice(this.weekIndex + 1, 0, copy); this.weekIndex++; this.#renumberWeeks(); this.#notify(true); return; }
+    if (action === "select-week") { this.weekIndex = Number(button.dataset.w); this.dayIndex = 0; this.#openFirstBlock(); this.render(); return; }
+    if (action === "select-day") {
+      this.dayIndex = Number(button.dataset.d);
+      this.#openFirstBlock();
+      this.render();
+      const editor = this.root.querySelector(".pb-day-editor");
+      editor?.focus({ preventScroll: true });
+      editor?.scrollIntoView({ block: "start" });
+      return;
+    }
+    if (action === "add-week") {
+      if (this.program.settimane.length >= 52) return alert("La scheda può contenere al massimo 52 settimane.");
+      const next = { id: uid("week"), n: this.program.settimane.length + 1, fase: "", dal: "", al: "", dates_are_manual: false, volume_target: null, intensity_target: null, rule_note: "", giorni: [blankDay(this.program.settimane.length, 0)] };
+      this.program.settimane.push(next);
+      this.weekIndex = this.program.settimane.length - 1;
+      this.dayIndex = 0;
+      this.#openFirstBlock();
+      this.#renumberWeeks();
+      this.#notify(true);
+      return;
+    }
+    if (action === "duplicate-week") {
+      if (this.program.settimane.length >= 52) return alert("La scheda può contenere al massimo 52 settimane.");
+      const copy = changeIds({ settimane: [week] }).settimane[0];
+      copy.dates_are_manual = false;
+      this.program.settimane.splice(this.weekIndex + 1, 0, copy);
+      this.weekIndex++;
+      this.#openFirstBlock();
+      this.#renumberWeeks();
+      this.#notify(true);
+      return;
+    }
     if (action === "delete-week") { if (this.program.settimane.length < 2) return alert("La scheda deve mantenere almeno una settimana."); if (!confirm("Eliminare questa settimana?")) return; this.program.settimane.splice(this.weekIndex, 1); this.weekIndex = Math.max(0, this.weekIndex - 1); this.dayIndex = 0; this.#renumberWeeks(); this.#notify(true); return; }
     if (action === "move-week-up" || action === "move-week-down") { const target = this.weekIndex + (action.endsWith("up") ? -1 : 1); if (target < 0 || target >= this.program.settimane.length) return; [this.program.settimane[this.weekIndex], this.program.settimane[target]] = [this.program.settimane[target], this.program.settimane[this.weekIndex]]; this.weekIndex = target; this.#renumberWeeks(); this.#notify(true); return; }
     if (action === "add-day") { if (week.giorni.length >= 7) return alert("Puoi inserire al massimo 7 sedute in una settimana."); week.giorni.push(blankDay(this.weekIndex, week.giorni.length)); this.dayIndex = week.giorni.length - 1; this.#renumberDays(week); this.#notify(true); return; }
@@ -277,6 +373,20 @@ export class ProgramBuilder {
     if (action === "set-method") { this.#convertMethod(day.blocks[bi], button.dataset.method); this.#notify(true); return; }
     if (action === "delete-block") { if (!confirm("Eliminare il blocco e le sue prescrizioni?")) return; const [removed] = day.blocks.splice(bi, 1); this.openBlocks.delete(removed?.id); day.blocks.forEach((block, index) => { block.position = index + 1; }); this.#notify(true); return; }
     if (action === "duplicate-block") { const copy = changeIds({ settimane: [{ giorni: [{ blocks: [day.blocks[bi]] }] }] }).settimane[0].giorni[0].blocks[0]; day.blocks.splice(bi + 1, 0, copy); this.openBlocks.add(copy.id); day.blocks.forEach((block, index) => { block.position = index + 1; }); this.#notify(true); return; }
+    if (action === "copy-block-to-day") {
+      const targetIndex = Number(button.dataset.d);
+      const target = week.giorni[targetIndex];
+      if (!target || target === day || !day.blocks[bi]) return;
+      if (target.blocks.length >= 40) return alert("La seduta può contenere al massimo 40 blocchi.");
+      const copy = changeIds({ settimane: [{ giorni: [{ blocks: [day.blocks[bi]] }] }] }).settimane[0].giorni[0].blocks[0];
+      copy.position = target.blocks.length + 1;
+      target.blocks.push(copy);
+      this.dayIndex = targetIndex;
+      this.openBlocks.clear();
+      this.openBlocks.add(copy.id);
+      this.#notify(true);
+      return;
+    }
     if (action === "move-block-up" || action === "move-block-down") { const target = bi + (action.endsWith("up") ? -1 : 1); if (target < 0 || target >= day.blocks.length) return; [day.blocks[bi], day.blocks[target]] = [day.blocks[target], day.blocks[bi]]; day.blocks.forEach((block, index) => { block.position = index + 1; }); this.#notify(true); return; }
     if (action === "add-exercise") { const block = day.blocks[bi], exercises = block.exercises; if (!multiExerciseMethods.has(block.method)) return; if (exercises.length >= 12) return alert("Il blocco può contenere al massimo 12 esercizi."); exercises.push(blankExercise(exercises.length + 1)); this.#notify(true); return; }
     if (action === "remove-exercise") { const block = day.blocks[bi]; if (block.exercises.length <= minimumExercises(block.method)) { alert(`Il metodo richiede almeno ${minimumExercises(block.method)} esercizi.`); return; } block.exercises.splice(ei, 1); this.#notify(true); return; }
@@ -308,14 +418,25 @@ export class ProgramBuilder {
     if (element.dataset.field === "program.periodization") { this.program.periodizzazione = element.value; this.program.periodization = element.value; this.#notify(); return; }
     if (element.dataset.field === "exercise.name") {
       const day = this.#currentDay(), exercise = day.blocks[Number(element.dataset.b)].exercises[Number(element.dataset.e)], name = element.value.trim();
-      const existing = this.program.settimane.flatMap((item) => item.giorni || []).flatMap((item) => item.blocks || []).flatMap((item) => item.exercises || []).find((item) => String(item.name || "").trim().toLocaleLowerCase() === name.toLocaleLowerCase());
-      if (name && !existing && globalThis.confirm?.(`“${name}” non è nella libreria di questa scheda. Vuoi aggiungerlo come esercizio personalizzato?`) === false) { exercise.name = ""; this.render(); return; }
-      this.#setField(element);
-      if (existing) {
-        exercise.equipment = existing.equipment || ""; exercise.primary_muscles = structuredClone(existing.primary_muscles || []); exercise.secondary_muscles = structuredClone(existing.secondary_muscles || []);
+      exercise.name = name.slice(0, 160);
+      const key = exerciseKey(name);
+      const matches = key ? this.program.settimane.flatMap((item) => item.giorni || [])
+        .flatMap((item) => item.blocks || []).flatMap((item) => item.exercises || [])
+        .filter((item) => item !== exercise && exerciseKey(item.name) === key) : [];
+      if (matches.length) {
+        if (!exercise.equipment) exercise.equipment = matches.find((item) => item.equipment)?.equipment || "";
+        if (!exercise.primary_muscles?.length) exercise.primary_muscles = structuredClone(matches.find((item) => item.primary_muscles?.length)?.primary_muscles || []);
+        if (!exercise.secondary_muscles?.length) exercise.secondary_muscles = structuredClone(matches.find((item) => item.secondary_muscles?.length)?.secondary_muscles || []);
+        if (!exercise.instructions) exercise.instructions = matches.find((item) => item.instructions)?.instructions || "";
+        if (!exercise.video_ref) exercise.video_ref = matches.find((item) => parseExerciseVideo(item.video_ref))?.video_ref || null;
         if (!day.muscle_focus) day.muscle_focus = [...new Set([...exercise.primary_muscles, ...exercise.secondary_muscles])].join(", ");
       }
       this.#notify(true); return;
+    }
+    if (["exercise.instructions", "exercise.video_ref"].includes(element.dataset.field)) {
+      this.#setField(element);
+      this.#notify();
+      return;
     }
     this.#setField(element); this.#notify(true);
   }
@@ -351,6 +472,20 @@ export class ProgramBuilder {
       case "exercise.primary_muscles": day.blocks[b].exercises[e].primary_muscles = value.split(",").map((part) => part.trim()).filter(Boolean).slice(0, 8); break;
       case "exercise.secondary_muscles": day.blocks[b].exercises[e].secondary_muscles = value.split(",").map((part) => part.trim()).filter(Boolean).slice(0, 8); break;
       case "exercise.instructions": day.blocks[b].exercises[e].instructions = value.slice(0, 1000); break;
+      case "exercise.video_ref": {
+        const link = value.trim();
+        const video = parseExerciseVideo(link);
+        const invalid = Boolean(link && !video);
+        day.blocks[b].exercises[e].video_ref = link || null;
+        element.setCustomValidity(invalid ? EXERCISE_VIDEO_ERROR : "");
+        element.setAttribute("aria-invalid", String(invalid));
+        const panel = element.closest(".pb-exercise-media");
+        const feedback = panel.querySelector(".pb-video-feedback");
+        feedback.dataset.invalid = String(invalid);
+        feedback.textContent = invalid ? EXERCISE_VIDEO_ERROR : "YouTube, Vimeo o link diretto a un file MP4/WebM.";
+        panel.querySelector("[data-video-status]").textContent = video ? "Video collegato" : "";
+        break;
+      }
       case "set.set_type": day.blocks[b].exercises[e].sets[s].set_type = value; break;
       case "set.effort_by_feel": day.blocks[b].exercises[e].sets[s].effort_by_feel = Boolean(value); break;
       case "set.reps": { const valid = parseReps(value, day.blocks[b].exercises[e].sets[s]); element.classList.toggle("invalid", !valid); element.setAttribute("aria-invalid", String(!valid)); break; }

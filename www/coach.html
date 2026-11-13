@@ -78,17 +78,85 @@
     @media(max-width:850px){.pb-block-content>header{flex-wrap:wrap}.pb-block-content>header>.pb-block-ident{flex:1 1 100%}.pb-block-content>header>.pb-block-actions{margin-left:0}}
     @media(max-width:520px){.pb-block>summary{grid-template-columns:max-content minmax(0,1fr) 14px;gap:6px}.pb-block-summary small{grid-column:2;grid-row:2}.pb-block>summary:after{grid-column:3;grid-row:1/3}}
   </style>
+  <link rel="stylesheet" href="src/coach-shell.css?v=20261113">
+  <link rel="stylesheet" href="src/program-builder.css?v=20261113">
 </head>
 <body>
-  <header class="top"><div class="brand">LIPPOLIS <b>PT</b></div><span class="pill">Personal Trainer</span><div class="spacer"></div><div class="who" id="coachIdentity"></div><button id="changePassword">Password</button><button id="logout">Esci</button></header>
-  <div class="layout">
-    <aside class="side"><div class="side-head"><h1>Clienti</h1><button class="primary" id="addClient">+ Aggiungi</button></div><input class="search" id="search" type="search" placeholder="Cerca nome o email"><div class="client-list" id="clientList"></div></aside>
+  <header class="top">
+    <div class="coach-top-inner">
+      <button class="coach-brand" type="button" data-coach-route="home" aria-label="Home del coach">
+        <img src="icon-192.png" alt="" width="38" height="38"><span>LIPPOLIS<b>PT</b></span><small>COACH</small>
+      </button>
+      <div class="coach-top-profile">
+        <div class="who" id="coachIdentity"></div><div class="avatar coach-avatar" id="coachAvatar" aria-hidden="true">PT</div>
+        <button id="changePassword" type="button">Password</button><button id="logout" type="button">Esci</button>
+      </div>
+    </div>
+  </header>
+  <main class="coach-home" id="coachHome">
+    <h1 id="coachGreeting">Pannello coach</h1>
+    <div class="coach-tiles">
+      <button class="coach-tile" type="button" data-coach-route="priority"><span class="coach-tile-icon" data-coach-icon="priority"></span><b>Priorità oggi</b><small>Schede mancanti, in scadenza e scadute</small></button>
+      <button class="coach-tile" type="button" data-coach-route="clients"><span class="coach-tile-icon" data-coach-icon="clients"></span><b>Clienti</b><small id="coachClientCount">Elenco clienti</small></button>
+      <button class="coach-tile" type="button" data-coach-route="clients" data-client-tab="program"><span class="coach-tile-icon" data-coach-icon="program"></span><b>Workout</b><small>Crea e pubblica schede di allenamento</small></button>
+      <button class="coach-tile" type="button" data-coach-route="clients" data-client-tab="history" data-history-target="loadList"><span class="coach-tile-icon" data-coach-icon="history"></span><b>Revisione carichi</b><small>Serie e progressi per esercizio</small></button>
+      <button class="coach-tile" type="button" data-coach-route="clients" data-client-tab="nutrition"><span class="coach-tile-icon" data-coach-icon="nutrition"></span><b>Consigli alimentari</b><small>Indicazioni per i tuoi clienti</small></button>
+      <button class="coach-tile" type="button" data-coach-route="agenda"><span class="coach-tile-icon" data-coach-icon="agenda"></span><b>Agenda</b><small>Inizio e fine delle schede pubblicate</small></button>
+      <button class="coach-tile" type="button" data-coach-route="clients" data-client-tab="messages"><span class="coach-tile-icon" data-coach-icon="messages"></span><b>Messaggi</b><small>Conversazioni con i clienti</small></button>
+      <button class="coach-tile" type="button" data-coach-route="settings"><span class="coach-tile-icon" data-coach-icon="settings"></span><b>Impostazioni</b><small>Account e password</small></button>
+    </div>
+  </main>
+  <main class="coach-home hidden" id="coachPage">
+    <div class="coach-page-head">
+      <button class="coach-back" type="button" data-coach-route="home">← Home</button>
+      <h1 id="coachPageTitle"></h1>
+    </div>
+    <div id="coachPageBody" class="coach-page-body"></div>
+  </main>
+  <div class="layout hidden" id="coachWorkspace">
+    <aside class="side">
+      <div class="coach-page-head">
+        <button class="coach-back" type="button" data-coach-route="home">← Home</button>
+        <h1 id="directoryTitle">Clienti</h1>
+      </div>
+      <div class="side-head"><p class="sub" id="directoryHelp">Seleziona un cliente</p><button class="primary" id="addClient" type="button">+ Aggiungi cliente</button></div>
+      <input class="search" id="search" type="search" placeholder="Cerca nome o email" aria-label="Cerca nome o email">
+      <div class="client-list" id="clientList"></div>
+    </aside>
     <main class="main">
-      <div class="empty" id="empty"><div><h2>Seleziona un cliente</h2><p>Profilo, schede e risultati vengono caricati solo quando servono.</p></div></div>
+      <div class="empty" id="empty" role="status"><div><h2 id="detailStatus">Seleziona un cliente</h2><p id="detailStatusHint">Apri il profilo per vedere schede, risultati e conversazioni.</p></div></div>
       <section class="detail" id="detail">
-        <div class="detail-head"><div class="avatar" id="detailAvatar"></div><div><h2 id="detailName"></h2><p id="detailEmail"></p></div><div class="actions"><button class="secondary" id="accessAction"></button><button class="secondary" id="exportClient">Esporta dati</button><button class="secondary danger" id="deleteClient">Elimina</button></div></div>
-        <nav class="tabs"><button class="on" data-tab="overview">Panoramica</button><button data-tab="program">Scheda</button><button data-tab="history">Storico e misure</button><button data-tab="messages">Messaggi</button></nav>
-        <div class="tab on" id="tab-overview"><div class="grid"><div class="card"><h3>Account</h3><div id="accountSummary"></div></div><div class="card"><h3>Scheda attuale</h3><div id="currentProgramSummary"></div></div><div class="card"><h3>Ultimo allenamento</h3><div id="lastWorkout"></div></div><div class="card"><h3>Ultimo peso corporeo</h3><div id="lastWeight"></div></div></div></div>
+        <div class="coach-page-head"><button class="coach-back" type="button" id="backClients">← Clienti</button><h1>Scheda cliente</h1></div>
+        <div class="detail-head">
+          <div class="avatar" id="detailAvatar"></div><div class="coach-client-name"><h2 id="detailName"></h2><p id="detailEmail"></p></div>
+          <span class="pill" id="detailAccess"></span>
+        </div>
+        <nav class="tabs" aria-label="Sezioni cliente">
+          <button class="on" data-tab="overview" aria-current="page">Panoramica</button><button data-tab="program">Programmazione</button>
+          <button data-tab="history">Storico e misure</button><button data-tab="nutrition">Consigli alimentari</button>
+          <button data-tab="messages">Messaggi</button><button data-tab="account">Account</button>
+        </nav>
+        <div class="tab on" id="tab-overview">
+          <div class="coach-client-menu">
+            <button type="button" data-open-tab="program"><span data-coach-icon="program"></span>Programmazione</button>
+            <button type="button" data-open-tab="history" data-history-target="workoutList"><span data-coach-icon="history"></span>Allenamenti e carichi</button>
+            <button type="button" data-open-tab="history" data-history-target="biaList"><span data-coach-icon="metrics"></span>Metriche e BIA</button>
+            <button type="button" data-open-tab="nutrition"><span data-coach-icon="nutrition"></span>Consigli alimentari</button>
+            <button type="button" data-open-tab="messages"><span data-coach-icon="messages"></span>Messaggi</button>
+            <button type="button" data-open-tab="account"><span data-coach-icon="settings"></span>Informazioni generali</button>
+          </div>
+          <div class="grid coach-overview-grid">
+            <div class="card"><h3>Scheda attuale</h3><div id="currentProgramSummary"></div></div>
+            <div class="card"><h3>Ultimo allenamento</h3><div id="lastWorkout"></div></div>
+            <div class="card"><h3>Ultimo peso corporeo</h3><div id="lastWeight"></div></div>
+          </div>
+        </div>
+        <div class="tab" id="tab-account">
+          <div class="card">
+            <h3>Informazioni generali</h3><div id="accountSummary"></div>
+            <div class="actions"><button class="secondary" id="accessAction"></button><button class="secondary" id="exportClient">Esporta dati</button><button class="secondary danger" id="deleteClient">Elimina cliente</button></div>
+          </div>
+        </div>
         <div class="tab" id="tab-program">
           <div id="programNotice"></div><div class="form-grid"><div><label>Nome scheda</label><input class="field" id="programName" maxlength="80"></div><div><label>Dal</label><input class="field" id="programStart" type="date"></div><div><label>Al</label><input class="field" id="programEnd" type="date"></div></div>
           <div class="pb-toolbar"><button class="secondary" id="programViewToggle" type="button">Vista JSON</button><button class="secondary" id="programScaleToggle" type="button">Scala RIR / RPE</button><span class="pb-status" id="programStatus" role="status">Bozza</span><span class="pb-save-state" id="programSaveState" role="status" aria-live="polite">Nessuna modifica</span></div>
@@ -102,6 +170,7 @@
           <div class="bia-field" data-bia-key="skeletalMuscleKg"><label for="biaMuscle">Massa muscolo scheletrico (kg) *</label><input class="field" id="biaMuscle" inputmode="decimal" required><small class="bia-field-status"></small></div>
           <div class="bia-field" data-bia-key="bodyFatMassKg"><label for="biaFatMass">Massa grassa (kg) *</label><input class="field" id="biaFatMass" inputmode="decimal" required><small class="bia-field-status"></small></div>
         </div><div class="bia-derived" id="biaLeanPreview" role="status">Massa magra calcolata: inserisci peso e massa grassa.</div><label class="bia-confirm"><input id="biaHistoryConfirmed" type="checkbox"> Ho verificato sulla foto peso, massa muscolare e massa grassa.</label><div class="bia-note">Il referto originale e una copia visualizzabile vengono archiviati automaticamente nell’area privata del cliente. Nel riepilogo salviamo peso, massa muscolare e massa grassa; la massa magra viene calcolata come peso meno massa grassa.</div><div class="bia-status" id="biaReviewStatus" role="status" aria-live="polite"></div><div class="bar"><button class="secondary" id="biaCancelReview" type="button">Annulla</button><span class="push"></span><button class="primary" id="biaSave" type="submit" disabled>Conferma e salva</button></div></form></div></div><div class="bia-primary-summary" id="biaPrimarySummary"></div><div class="bia-charts" id="biaCharts"></div><div class="list" id="biaList"></div></div><div class="card"><h3>Allenamenti</h3><div class="list" id="workoutList"></div></div><div class="card"><h3>Peso corporeo</h3><div class="list" id="weightList"></div></div><div class="card"><h3>Check-in e misure</h3><div class="list" id="checkinList"></div></div><div class="card"><h3>Carichi per esercizio</h3><div class="list" id="loadList"></div></div></div></div>
+        <div class="tab" id="tab-nutrition"><div id="coachNutrition"></div></div>
         <div class="tab" id="tab-messages"><div class="card"><h3>Conversazione</h3><div class="list" id="messageList"></div><label for="coachMessage">Nuovo messaggio</label><textarea class="field" id="coachMessage" style="min-height:90px;font-family:inherit"></textarea><div class="bar"><span class="push"></span><button class="primary" id="sendMessage">Invia</button></div></div></div>
       </section>
     </main>
@@ -112,6 +181,6 @@
   <div class="modal" id="programVersionModal"><div class="dialog program-version-dialog"><div class="bia-head"><h2 id="versionPreviewTitle">Anteprima versione</h2><button class="secondary" data-close="programVersionModal" type="button">Chiudi</button></div><div id="versionPreviewContent"></div></div></div>
   <div class="modal" id="passwordModal"><div class="dialog"><h2>Cambia password</h2><p>Per sicurezza conferma prima la password attuale.</p><label>Password attuale</label><input class="field" id="currentPassword" type="password"><label>Nuova password</label><input class="field" id="coachNewPassword" type="password"><div class="bar"><button class="secondary" data-close="passwordModal">Annulla</button><span class="push"></span><button class="primary" id="savePassword">Aggiorna</button></div><div id="passwordNotice"></div></div></div>
   <div class="modal" id="deleteModal"><div class="dialog"><h2>Elimina definitivamente</h2><p id="deletePrompt"></p><label>Digita l’email del cliente</label><input class="field" id="deleteConfirmation"><div class="bar"><button class="secondary" data-close="deleteModal">Annulla</button><span class="push"></span><button class="secondary" id="exportBeforeDelete">Esporta prima</button><button class="primary danger" id="confirmDelete">Elimina definitivamente</button></div><div id="deleteNotice"></div></div></div>
-  <script src="supabase-config.js"></script><script type="module" src="src/coach.mjs?v=20261110-program-v4"></script>
+  <script src="supabase-config.js"></script><script type="module" src="src/coach.mjs?v=20261113-program-v5"></script>
 </body>
 </html>

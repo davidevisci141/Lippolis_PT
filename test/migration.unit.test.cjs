@@ -51,7 +51,8 @@ test("le anteprime BIA vengono archiviate e mostrate insieme agli originali", ()
   const app = read("www/src/coach.mjs"), html = read("www/coach.html"), api = read("supabase/functions/admin-api/index.ts");
   const migration = read("supabase/migrations/202611100001_bia_report_previews.sql");
   assert.doesNotMatch(html, /id="biaKeepOriginal"/);
-  assert.match(app, /upload\(reportPath, pendingBiaFile/);
+  assert.match(app, /clientUid = biaSourceClientUid, file = pendingBiaFile, bia = pendingBia/);
+  assert.match(app, /upload\(reportPath, file/);
   assert.match(app, /upload\(reportPreviewPath, previewBlob/);
   assert.match(app, /loadBiaReportPreview\(item\)/);
   assert.match(api, /reportPreviewPath/);

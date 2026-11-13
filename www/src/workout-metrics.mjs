@@ -1,3 +1,5 @@
+import { EXERCISE_VIDEO_ERROR, parseExerciseVideo } from "./exercise-video.mjs";
+
 export const PROGRAM_SCHEMA_VERSION = 2;
 
 export const DEFAULT_WORKOUT_SETTINGS = Object.freeze({
@@ -594,7 +596,8 @@ export function toAthleteProgram(input) {
               ssType: grouped ? block.method : undefined,
               setTypes: rows.map((row) => row.set_type), prescriptions: athleteRows,
               muscolo: (exercise.primary_muscles || []).join(", "),
-              equipment: exercise.equipment || "", video_ref: exercise.video_ref || null
+              equipment: exercise.equipment || "", video_ref: exercise.video_ref || null,
+              instructions: toText(exercise.instructions)
             });
           }
         }
@@ -690,6 +693,9 @@ export function validateV2Program(input, { forPublish = false } = {}) {
           if (!exercise || typeof exercise !== "object" || Array.isArray(exercise)) { check(`settimane[${wi}].giorni[${di}].blocks[${bi}].exercises[${ei}]`, false, "Esercizio non valido."); continue; }
           check(`settimane[${wi}].giorni[${di}].blocks[${bi}].exercises[${ei}].name`, toText(exercise.name).length <= 160, "Il nome esercizio non può superare 160 caratteri.");
           if (forPublish) check(`settimane[${wi}].giorni[${di}].blocks[${bi}].exercises[${ei}].name.required`, Boolean(toText(exercise.name)), "Inserisci il nome dell’esercizio prima di pubblicare.");
+          if (exercise.video_ref != null && exercise.video_ref !== "") {
+            check(`settimane[${wi}].giorni[${di}].blocks[${bi}].exercises[${ei}].video_ref`, Boolean(parseExerciseVideo(exercise.video_ref)), EXERCISE_VIDEO_ERROR);
+          }
           const sets = Array.isArray(exercise.sets) ? exercise.sets : [];
           if (toText(exercise.name) && sets.some((set) => set && set.set_type !== "warmup")) hasWorkout = true;
           check(`settimane[${wi}].giorni[${di}].blocks[${bi}].exercises[${ei}].sets`, Array.isArray(exercise.sets) && exercise.sets.length <= 100, "L'esercizio può contenere al massimo 100 serie.");
