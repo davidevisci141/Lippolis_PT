@@ -257,7 +257,7 @@
   .sugg-q{-webkit-appearance:none; appearance:none; border:0; margin-left:auto; width:17px; height:17px; border-radius:50%; background:var(--accent); color:#fff; font-size:11px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; flex:0 0 auto;}
   .sugg-apply{-webkit-appearance:none; appearance:none; border:1px solid var(--accent); background:var(--surface); color:var(--accent-ink); border-radius:999px; padding:4px 11px; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:11px; letter-spacing:.4px; cursor:pointer; flex:0 0 auto;}
   .sugg-apply:active{transform:scale(.97);}
-  .sugg-head{margin-top:7px; font-size:12.5px; color:#5a5f66; line-height:1.45;}
+  .sugg-head{margin:7px 0 0;font-size:12.5px;color:var(--muted);line-height:1.45;}
   .sugg-table{margin-top:8px;}
   .sugg-table th:nth-child(1),.sugg-table td:nth-child(1){width:44px;}
   .sugg-table th:nth-child(3),.sugg-table td:nth-child(3){width:44px;}
@@ -1202,7 +1202,10 @@
   // ====== WORKOUT ======
   function exState(day, idx, n){ if(!stato[day])stato[day]={}; if(!stato[day][idx])stato[day][idx]={sets:Array.from({length:n},()=>({kg:'',reps:'',rir:''})),manual:false,note:''}; const _s=stato[day][idx]; while(_s.sets.length<n) _s.sets.push({kg:'',reps:'',rir:''}); return stato[day][idx]; }
   function valoreSerie(value){ if(value==null||String(value).trim()==='')return null; const n=Number(String(value).trim().replace(',','.')); return Number.isFinite(n)?n:null; }
-  function serieACorpoLibero(ex,i){ return ex.prescriptions?.[i]?.load_unit==='bodyweight' || /^p\.?c\.?$/i.test(ex.carichiSerie?.[i]??ex.carico??''); }
+  function serieACorpoLibero(ex,i){
+    const index=isUnilat(ex)?Math.floor(i/2):i;
+    return ex.prescriptions?.[index]?.load_unit==='bodyweight' || /^p\.?c\.?$/i.test(ex.carichiSerie?.[index]??ex.carico??'');
+  }
   function leggiSerie(ex, set, i){
     const reps=valoreSerie(set.reps), inputKg=valoreSerie(set.kg), rir=valoreSerie(set.rir);
     if(!Number.isInteger(reps)||reps<=0 || (set.kg!==''&&set.kg!=null&&(inputKg===null||inputKg<0)) || (inputKg===null&&!serieACorpoLibero(ex,i)&&!!ex.carico) || (set.rir!==''&&set.rir!=null&&(rir===null||rir<0||rir>10)))return null;
@@ -1705,41 +1708,54 @@
   function upKg(kg,st){ if(!kg||kg<=0) return st; const r=roundStepKg(kg*1.05,st); return +((r>=kg+st?r:kg+st).toFixed(1)); }
   function downKg(kg,st){ const r=roundStepKg(kg*0.95,st); const v=(r>0&&r<=kg-st)?r:(kg-st); return +(Math.max(v,0).toFixed(1)); }
   function suggSets(ex){
-    const last=riferimento(ex);
-    if(!ex.carico || !last || !last.length) return null;
-    const st=stepOf(ex), uni=isUnilat(ex), n=uni ? (ex.serie||Math.ceil(last.length/2))*2 : (ex.serie||last.length);
+    const previous=riferimento(ex);
+    if(!previous) return null;
+    const {sets:last,perSide}=previous;
+    const st=stepOf(ex), uni=isUnilat(ex), n=nSlot(ex);
     const mode = ex.rm ? 'rm' : (ex.prog==='drop' ? 'drop' : (ex.prog==='interrotte' ? 'interrotte' : (ex.prog==='stripping' ? 'stripping' : (ex.repsSerie ? 'variabili' : 'range'))));
     const out={mode, head:'', sets:[]};
-    // unilaterale con storico già per lato: riga per riga; storico vecchio (una riga per serie): stessa serie per DX e SX
-    const get=i=> (uni && last.length<n) ? last[Math.min(Math.floor(i/2),last.length-1)] : last[Math.min(i,last.length-1)];
+    const bySlot=new Map(last.filter(set=>Number.isInteger(set.slot)).map(set=>[set.slot,set]));
+    const references=Array.from({length:n},(_,i)=>{
+      // Le sedute recenti conservano la posizione anche se una serie è stata saltata.
+      const index=uni&&!perSide&&last.length<=n/2?Math.floor(i/2):i;
+      const set=bySlot.size?bySlot.get(i):last[index];
+      const kg=valoreSerie(set?.kg), reps=valoreSerie(set?.reps);
+      if(reps===null||reps<=0||kg===null||kg<0||kg===0&&!serieACorpoLibero(ex,i))return null;
+      return {kg,reps};
+    });
+    if(!references.some(Boolean))return null;
 
     if(mode==='stripping'){ out.head='Stripping: stesso carico della serie precedente, a cedimento, poi −20% a ogni scarico.'; return out; }
 
     if(mode==='rm'){
-      const kg=+get(0).kg||0;
-      const best=Math.max.apply(null, last.map(s=>+s.reps||0));
+      if(!references[0])return null;
+      const {kg}=references[0];
+      const best=Math.max(...references.filter(Boolean).map(s=>s.reps));
       const over=best>ex.rm;
       const nk=over?upKg(kg,st):kg;
       out.head = over
         ? 'Hai superato il '+ex.rm+'RM ('+best+' reps): questa settimana sali a <b>'+fmtKgS(nk)+' kg</b>, carico unico su tutte le serie.'
         : 'Resta su <b>'+fmtKgS(kg)+' kg</b> per tutte le serie: il '+ex.rm+'RM non è ancora superato (max '+best+' reps).';
-      for(let i=0;i<n;i++) out.sets.push({dir:over?'up':'keep', kg:nk, lkg:(+get(i).kg||0), lreps:(+get(i).reps||0), why:(over?'RM superato in una serie':'carico unico dal tuo '+ex.rm+'RM')});
+      references.forEach((set,i)=>{if(set)out.sets[i]={dir:over?'up':'keep',kg:nk,lkg:set.kg,lreps:set.reps,why:over?'RM superato in una serie':'carico unico dal tuo '+ex.rm+'RM'};});
       return out;
     }
 
     if(mode==='interrotte'){
+      if(!references[0])return null;
       const tgt=parseInt((String(ex.reps).match(/\d+/)||['5'])[0],10);
-      const kg=+get(0).kg||0;
-      const closed=last.every(s=>(+s.reps||0)>=tgt);
+      const {kg}=references[0];
+      const closed=references.every(s=>s&&s.reps>=tgt);
       const nk=closed?upKg(kg,st):kg;
       out.head=closed ? 'Hai chiuso anche l&rsquo;ultimo miniset: aumenta a <b>'+fmtKgS(nk)+' kg</b>.' : 'Ultimo miniset non chiuso: stesso carico anche questa settimana.';
-      for(let i=0;i<n;i++) out.sets.push({dir:closed?'up':'keep', kg:nk, lkg:(+get(i).kg||0), lreps:(+get(i).reps||0), why:(closed?'tutti i miniset chiusi':'carico giusto: il 3° miniset non deve chiudersi')});
+      references.forEach((set,i)=>{if(set)out.sets[i]={dir:closed?'up':'keep',kg:nk,lkg:set.kg,lreps:set.reps,why:closed?'tutti i miniset chiusi':'ultimo miniset non chiuso'};});
       return out;
     }
 
     const dropTgt = mode==='drop' ? parseInt((String(ex.reps).match(/\d+/)||['8'])[0],10) : null;
     for(let i=0;i<n;i++){
-      const L=get(i), kg=+L.kg||0, reps=+L.reps||0;
+      const set=references[i];
+      if(!set)continue;
+      const {kg,reps}=set;
       let s=null;
       if(mode==='drop'){
         if(i>0){ s={dir:'keep', kg:kg, why:'nel drop set si progredisce solo sul 1° blocco'}; }
@@ -1750,7 +1766,8 @@
           else s={dir:'down', kg:downKg(kg,st), why:'1° blocco troppo lontano ('+reps+'/'+dropTgt+')'};
         }
       } else {
-        const tRaw = ex.repsSerie ? ex.repsSerie[Math.min(i, ex.repsSerie.length-1)] : ex.reps;
+        const targetIndex=uni?Math.floor(i/2):i;
+        const tRaw=ex.repsSerie?.[targetIndex]??ex.reps;
         const t=parseTarget(tRaw);
         if(!t){ s={dir:'keep', kg:kg, why:'&mdash;'}; }
         else if(t.fix){
@@ -1770,7 +1787,7 @@
           else { s={dir:'keep', kg:kg, why:'dentro il range ('+reps+' su '+t.lo+'-'+t.hi+')'}; }
         }
       }
-      out.sets.push(Object.assign(s,{lkg:kg, lreps:reps}));
+      out.sets[i]={...s,lkg:kg,lreps:reps};
     }
     if(mode==='drop') out.note='Drop set: si progredisce solo sul 1° blocco, gli altri tengono il peso della scorsa sessione.';
     if(mode==='variabili') out.note='Range variabili: ogni serie ha il suo range e il suo peso.';
@@ -1816,7 +1833,8 @@
     }
     const cnote = `<div class="cnote"><label class="cnote-l">Le tue note</label><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></div>`;
     const headSum = (ex.cardio||ex.timed) ? ex.tempo : (ex.repsSerie ? (ex.serie+' serie · var.') : (ex.serie+'×'+ex.reps+(uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':'')));
-    const sg = ex.carico ? suggSets(ex) : null;
+    const supportsProgression=hasSets&&ex.unita!=='sec';
+    const sg=supportsProgression?suggSets(ex):null;
     let suggHTML='';
     if(sg){
       const chipTxt=(s)=> s.dir==='up'?('↑ '+fmtKgS(s.kg)+' kg') : s.dir==='down'?('↓ '+fmtKgS(s.kg)+' kg') : s.dir==='push'?('+reps · '+fmtKgS(s.kg)+' kg') : s.dir==='zav'?('+ zavorra '+fmtKgS(s.kg)+' kg') : ('= '+(s.kg>0?fmtKgS(s.kg)+' kg':'C.L.'));
@@ -1827,6 +1845,8 @@
       }).join('');
       const why=sg.sets.map((s,i)=>`<b>S${slotLabel(ex,i)}:</b> ${s.why}`).join(' · ');
       suggHTML=`<div class="sugg"><div class="sugg-top"><span class="sugg-l">${I.spark} Progressione</span><button class="sugg-q" data-sugg-info aria-label="Come vengono calcolati">?</button>${sg.sets.some(s=>s.kg>0)?'<button class="sugg-apply">Usa tutti</button>':''}</div>${sg.head?`<div class="sugg-head">${sg.head}</div>`:''}${rows?`<table class="sc-table sugg-table"><thead><tr><th>Serie</th><th>Peso</th><th>Reps</th><th>Oggi</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:''}<div class="sugg-hint" hidden>${sg.note?sg.note+' ':''}A sinistra la tua ultima sessione, a destra il carico suggerito per oggi: tocca una riga per inserirlo.${why?' '+why:''}</div></div>`;
+    }else if(supportsProgression){
+      suggHTML=`<div class="sugg"><div class="sugg-l">${I.spark} Progressione</div><p class="sugg-head">Registra il peso e le ripetizioni, poi concludi l’allenamento per vedere i suggerimenti nella prossima seduta.</p></div>`;
     }
     c.innerHTML=`
       <div class="card-top">
@@ -1838,13 +1858,13 @@
       </div>
       <div class="card-body">
         <div class="targets">${targets}</div>
+        ${suggHTML}
         ${historyPanel}
         ${approvedLoad?`<div class="note">Carico indicato dal PT: <b>${esc(fmtKgS(Number(approvedLoad.kg)))} kg</b></div>`:''}
         ${ex.alternativa?`<div class="note">Esercizio alternativo</div>`:''}
         ${duo}
         ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()?`<div class="note"><span class="nl">Note</span> ${esc((ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim())}</div>`:''}
         ${(ex.carico&&ex.rir!=null)?`<div class="rir-hint" hidden><b>RIR ${ex.rir}</b> = a fine serie devono restarti <b>${ex.rir}</b> ripetizioni «in canna». ${ex.rir===0?'Qui si arriva al cedimento: nessuna ripetizione di riserva.':'Se ne avevi di più, il carico era leggero; se eri al limite, era pesante.'} Segnalo a ogni serie: il coach lo usa per calibrare i carichi della settimana dopo.</div>`:''}
-        ${suggHTML}
         ${sets}
         ${cnote}
       </div>`;
@@ -1978,19 +1998,25 @@
     return sessioni.slice().sort((a,b)=>b.ts-a.ts)
       .map(se=>{ const choices=(se.esercizi||[]).filter(e=>e.sets?.length); return {se,ex:(exerciseId&&choices.find(e=>e.exerciseId===exerciseId))||choices.find(e=>String(e.nome||'').trim().toLocaleLowerCase('it')===normalized)}; })
       .filter(x=>x.ex)
-      .map(x=>({ data: fmtDataAnno(x.se.ts), sett: x.se.settimana, nota: x.ex.note||'', lati: (x.ex.lati && x.ex.lati.length===x.ex.sets.length) ? x.ex.lati : ((x.ex.uni || /per lato/i.test(x.ex.note||'')) && x.ex.sets.length%2===0 ? x.ex.sets.map((_,i)=>LATI[i%2]) : null), serie: x.ex.sets.map(st=>({kg:st.kg, reps:st.reps, rir:st.rir})) }));
+      .map(x=>({ data: fmtDataAnno(x.se.ts), sett: x.se.settimana, nota: x.ex.note||'', lati: (x.ex.lati && x.ex.lati.length===x.ex.sets.length) ? x.ex.lati : ((x.ex.uni || /per lato/i.test(x.ex.note||'')) && x.ex.sets.length%2===0 ? x.ex.sets.map((_,i)=>LATI[i%2]) : null), serie: x.ex.sets }));
   }
   // Riferimento per giornata: lo stesso esercizio in due sedute diverse (es. Peck back il giorno dorso
   // e il giorno spalle) ha carichi diversi, e il confronto va fatto con la stessa seduta.
   let ultimiPerGiorno = {};
   function riferimento(ex){
     const g=giorni[giornoCorr];
-    return (g && ultimiPerGiorno[g.titolo+'|'+ex.nome]) || ultimiPesi[ex.nome];
+    const candidates=[g&&ultimiPerGiorno[g.titolo+'|'+ex.nome],ultimiPesi[ex.nome]];
+    return candidates.find(record=>record&&record.unit!=='sec'&&(record.perLato==null||record.perLato===!!ex.perLato));
   }
   function ricalcolaUltimi(){
     ultimiPesi={}; ultimiPerGiorno={};
     sessioni.slice().sort((a,b)=>a.ts-b.ts).forEach(se=> se.esercizi.forEach(e=>{
-      const v=(e.sets||[]).filter(st=>st.reps!=null); if(v.length){ const r=v.map(st=>({kg:st.kg, reps:st.reps})); ultimiPesi[e.nome]=r; ultimiPerGiorno[se.titolo+'|'+e.nome]=r; }
+      const sets=(e.sets||[]).filter(st=>st.reps!=null);
+      if(sets.length){
+        const record={sets,perSide:!!(e.uni||e.lati?.length),unit:e.unita,perLato:e.perLato};
+        ultimiPesi[e.nome]=record;
+        ultimiPerGiorno[se.titolo+'|'+e.nome]=record;
+      }
     }));
   }
 
@@ -2002,7 +2028,7 @@
       const st=(stato[day]||{})[idx]; if(!st) return;
       const rows=(st.sets||[]).map((set,i)=>({value:leggiSerie(ex,set,i),i})).filter(r=>r.value);
       if(rows.length || st.manual || st.note || st.segnalato){
-        const o={nome:ex.nome, exerciseId:ex.id||null, sets:rows.map(r=>r.value), fatto:isDone(ex,st), note:st.note||'', segnalato:st.segnalato||null, unita:ex.unita||null, perLato:!!ex.perLato};
+        const o={nome:ex.nome, exerciseId:ex.id||null, sets:rows.map(r=>({...r.value,slot:r.i})), fatto:isDone(ex,st), note:st.note||'', segnalato:st.segnalato||null, unita:ex.unita||null, perLato:!!ex.perLato};
         if(isUnilat(ex)){ o.uni=true; o.lati=rows.map(r=>LATI[r.i%2]); }
         out.push(o);
       }
@@ -2032,7 +2058,13 @@
     return true;
   }
   function sessioneSalvataHTML(session){
-    return `${session.nota?`<div class="note">${esc(session.nota)}</div>`:''}${(session.esercizi||[]).map(ex=>`<section class="physical-panel"><h3 class="physical-title">${esc(ex.nome)}</h3>${(ex.sets||[]).map((set,i)=>{const f=fmtSerie(ex,set);return `<div class="progmeta">Serie ${i+1}${ex.lati?.[i]?' · '+esc(ex.lati[i]):''} · ${esc(f.kg)} × ${esc(f.r)}${set.rir==null?'':' · RIR '+esc(set.rir)}</div>`;}).join('')||'<div class="progmeta">Nessuna serie registrata</div>'}${ex.note?`<div class="note">${esc(ex.note)}</div>`:''}</section>`).join('')}`;
+    return `${session.nota?`<div class="note">${esc(session.nota)}</div>`:''}${(session.esercizi||[]).map(ex=>`<section class="physical-panel"><h3 class="physical-title">${esc(ex.nome)}</h3>${(ex.sets||[]).map((set,i)=>{const f=fmtSerie(ex,set);return `<div class="progmeta">Serie ${esc(savedSetLabel(ex.lati,set,i))} · ${esc(f.kg)} × ${esc(f.r)}${set.rir==null?'':' · RIR '+esc(set.rir)}</div>`;}).join('')||'<div class="progmeta">Nessuna serie registrata</div>'}${ex.note?`<div class="note">${esc(ex.note)}</div>`:''}</section>`).join('')}`;
+  }
+  function savedSetLabel(sides,set,i){
+    const side=sides?.[i];
+    if(!side)return String((set.slot??i)+1);
+    const number=Number.isInteger(set.slot)?Math.floor(set.slot/2)+1:sides.slice(0,i+1).filter(value=>value===side).length;
+    return number+' '+side;
   }
   function fmtSerie(e, st){
     const kg = st.kg===0 ? 'C.L.' : fmtKgIt(st.kg)+(e.perLato?' kg/lato':' kg');
@@ -2042,7 +2074,7 @@
   function storicoSessionsHTML(name,exerciseId){
     const sessions=getStorico(name,exerciseId), e=infoEsercizio(name);
     if(!sessions.length) return `<div class="nodata">Nessuno storico per questo esercizio.</div>`;
-    return sessions.map(ses=>`<div class="stor-block"><div class="stor-date">${ses.data}${ses.sett?' · Sett. '+ses.sett:''}</div><table class="sc-table"><thead><tr><th>Serie</th><th>Peso</th><th>${e.unita==='sec'?'Tempo':'Reps'}</th><th>RIR</th></tr></thead><tbody>${ses.serie.map((st,si)=>{ const f=fmtSerie(e,st); const lab=ses.lati ? (ses.lati.slice(0,si+1).filter(l=>l==='DX').length||1)+' '+ses.lati[si] : si+1; return `<tr><td>${lab}</td><td>${f.kg}</td><td>${f.r}</td><td>${st.rir==null?'—':st.rir}</td></tr>`; }).join('')}</tbody></table>${ses.nota?`<div class="stor-nota">${esc(ses.nota)}</div>`:''}</div>`).join('');
+    return sessions.map(ses=>`<div class="stor-block"><div class="stor-date">${ses.data}${ses.sett?' · Sett. '+ses.sett:''}</div><table class="sc-table"><thead><tr><th>Serie</th><th>Peso</th><th>${e.unita==='sec'?'Tempo':'Reps'}</th><th>RIR</th></tr></thead><tbody>${ses.serie.map((st,si)=>{ const f=fmtSerie(e,st); return `<tr><td>${esc(savedSetLabel(ses.lati,st,si))}</td><td>${f.kg}</td><td>${f.r}</td><td>${st.rir==null?'—':st.rir}</td></tr>`; }).join('')}</tbody></table>${ses.nota?`<div class="stor-nota">${esc(ses.nota)}</div>`:''}</div>`).join('');
   }
   function renderStorico(){
     const name=storicoEx;
