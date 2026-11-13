@@ -13,7 +13,8 @@ const val = (id) => $(id)?.value.trim() || "";
 const row = (title, detail="", action="") => `<div class="row"><span class="row-main"><span class="row-t">${escape(title)}</span><span class="row-s mock-multiline">${escape(detail)}</span></span>${action}</div>`;
 const empty = (title,detail="") => `<div class="empty"><div class="ic">${ui.I.doc}</div><h2>${escape(title)}</h2><p>${escape(detail)}</p></div>`;
 const button = (id,label,primary=false) => `<button type="button" class="btn btn-${primary?"primary":"ghost"}" id="${id}">${label}</button>`;
-const field = (id,label,type="text",value="",required=false) => `<label class="fld"><span>${label}</span><input class="inp" id="${id}" type="${type}" value="${escape(value)}" ${required?"required":""}></label>`;
+const field = (id,label,type="text",value="",required=false,autocomplete="") =>
+  `<label class="fld"><span>${label}</span><input class="inp" id="${id}" type="${type}" value="${escape(value)}"${required?" required":""}${autocomplete?` autocomplete="${autocomplete}"`:""}></label>`;
 const textarea = (id,label,value="") => `<label class="fld"><span>${label}</span><textarea class="ta" id="${id}" rows="4">${escape(value)}</textarea></label>`;
 const fail = (err) => ui.toast(friendlyAuthError(err));
 const checked = ({data,error}) => { if(error) throw error; return data; };
@@ -238,7 +239,12 @@ function publishNutrition(plan) {
 }
 
 function createClient(){
-  showModal("Aggiungi cliente",field("mockFirst","Nome","text","",true)+field("mockLast","Cognome","text","",true)+field("mockEmail","Email","email","",true)+field("mockPassword","Password iniziale","password","",true)+button("mockGenerate","Genera password"),"Crea account",async ()=>{
+  const fields=field("mockFirst","Nome","text","",true,"off")
+    +field("mockLast","Cognome","text","",true,"off")
+    +field("mockEmail","Email","email","",true,"off")
+    +field("mockPassword","Password iniziale","password","",true,"new-password")
+    +button("mockGenerate","Genera password");
+  showModal("Aggiungi cliente",fields,"Crea account",async ()=>{
     const email=val("mockEmail"),password=val("mockPassword");
     await adminCall("createClient",{firstName:val("mockFirst"),lastName:val("mockLast"),email,password,idempotencyKey:crypto.randomUUID()});
     await loadDirectory();ui.go("clienti");
