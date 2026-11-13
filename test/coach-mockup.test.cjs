@@ -12,11 +12,14 @@ const template = (...esercizi) => ({
   weeks: [{ nome: "Settimana 1", giorni: [{ nome: "Gambe", giorno: "1", esercizi }] }]
 });
 
-test("il mockup mantiene le otto sezioni originali, la scheda cliente e i due editor", () => {
+test("la home PT integra il calendario e mantiene la scheda cliente e i due editor", () => {
   const html = fs.readFileSync(path.join(__dirname, "../www/coach.html"), "utf8");
-  for (const tile of ["priorita", "clienti", "workout", "revisione", "nutrizione", "abbonamenti", "impostazioni", "agenda"]) {
+  for (const tile of ["priorita", "clienti", "workout", "nutrizione", "impostazioni"]) {
     assert.match(html, new RegExp(`id:'${tile}'`));
   }
+  assert.doesNotMatch(html, /id:'(?:revisione|abbonamenti|agenda)'/);
+  assert.match(html, /id="homeCalendar"/);
+  assert.match(html, /id="calAdd"/);
   for (const field of ["copyWk", "addWk", "addDay", "assignMockProgram", "assignPiano", "savePianoDraft", "impBtn", "impPiano", "addEx"]) {
     assert.match(html, new RegExp(`id="${field}"`));
   }

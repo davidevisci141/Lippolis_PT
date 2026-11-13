@@ -22,7 +22,7 @@ const checked = ({data,error}) => { if(error) throw error; return data; };
 const sectionRows = new Map(), snapshots = new Map(), stateRevisions = new Map(), published = new Map(), versions = new Map(), drafts = new Map();
 const sectionWrites = new Map();
 let profile, uid, workspaceRevision=0, workspaceSignature="", saveQueue=Promise.resolve(), selectEpoch=0, loadEpoch=0, workspaceLoaded=false;
-let workspace = {exerciseEdits:{}, templates:[], collaborators:[], review:{}, priority:{}, recipes:[], preferences:{}};
+let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}};
 const key = (client,section) => `${client.id}:${section}`;
 const getSection = (client,section) => sectionRows.get(key(client,section))?.content || {};
 const items = (client,section) => getSection(client,section).items || [];
@@ -161,12 +161,15 @@ async function loadDirectory() {
 }
 let urgentMessages=[];
 function refreshSignals() {
-  const priorities=[], reviews=[], dates=[];
+  const priorities=[], dates=[];
   for(const c of ui.clienti){
     const active=published.get(c.id), end=active?.program?.al||active?.program?.endDate, start=active?.program?.dal||active?.program?.startDate;
-    if(start)dates.push({data:start,cliente:c.nome,prog:active.program.nome||active.program.name,tipo:"Inizio"});
-    if(end)dates.push({data:end,cliente:c.nome,prog:active.program.nome||active.program.name,tipo:"Scadenza"});
-    for(const event of items(c,"agenda"))dates.push({data:event.date,cliente:c.nome,prog:event.title,tipo:"Promemoria"});
+    const title=active?.program?.nome||active?.program?.name||"Scheda";
+    if(start)dates.push({date:start,clientName:c.nome,title,kind:"start"});
+    if(end)dates.push({date:end,clientName:c.nome,title,kind:"end"});
+    for(const event of items(c,"agenda")){
+      dates.push({id:event.id,date:event.date,clientId:c.id,clientName:c.nome,title:event.title,detail:event.detail,kind:"reminder"});
+    }
     if(!c.attivo)continue;
     for(const message of urgentMessages.filter(m=>m.athlete_id===c.id).slice(0,5)){
       const id=c.id+":urgent:"+message.id;
@@ -176,32 +179,15 @@ function refreshSignals() {
         messaggio:`Ciao ${c.first_name}, ho letto la tua segnalazione. Puoi dirmi come va adesso?`,...(status?.stato==="rimandato"&&status.date!==today()?{messaggio:status.messaggio}:status)});
     }
     const days=end?Math.round((Date.parse(end)-Date.parse(today()))/86400000):null;
-    const title=!active?"Scheda da assegnare":days<0?"Scheda scaduta":days!=null&&days<=7?"Scheda in scadenza":"";
-    if(title){
-      const id=`${c.id}:${active?.version_id||"no-program"}:${title}`, status=workspace.priority[id];
-      priorities.push({id:priorities.length+1,key:id,clientId:c.id,cliente:c.nome,urgenza:!active||days<0?"alta":"media",fonte:"auto",tag:"Programmazione",titolo:title,
+    const priorityTitle=!active?"Scheda da assegnare":days<0?"Scheda scaduta":days!=null&&days<=7?"Scheda in scadenza":"";
+    if(priorityTitle){
+      const id=`${c.id}:${active?.version_id||"no-program"}:${priorityTitle}`, status=workspace.priority[id];
+      priorities.push({id:priorities.length+1,key:id,clientId:c.id,cliente:c.nome,urgenza:!active||days<0?"alta":"media",fonte:"auto",tag:"Programmazione",titolo:priorityTitle,
         evidenza:end?`Fine scheda: ${displayDate(end)}`:"Nessuna scheda pubblicata.",azione:"Apri la programmazione del cliente.",cta:"Invia messaggio",tono:"rassicurante",
         messaggio:`Ciao ${c.first_name}, sto aggiornando la tua programmazione. Scrivimi se hai domande.`, ...(status?.stato==="rimandato"&&status.date!==today()?{messaggio:status.messaggio}:status)});
     }
-    const sessions=(snapshots.get(c.id)?.sessioni||[]).slice().sort((a,b)=>b.ts-a.ts), seen=new Set();
-    for(const session of sessions.slice(0,10)){
-      const program=active?.version_id===session.programVersionId?active.program:null;
-      const day=program?.settimane?.find(w=>w.n===session.settimana)?.giorni?.[session.giorno];
-      for(const ex of (session.esercizi||[])){
-        if(seen.has(ex.nome))continue;
-        const prescription=day?.blocks?.flatMap(b=>b.exercises||[]).find(x=>x.id===ex.exerciseId||x.name===ex.nome);
-        const target=prescription?.sets?.find(s=>s.target_rir!=null)?.target_rir;
-        const sets=(ex.sets||[]).filter(s=>s.rir!=null&&Number.isFinite(Number(s.rir))&&Number.isFinite(Number(s.kg)));
-        if(!sets.length||target==null||ex.unita==="sec")continue;
-        seen.add(ex.nome);
-        const id=`${c.id}:${session.id}:${ex.exerciseId||ex.nome}`;
-        reviews.push({id:reviews.length+1,key:id,clientId:c.id,exerciseId:ex.exerciseId,versionId:session.programVersionId, exerciseName:ex.nome,cliente:c.nome,
-          esercizio:ex.nome,gruppo:prescription.primary_muscles?.[0]||"Allenamento",sessione:displayDate(session.ts),targetRir:Number(target),reps:String(prescription.sets?.[0]?.reps_min||sets[0].reps),
-          carico:Math.max(...sets.map(s=>Number(s.kg))),step:2.5,sets,...workspace.review[id]});
-      }
-    }
   }
-  replace(ui.prioritaOggi,priorities);replace(ui.revisioneCarichi,reviews);replace(ui.scadenze,dates);
+  replace(ui.prioritaOggi,priorities);replace(ui.scadenze,dates);
 }
 
 function clientSelect(id="mockClient") {
@@ -366,17 +352,28 @@ function questionnaire(c){
     });
   };
 }
-function editableList(c,section,title,isSubscription=false) {
-  const list=items(c,section);
-  drawClient(c,title,list.length?list.map((it,i)=>row(it.title,[displayDate(it.date),it.detail].filter(Boolean).join(" · "),button("mockEditEntry"+i,"Modifica")+button("mockDelEntry"+i,"Elimina"))).join(""):empty("Nessun elemento"),button("mockAddEntry",isSubscription?"Aggiungi abbonamento":"Aggiungi promemoria",true));
-  const edit=(it)=>showModal(it?"Modifica":"Aggiungi",field("mockEntryTitle","Titolo","text",it?.title,true)+field("mockEntryDate",isSubscription?"Scadenza":"Data","date",it?.date||today(),true)+textarea("mockEntryDetail",isSubscription?"Importo e stato pagamento":"Note",it?.detail),"Salva",async()=>{
-    const record={id:it?.id||crypto.randomUUID(),title:val("mockEntryTitle"),date:val("mockEntryDate"),detail:val("mockEntryDetail")};
-    await saveSection(c,section,{items:[...items(c,section).filter(x=>x.id!==record.id),record]});refreshSignals();editableList(c,section,title,isSubscription);
+function editCalendarReminder(event,defaultDate){
+  const clientField=event?"":`<label class="fld"><span>Cliente</span><select class="sel" id="calendarClient">${ui.clienti.map(client=>`<option value="${escape(client.id)}">${escape(client.nome)}</option>`).join("")}</select></label>`;
+  const fields=clientField+field("calendarTitle","Titolo","text",event?.title,true)
+    +field("calendarDate","Data","date",event?.date||defaultDate,true)
+    +textarea("calendarNote","Note",event?.detail);
+  showModal(event?"Modifica promemoria":"Aggiungi promemoria",fields,"Salva",async()=>{
+    const client=ui.clienti.find(item=>item.id===(event?.clientId||val("calendarClient")));
+    const title=val("calendarTitle"), date=val("calendarDate");
+    if(!client||!title||!date)throw new Error("Indica cliente, titolo e data.");
+    const record={id:event?.id||crypto.randomUUID(),title,date,detail:val("calendarNote")};
+    await changeSection(client,"agenda",content=>({...content,items:[...(content.items||[]).filter(item=>item.id!==record.id),record]}));
+    refreshSignals();
+    ui.renderHomeCalendar(date);
   });
-  $("mockAddEntry").onclick=()=>edit();
-  list.forEach((it,i)=>{
-    $("mockEditEntry"+i).onclick=()=>edit(it);
-    $("mockDelEntry"+i).onclick=async()=>{if(!confirm("Eliminare la voce?"))return;try{await saveSection(c,section,{items:items(c,section).filter(x=>x.id!==it.id)});refreshSignals();editableList(c,section,title,isSubscription);}catch(error){fail(error);}};
+}
+function deleteCalendarReminder(event){
+  const client=ui.clienti.find(item=>item.id===event.clientId);
+  if(!client)return;
+  showModal("Elimina promemoria",`<p>${escape(event.title)} · ${escape(client.nome)}</p>`,"Elimina",async()=>{
+    await changeSection(client,"agenda",content=>({...content,items:(content.items||[]).filter(item=>item.id!==event.id)}));
+    refreshSignals();
+    ui.renderHomeCalendar();
   });
 }
 let chatClient=null, inbox=[], inboxRequest=0, threadRequest=0, inboxLoaded=false;
@@ -476,25 +473,18 @@ async function sendMessage(clientId,text){
 function sendPriority(it,btn){
   btn.disabled=true;
   sendMessage(it.clientId,it.messaggio).then(()=>{
-    it.stato="inviato";storeSignal(it,"priority");ui.fillPriorita();ui.toast("Messaggio inviato");
+    it.stato="inviato";storeSignal(it);ui.fillPriorita();ui.toast("Messaggio inviato");
   }).catch(error=>{btn.disabled=false;fail(error);});
 }
-function storeSignal(it,type){
+function storeSignal(it){
   if(!it?.key)return;
-  if(it.stato)workspace[type][it.key]={stato:it.stato,...(type==="review"?{nuovo:it.nuovo}:{date:today()})};
-  else delete workspace[type][it.key];
-  if(type==="priority"&&it.messaggio)workspace.priority[it.key]={...workspace.priority[it.key],messaggio:it.messaggio};
+  if(it.stato)workspace.priority[it.key]={stato:it.stato,date:today()};
+  else delete workspace.priority[it.key];
+  if(it.messaggio)workspace.priority[it.key]={...workspace.priority[it.key],messaggio:it.messaggio};
   ui.scheduleSave();
-  if(type==="review"){
-    const c=ui.clienti.find(c=>c.id===it.clientId);
-    if(!c)return;
-    const recommendation=["approvato","modificato"].includes(it.stato)
-      ?{id:it.key,versionId:it.versionId,exerciseId:it.exerciseId,exerciseName:it.exerciseName,kg:Number(it.nuovo),date:today()}:null;
-    changeSection(c,"loads",data=>({items:[...(data.items||[]).filter(row=>row.id!==it.key),...(recommendation?[recommendation]:[])]})).catch(fail);
-  }
 }
 function clientInfo(c){
-  drawClient(c,"Informazioni generali",row(c.nome,c.email)+row("Accesso",c.attivo?"Attivo":"Sospeso")+button("mockAccess",c.attivo?"Sospendi accesso":"Riattiva accesso")+button("mockExport","Esporta dati")+button("mockClientSubscriptions","Abbonamenti")+button("mockDeleteClient","Elimina cliente"));
+  drawClient(c,"Informazioni generali",row(c.nome,c.email)+row("Accesso",c.attivo?"Attivo":"Sospeso")+button("mockAccess",c.attivo?"Sospendi accesso":"Riattiva accesso")+button("mockExport","Esporta dati")+button("mockDeleteClient","Elimina cliente"));
   $("mockAccess").onclick=async()=>{
     if(c.attivo&&!confirm("Sospendere l’accesso di questo cliente?"))return;
     try{await adminCall("setClientAccess",{clientUid:c.id,action:c.attivo?"suspend":"reactivate"});await loadDirectory();const next=ui.clienti.find(p=>p.id===c.id);ui.setClient(next,"info");}catch(error){fail(error);}
@@ -509,7 +499,6 @@ function clientInfo(c){
     if(val("mockDeleteEmail").toLowerCase()!==c.email.toLowerCase())throw new Error("L’email non corrisponde.");
     await adminCall("deleteClient",{clientUid:c.id,confirmationEmail:val("mockDeleteEmail")});await loadDirectory();ui.go("clienti");
   });
-  $("mockClientSubscriptions").onclick=()=>editableList(c,"subscriptions","Abbonamenti",true);
 }
 function clientNutrition(c){
   const plan=getSection(c,"nutrition").plan;
@@ -528,16 +517,10 @@ function clientSection(c,section){
   else if(section==="progressi")listFiles(c,"progress","Progressi fisici");
   else if(section==="questionari")questionnaire(c);
   else if(section==="documenti")listFiles(c,"documents","Documenti");
-  else if(section==="agenda")editableList(c,"agenda","Agenda");
   else if(section==="messaggi")openCoachChat(c.id);
   else if(section==="info")clientInfo(c);
   else return false;
   return true;
-}
-function subscriptions(){
-  ui.main.innerHTML=ui.pageHead("Abbonamenti")+`<div class="sec">${ui.clienti.length?ui.clienti.map((c,i)=>row(c.nome,`${items(c,"subscriptions").length} abbonamenti`,button("mockSub"+i,"Gestisci"))).join(""):empty("Nessun cliente")}</div>`;
-  $("back").onclick=()=>ui.go("home");
-  ui.clienti.forEach((c,i)=>{$("mockSub"+i).onclick=()=>{ui.setClient(c,"info");editableList(c,"subscriptions","Abbonamenti",true);};});
 }
 
 function programHistory(c){
@@ -837,7 +820,7 @@ async function start(){
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshChat();});
     navigator.serviceWorker?.addEventListener("message",event=>{if(event.data?.type==="open-chat")ui.go("chat");});
     let update;
-    const reload=()=>{clearTimeout(update);update=setTimeout(async()=>{try{await loadDirectory();if(["home","priorita","revisione","agenda"].includes(ui.view))ui.render();}catch(error){fail(error);}},300);};
+    const reload=()=>{clearTimeout(update);update=setTimeout(async()=>{try{await loadDirectory();if(["home","priorita"].includes(ui.view))ui.render();}catch(error){fail(error);}},300);};
     let feed=supabase.channel("coach-mockup:"+uid);
     for(const table of ["athlete_states","programs","coach_client_sections"])feed=feed.on("postgres_changes",{event:"*",schema:"public",table},reload);
     feed.on("postgres_changes",{event:"*",schema:"public",table:"profiles"},async()=>{
@@ -852,6 +835,6 @@ async function start(){
     $("mockRetry").onclick=()=>location.reload();
   }
 }
-window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,subscriptions,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox};
+window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
 $("coachLogout").onclick=signOutCoach;
 void start();

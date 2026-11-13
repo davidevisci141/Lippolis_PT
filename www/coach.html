@@ -41,26 +41,20 @@
   .main{max-width:1140px; margin:0 auto; padding:30px 28px 70px;}
   .main.wide, .topbar-inner.wide{max-width:1760px;}
   .home-head h1{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:30px; color:var(--text); line-height:1.05;}
-  .home-head p{font-size:14px; color:var(--muted); font-weight:600; margin-top:6px; margin-bottom:26px;}
+  .home-head{margin-bottom:22px;}
+  .home-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:20px;}
 
   /* ---- TILES ---- */
-  .tiles{display:grid; grid-template-columns:repeat(3,1fr); gap:18px;}
-  .tile{position:relative; overflow:hidden; aspect-ratio:1/1; -webkit-appearance:none; appearance:none; font:inherit; text-align:left; cursor:pointer; background:var(--surface); border:1px solid var(--line-soft); border-radius:22px; box-shadow:var(--shadow-card); padding:24px; display:flex; flex-direction:column; color:var(--text); transition:.18s;}
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+  .tile{position:relative;overflow:hidden;min-height:145px;appearance:none;font:inherit;text-align:left;cursor:pointer;background:var(--surface);border:1px solid var(--line-soft);border-radius:18px;box-shadow:var(--shadow-card);padding:16px;display:flex;flex-direction:column;color:var(--text);transition:.18s;}
   .tile:hover{transform:translateY(-4px); border-color:rgba(18,199,162,.5); box-shadow:0 10px 30px rgba(20,24,28,.14);}
-  .tile-ic{width:54px;height:54px;border-radius:15px; display:grid;place-items:center; background:var(--accent-soft); color:var(--accent-ink); border:1px solid rgba(18,199,162,.25);}
-  .tile-ic svg{width:28px;height:28px;}
-  .tile-l{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:21px; margin-top:auto;}
+  .tile-ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);border:1px solid rgba(18,199,162,.25);margin-bottom:12px;}
+  .tile-ic svg{width:22px;height:22px;}
+  .tile-l{font-family:'Archivo',system-ui,sans-serif;font-weight:800;font-size:17px;margin-top:auto;}
   .tile-s{font-size:13px; color:var(--muted); font-weight:600; margin-top:5px;}
-  .tile-bg{position:absolute; right:-18px; bottom:-24px; color:var(--text); opacity:.05; pointer-events:none;}
-  .tile-bg svg{width:150px;height:150px;}
   .tile-arrow{position:absolute; top:26px; right:24px; color:var(--muted2); opacity:0; transition:.18s;}
   .tile:hover .tile-arrow{opacity:1; transform:translateX(2px);}
   .tile-arrow svg{width:20px;height:20px;}
-  .tile.ghost{background:transparent; border:2px dashed var(--line); box-shadow:none; cursor:default; align-items:center; justify-content:center; gap:12px;}
-  .tile.ghost:hover{transform:none; border-color:var(--line); box-shadow:none;}
-  .tile.ghost .gp{width:48px;height:48px;border-radius:14px; display:grid;place-items:center; border:2px dashed var(--line); color:var(--muted2);}
-  .tile.ghost .gp svg{width:22px;height:22px;}
-  .tile.ghost .gl{font-size:12.5px; font-weight:700; color:var(--muted2);}
 
   /* ---- PAGE HEAD ---- */
   .page-head{display:flex; align-items:center; gap:14px; margin-bottom:24px;}
@@ -279,38 +273,44 @@
   .notif-row .nr-s{font-size:12.5px; color:var(--muted); font-weight:600; margin-top:2px;}
   .danger-link{display:block; background:transparent; border:0; color:var(--danger); font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14px; cursor:pointer; padding:8px 0; text-align:left;}
 
-  /* ---- agenda (calendario) ---- */
-  .cal-note{background:var(--accent-soft); border:1px solid rgba(18,199,162,.22); border-radius:12px; padding:13px 15px; font-size:13px; color:var(--muted); font-weight:600; line-height:1.5; margin-bottom:16px;}
-  .cal-note b{color:var(--accent-ink); font-family:'Archivo',system-ui,sans-serif;}
-  .cal-bar{display:flex; align-items:center; gap:12px; margin-bottom:14px;}
-  .cal-nav{width:38px;height:38px;border-radius:11px; background:var(--surface); border:1px solid var(--line-soft); display:grid;place-items:center; cursor:pointer; box-shadow:var(--shadow-card);} .cal-nav svg{width:18px;height:18px;color:var(--text);}
-  .cal-title{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:20px; color:var(--text); min-width:175px;}
-  .cal-legend{display:flex; gap:18px; margin-bottom:12px; font-size:12.5px; color:var(--muted); font-weight:700; flex-wrap:wrap;}
-  .cal-legend .lg{display:inline-flex; align-items:center; gap:7px;}
-  .cal-legend i{width:11px;height:11px;border-radius:3px;}
-  .cal-legend .d-scad{background:#D68A14;}
-  .cal-legend .d-prom{background:var(--muted2);}
-  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:8px;}
-  .cal-grid.head{margin-bottom:8px;}
-  .cal-dow{text-align:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:11px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted2); padding:4px 0;}
-  .cal-cell{min-height:98px; background:var(--surface); border:1px solid var(--line-soft); border-radius:12px; padding:8px; box-shadow:var(--shadow-card); display:flex; flex-direction:column; gap:4px; overflow:hidden;}
-  .cal-cell.empty{background:transparent; border:0; box-shadow:none;}
-  .cal-cell.today{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent-soft), var(--shadow-card);}
-  .cal-d{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:13px; color:var(--text);}
-  .cal-cell.today .cal-d{color:var(--accent-ink);}
-  .cal-ev{font-size:10.5px; font-weight:700; padding:3px 6px; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .cal-ev.scad{background:rgba(214,138,20,.16); color:#A06200;}
-  .cal-ev.prom{background:var(--surface2); color:var(--muted2);}
+  /* ---- Calendario nella home PT ---- */
+  .home-calendar{min-width:0;padding:16px;background:var(--surface);border:1px solid var(--line-soft);border-radius:18px;box-shadow:var(--shadow-card);}
+  .cal-heading,.cal-bar,.cal-detail-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .cal-heading{margin-bottom:13px;}
+  .cal-heading h2,.cal-detail h3{margin:0;font:800 19px 'Archivo',system-ui,sans-serif;}
+  .cal-bar{margin-bottom:7px;}
+  .cal-title{font:800 15px 'Archivo',system-ui,sans-serif;text-align:center;text-transform:capitalize;}
+  .cal-nav{width:34px;height:34px;flex:none;display:grid;place-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:9px;color:var(--text);cursor:pointer;}
+  .cal-nav svg{width:16px;height:16px;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;}
+  .cal-dow{text-align:center;padding:4px 0;color:var(--muted);font-size:10px;font-weight:800;}
+  .cal-cell{min-height:38px;display:grid;place-items:center;align-content:center;gap:3px;padding:3px 1px;color:var(--text);background:var(--surface2);border:1px solid transparent;border-radius:8px;cursor:pointer;font:700 12px 'Manrope',system-ui,sans-serif;}
+  .cal-cell:hover,.cal-cell[aria-current="date"]{border-color:var(--accent);}
+  .cal-cell[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-ink);}
+  .cal-dots,.cal-legend{display:flex;align-items:center;justify-content:center;gap:4px;}
+  .cal-dots{height:5px;}
+  .cal-legend{justify-content:flex-start;flex-wrap:wrap;gap:5px 11px;margin:10px 0;color:var(--muted);font-size:10px;font-weight:700;}
+  .cal-legend span{display:inline-flex;align-items:center;gap:4px;}
+  .cal-dot{width:6px;height:6px;display:inline-block;flex:none;border-radius:50%;background:var(--accent-ink);}
+  .cal-dot.end{background:#bb710c;}.cal-dot.warning{background:#6f65a6;}.cal-dot.reminder{background:#3977a9;}
+  .cal-detail{padding-top:11px;border-top:1px solid var(--line-soft);}
+  .cal-detail h3{font-size:14px;}
+  .cal-detail-head .btn,.cal-heading .btn{padding:6px 8px;font-size:11px;}
+  .cal-events{display:grid;gap:8px;margin-top:9px;max-height:330px;overflow:auto;}
+  .cal-event{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px 8px;padding:8px 9px;border-radius:8px;background:var(--surface2);overflow-wrap:anywhere;}
+  .cal-event p{margin:4px 0 0;color:var(--muted);font-size:12px;white-space:pre-wrap;}
+  .cal-event small,.cal-empty{color:var(--muted);font-size:12px;}
+  .cal-event-actions{display:flex;align-items:flex-start;gap:4px;}
+  .cal-event-actions .btn{padding:4px 6px;font-size:10px;}
+  .cal-empty{margin:0;}
+  @media(max-width:760px){.home-layout{grid-template-columns:1fr;}.home-calendar{grid-row:1;}}
+  @media(max-width:430px){.home-calendar{padding:12px;}.cal-event{grid-template-columns:1fr;}}
   @media (max-width:760px){
     .settings{grid-template-columns:1fr;}
     .set-menu{position:static; display:flex; gap:6px; overflow-x:auto;}
     .set-menu-h{display:none;}
     .set-menu button{white-space:nowrap;} .set-menu button.on{box-shadow:none;}
     .set-panel{padding:18px;}
-    .cal-cell{min-height:62px; padding:5px;}
-    .cal-ev{font-size:9px; padding:2px 4px;}
-    .cal-title{font-size:17px; min-width:120px;}
-    .cal-grid, .cal-grid.head{gap:5px;}
   }
 
   /* ---- header: consenti wrap azioni ---- */
@@ -326,45 +326,6 @@
   .modal-x{background:transparent; border:0; cursor:pointer; color:var(--muted); width:34px;height:34px; display:grid;place-items:center; border-radius:9px;} .modal-x:hover{background:var(--surface2);} .modal-x svg{width:20px;height:20px;}
   .modal-b{padding:14px 24px 4px;}
   .modal-f{display:flex; gap:12px; padding:14px 24px 22px;}
-  /* ---- Revisione carichi ---- */
-  .rev-sub{color:var(--muted); font-size:14px; margin:2px 2px 14px; max-width:780px;}
-  .rev-count{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:15px; color:var(--text); margin:0 2px 10px;}
-  .rev-list{display:flex; flex-direction:column; gap:12px;}
-  .rev-card{display:flex; gap:18px; justify-content:space-between; background:var(--surface); border:1px solid var(--line-soft); border-radius:16px; padding:16px 18px; box-shadow:var(--shadow-card);}
-  .rev-card.done{opacity:.6;}
-  .rev-l{display:flex; gap:12px; min-width:0;}
-  .rev-av{flex:0 0 38px; width:38px; height:38px; border-radius:50%; background:var(--accent-soft); color:var(--accent-ink); font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:13px; display:flex; align-items:center; justify-content:center;}
-  .rev-cli{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:15.5px; color:var(--text);}
-  .rev-ex{font-size:13.5px; font-weight:700; color:var(--text); margin-top:1px;}
-  .rev-ses{font-size:12px; color:var(--muted); margin-top:2px;}
-  .rev-sets{display:flex; flex-wrap:wrap; gap:5px; margin-top:8px;}
-  .rev-set{font-size:11.5px; font-weight:700; color:var(--muted); background:var(--surface2); border:1px solid var(--line-soft); border-radius:7px; padding:3px 7px; white-space:nowrap;}
-  .rev-set b{color:var(--text);}
-  .rev-r{flex:0 0 310px; display:flex; flex-direction:column; align-items:flex-end; text-align:right; gap:6px;}
-  .rev-tag{font-size:11px; font-weight:800; letter-spacing:.3px; text-transform:uppercase; border-radius:7px; padding:3px 8px;}
-  .rev-tag.aumenta{background:#FBF3DC; color:#8F6B0F; border:1px solid #E0A82E;}
-  .rev-tag.riduci{background:#FBE5E3; color:#A03830; border:1px solid var(--danger);}
-  .rev-tag.osserva{background:var(--surface2); color:var(--muted); border:1px solid var(--line);}
-  .rev-prop{font-size:14px; color:var(--muted);}
-  .rev-prop b{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:18px; color:var(--text);}
-  .rev-prop .d{font-weight:800; font-size:12.5px;}
-  .rev-prop .d.up{color:#8F6B0F;} .rev-prop .d.down{color:var(--danger);}
-  .rev-why{font-size:12px; color:var(--muted); max-width:310px; line-height:1.45;}
-  .rev-acts{display:flex; gap:8px; margin-top:4px;}
-  .rev-acts .btn{padding:8px 13px; font-size:12.5px;}
-  .rev-done{display:flex; align-items:center; gap:7px; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:13px; color:var(--accent-ink); margin-top:4px;}
-  .rev-done svg{width:15px; height:15px;}
-  .rev-done.skip{color:var(--muted);}
-  .rev-undo{-webkit-appearance:none; appearance:none; border:0; background:transparent; color:var(--muted); font:inherit; font-size:12px; text-decoration:underline; cursor:pointer;}
-  .rev-foot{margin:16px 2px 0; font-size:13px; color:var(--muted);}
-  .rev-mcli{font-family:'Archivo',system-ui,sans-serif; font-weight:800; color:var(--text); margin-bottom:14px;}
-  .rev-step{display:flex; align-items:center; justify-content:center; gap:20px; margin:6px 0 12px;}
-  .rs-btn{-webkit-appearance:none; appearance:none; cursor:pointer; width:46px; height:46px; border-radius:12px; border:1px solid var(--line); background:var(--surface2); font-size:22px; font-weight:800; color:var(--text);}
-  .rs-btn:active{transform:scale(.95);}
-  .rs-val{font-size:15px; color:var(--muted);}
-  .rs-val b{font-family:'Archivo',system-ui,sans-serif; font-weight:900; font-size:30px; color:var(--text);}
-  .rev-mnote{text-align:center; font-size:12px; color:var(--muted); margin-bottom:6px;}
-  @media (max-width:780px){ .rev-card{flex-direction:column;} .rev-r{flex:auto; align-items:flex-start; text-align:left;} .rev-why{max-width:none;} }
 
   /* ---- PRIORITÀ OGGI ---- */
   .po-sub{color:var(--muted); font-size:14px; margin:2px 2px 14px; max-width:820px;}
@@ -638,7 +599,6 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   /* ---- RESPONSIVE ---- */
-  @media (max-width:980px){ .tiles{grid-template-columns:repeat(2,1fr);} }
   @media (max-width:620px){
     .topbar-inner{padding:10px 16px;}
     .main{padding:22px 16px 60px;}
@@ -652,7 +612,6 @@
     .tile-ic svg{width:23px;height:23px;}
     .tile-l{font-size:17px;}
     .tile-s{font-size:12px;}
-    .tile-bg svg{width:110px;height:110px;}
     .subtabs{display:flex;}
     .subtabs button{flex:1; padding:9px 8px;}
     .bar-row{flex-wrap:wrap;}
@@ -725,46 +684,17 @@
 
   const COACH = { name:'PT' };
 
-  // ---- REVISIONE CARICHI: dati d'esempio (in produzione: log RIR reali via Supabase) ----
-  const revisioneCarichi = [];
   // ---- PRIORITÀ OGGI: motore segnali (zone/trigger · evidenza · azione · messaggio voce Vittorio · stato) ----
   // urgenza: alta(rosso) / media(ambra) / bassa(verde) · fonte: 'auto' (dai dati app) | 'chat' (riferito all'assistente)
   const prioritaOggi = [];
 
-  const fmtKg = v => (Math.round(v*100)/100).toString().replace('.',',');
-  const fmt1  = v => v.toFixed(1).replace('.',',');
-  function avgRir(sets){ const v=sets.filter(x=>x.rir!=null&&x.rir!==''); if(!v.length) return null; return v.reduce((a,x)=>a+(+x.rir),0)/v.length; }
-  // Regole v1 (esplicite, modificabili dal coach): ±0.75 RIR = in target; ±0.75–1.5 = 1 incremento / osserva; oltre 1.5 = ±5% arrotondato all'incremento
-  function calcolaProposta(it){
-    const avg=avgRir(it.sets), d=avg-it.targetRir, step=it.step||2.5, kg=it.carico;
-    const arr=x=>Math.round(x/step)*step, r2=x=>Math.round(x*100)/100;
-    if(d>=1.5){
-      const inc = kg>0 ? Math.max(step, arr(kg*0.05)) : step;
-      return {tipo:'aumenta', nuovo:r2(kg+inc), diff:inc, avg, d, tag: kg>0?'Carico leggero':'Pronto per la zavorra',
-        perche:`RIR medio ${fmt1(avg)} contro target ${it.targetRir}: troppo margine. ${kg>0?'Proposta ≈ +5%, arrotondata all\'incremento minimo.':'Corpo libero a target di reps: si passa alla zavorra.'}`};
-    }
-    if(d>=0.75) return {tipo:'aumenta', nuovo:r2(kg+step), diff:step, avg, d, tag:'Sopra target',
-        perche:`RIR medio ${fmt1(avg)} contro target ${it.targetRir}: leggermente sopra. +1 incremento (${fmtKg(step)} kg).`};
-    if(d<=-1.5){
-      const dec=Math.max(step, arr(kg*0.05));
-      return {tipo:'riduci', nuovo:Math.max(0,r2(kg-dec)), diff:-dec, avg, d, tag:'Troppo vicino al cedimento',
-        perche:`RIR medio ${fmt1(avg)} contro target ${it.targetRir}: lavora oltre la prescrizione. Proposta ≈ −5%.`};
-    }
-    if(d<=-0.75) return {tipo:'osserva', nuovo:kg, diff:0, avg, d, tag:'Sotto target',
-        perche:`RIR medio ${fmt1(avg)} contro target ${it.targetRir}: vicino al limite ma gestibile. Mantieni e osserva la prossima sessione.`};
-    return {tipo:'mantieni', nuovo:kg, diff:0, avg, d, tag:'In target', perche:'RIR nel range: nessuna modifica.'};
-  }
 
   const tiles = [
     {id:'priorita',    label:'Priorità oggi',        sub:'',                         icon:I.bolt},
     {id:'clienti',     label:'Clienti',              sub:'',              icon:I.users},
     {id:'workout',     label:'Workout',              sub:'', icon:I.dumbbell},
-    {id:'revisione',   label:'Revisione carichi',    sub:'',                         icon:I.loop},
     {id:'nutrizione',  label:'Consigli nutrizionali',sub:'Piani e linee guida',      icon:I.apple},
-    {id:'abbonamenti', label:'Abbonamenti',          sub:'Pacchetti e pagamenti',    icon:I.wallet},
     {id:'impostazioni',label:'Impostazioni',         sub:'Account e preferenze',     icon:I.gear},
-    {id:'agenda',      label:'Agenda',               sub:'Scadenze e promemoria',    icon:I.calendar},
-    {empty:true},
   ];
 
   // dati di esempio
@@ -1470,8 +1400,6 @@
     {nome:'Polpaccio sinistro', dati:[]},
     {nome:'Polpaccio destro', dati:[]},
   ];
-  function _addDays(base,n){ const d=new Date(base); d.setDate(d.getDate()+n); d.setHours(0,0,0,0); return d; }
-  const _today0=(function(){ const d=new Date(); d.setHours(0,0,0,0); return d; })();
   const scadenze = [];
   const GRUPPI=['Quadricipiti','Femorali','Glutei','Polpacci','Pettorali','Dorsali','Deltoidi','Trapezi','Bicipiti','Tricipiti','Avambracci','Addome / Core'];
 
@@ -1491,7 +1419,8 @@
   let currentEx=null;
   let currentProg=null;
   let progWeek=0;
-  let agendaMonth=new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  let calendarMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);
+  let calendarDay=null;
   let notifiche=[
     {t:'Scadenza scheda', s:'Promemoria 1 settimana prima della fine di un programma', on:true},
     {t:'Questionario compilato', s:'Quando un cliente invia un questionario', on:true},
@@ -1515,14 +1444,11 @@
     else if(view==='chat') window.CoachDB?.renderInbox();
     else if(view==='cliente') renderCliente();
     else if(view==='workout') renderWorkout();
-    else if(view==='revisione') renderRevisione();
     else if(view==='nutrizione') renderNutrizione();
     else if(view==='esercizio') renderEsercizio();
     else if(view==='programma') renderProgramma();
     else if(view==='piano') renderPiano();
     else if(view==='impostazioni') renderImpostazioni();
-    else if(view==='agenda') renderAgenda();
-    else if(view==='abbonamenti') window.CoachDB?.subscriptions();
     else renderHome();
   }
 
@@ -1530,18 +1456,16 @@
 
   // ---- HOME ----
   function tileHTML(t){
-    if(t.empty) return '<div class="tile ghost"><span class="gp">'+I.plus+'</span><span class="gl">Slot disponibile</span></div>';
-    return '<button class="tile" data-go="'+t.id+'"><span class="tile-ic">'+t.icon+'</span><span class="tile-arrow">'+I.chevR+'</span><span class="tile-l">'+t.label+'</span><span class="tile-s">'+t.sub+'</span><span class="tile-bg">'+t.icon+'</span></button>';
+    return '<button class="tile" data-go="'+t.id+'"><span class="tile-ic">'+t.icon+'</span><span class="tile-arrow">'+I.chevR+'</span><span class="tile-l">'+t.label+'</span><span class="tile-s">'+t.sub+'</span></button>';
   }
   function renderHome(){
-    const rt=tiles.find(t=>t.id==='revisione');
-    if(rt){ const n=revisioneCarichi.filter(i=>!i.stato).length; rt.sub = n ? (n+' proposte da rivedere') : 'Tutto rivisto'; }
     const pt=tiles.find(t=>t.id==='priorita');
     if(pt){ const n=prioritaOggi.filter(i=>!i.stato).length; pt.sub = n ? (n+' clienti da seguire oggi') : 'Tutto gestito'; }
     const clientsTile=tiles.find(t=>t.id==='clienti'), workoutTile=tiles.find(t=>t.id==='workout');
-    clientsTile.sub=clienti.length+' clienti'; workoutTile.sub=programmi.length+' programmi · '+libreria.length+' esercizi';
-    main.innerHTML='<div class="home-head"><h1>Ciao, '+escapeHTML(COACH.name)+'</h1><p>Cosa vuoi gestire oggi?</p></div><div class="tiles">'+tiles.map(tileHTML).join('')+'</div>';
+    clientsTile.sub=clienti.length+(clienti.length===1?' cliente':' clienti'); workoutTile.sub=programmi.length+' programmi · '+libreria.length+' esercizi';
+    main.innerHTML='<div class="home-head"><h1>Ciao, '+escapeHTML(COACH.name)+'</h1></div><div class="home-layout"><nav class="tiles" aria-label="Sezioni del pannello PT">'+tiles.map(tileHTML).join('')+'</nav><section class="home-calendar" id="homeCalendar" aria-labelledby="calendarHeading"></section></div>';
     main.querySelectorAll('[data-go]').forEach(t=> t.onclick=()=>go(t.dataset.go));
+    renderHomeCalendar();
   }
 
   // ---- CLIENTI ----
@@ -1574,7 +1498,6 @@
     {id:'questionari',    label:'Questionari',         icon:I.questionnaire},
     {id:'messaggi',       label:'Messaggi',            icon:I.chat},
     {id:'documenti',      label:'Documenti',           icon:I.doc},
-    {id:'agenda',         label:'Agenda',              icon:I.calendar},
     {id:'info',           label:'Informazioni generali', icon:I.info},
   ];
   function openClient(c){ window.CoachDB.openClient(c); }
@@ -1985,34 +1908,90 @@
     p.querySelectorAll('[data-ni]').forEach(b=> b.onclick=()=>{ notifiche[+b.dataset.ni].on=!notifiche[+b.dataset.ni].on; setNotifiche(p); scheduleSave(); });
   }
 
-  // ---- AGENDA (calendario) ----
-  function renderAgenda(){
-    const M=agendaMonth, year=M.getFullYear(), month=M.getMonth();
-    const mesi=['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
-    const startDow=(new Date(year,month,1).getDay()+6)%7;
-    const giorni=new Date(year,month+1,0).getDate();
-    const today=new Date(); today.setHours(0,0,0,0);
-    const evByDay={};
-    scadenze.forEach(s=>{ const date=new Date(s.data+'T12:00:00'); (s.tipo==='Scadenza'?[['scad',date],['prom',_addDays(date,-7)]]:[[s.tipo==='Inizio'?'start':'event',date]]).forEach(([type,dd])=>{ if(dd.getFullYear()===year&&dd.getMonth()===month){ const k=dd.getDate(); (evByDay[k]=evByDay[k]||[]).push({type,cliente:s.cliente,prog:s.prog}); } }); });
-    let cells='';
-    for(let i=0;i<startDow;i++) cells+='<div class="cal-cell empty"></div>';
-    for(let d=1; d<=giorni; d++){
-      const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===d;
-      const chips=(evByDay[d]||[]).map(e=> '<span class="cal-ev '+(e.type==='scad'?'scad':'prom')+'">'+({scad:'Scad',prom:'Prom',start:'Inizio',event:'Evento'}[e.type])+' · '+escapeHTML(e.cliente.split(' ')[0])+'</span>').join('');
-      cells+='<div class="cal-cell'+(isToday?' today':'')+'"><div class="cal-d">'+d+'</div>'+chips+'</div>';
+  const calendarKinds={
+    start:'Inizio scheda', end:'Scadenza scheda', warning:'Avviso a 7 giorni', reminder:'Promemoria'
+  };
+  const calendarMonthLabel=new Intl.DateTimeFormat('it-IT',{month:'long',year:'numeric'});
+  const calendarDateLabel=new Intl.DateTimeFormat('it-IT',{weekday:'long',day:'numeric',month:'long'});
+  const calendarKey=date=>date.toLocaleDateString('sv-SE');
+  function calendarEvents(){
+    const month=calendarKey(calendarMonth).slice(0,7);
+    const events=[];
+    for(const item of scadenze){
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(item.date))continue;
+      events.push(item);
+      if(item.kind==='end'){
+        const reminder=new Date(item.date+'T12:00:00');
+        reminder.setDate(reminder.getDate()-7);
+        if(Number.isFinite(reminder.getTime()))events.push({...item,date:calendarKey(reminder),kind:'warning'});
+      }
     }
-    const tot=startDow+giorni, trail=(7-(tot%7))%7;
-    for(let i=0;i<trail;i++) cells+='<div class="cal-cell empty"></div>';
-    const dows=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(x=>'<div class="cal-dow">'+x+'</div>').join('');
-    main.innerHTML=pageHead('Agenda')+
-      '<div class="sec"><div class="cal-note">Il calendario mostra le scadenze delle schede, i promemoria a sette giorni e gli eventi aggiunti al cliente.</div>'+
-      '<div class="cal-bar"><button class="cal-nav" id="calPrev">'+I.chevL+'</button><div class="cal-title">'+mesi[month]+' '+year+'</div><button class="cal-nav" id="calNext">'+I.chevR+'</button><button class="btn btn-ghost" id="calToday">Oggi</button></div>'+
-      '<div class="cal-legend"><span class="lg"><i class="d-scad"></i>Scadenza scheda</span><span class="lg"><i class="d-prom"></i>Promemoria (1 sett. prima)</span></div>'+
-      '<div class="cal-grid head">'+dows+'</div><div class="cal-grid">'+cells+'</div></div>';
-    document.getElementById('back').onclick=()=>go('home');
-    document.getElementById('calPrev').onclick=()=>{ agendaMonth=new Date(year,month-1,1); renderAgenda(); };
-    document.getElementById('calNext').onclick=()=>{ agendaMonth=new Date(year,month+1,1); renderAgenda(); };
-    document.getElementById('calToday').onclick=()=>{ const n=new Date(); agendaMonth=new Date(n.getFullYear(),n.getMonth(),1); renderAgenda(); };
+    return events.filter(item=>item.date.startsWith(month+'-'))
+      .sort((a,b)=>a.date.localeCompare(b.date)||a.clientName.localeCompare(b.clientName,'it'));
+  }
+  function renderHomeCalendar(selectedDate){
+    const host=document.getElementById('homeCalendar');
+    if(!host)return;
+    if(selectedDate){
+      const [year,month]=selectedDate.split('-').map(Number);
+      calendarMonth=new Date(year,month-1,1);
+      calendarDay=selectedDate;
+    }
+    const year=calendarMonth.getFullYear(), month=calendarMonth.getMonth();
+    const events=calendarEvents(), byDate=new Map();
+    for(const event of events){
+      if(!byDate.has(event.date))byDate.set(event.date,[]);
+      byDate.get(event.date).push(event);
+    }
+    const today=calendarKey(new Date());
+    const weekdays=['Lun','Mar','Mer','Gio','Ven','Sab','Dom'].map(day=>'<span class="cal-dow">'+day+'</span>').join('');
+    const offset=(calendarMonth.getDay()+6)%7;
+    const days=new Date(year,month+1,0).getDate();
+    let cells='<span aria-hidden="true"></span>'.repeat(offset);
+    for(let day=1;day<=days;day++){
+      const date=new Date(year,month,day), key=calendarKey(date), items=byDate.get(key)||[];
+      const label=calendarDateLabel.format(date)+(items.length?' · '+items.length+(items.length===1?' evento':' eventi'):'');
+      const dots=[...new Set(items.map(item=>item.kind))].map(kind=>'<i class="cal-dot '+kind+'"></i>').join('');
+      cells+='<button type="button" class="cal-cell" data-cal-date="'+key+'" aria-label="'+escapeHTML(label)+'" aria-pressed="'+(key===calendarDay)+'"'+(key===today?' aria-current="date"':'')+'>'+day+'<span class="cal-dots" aria-hidden="true">'+dots+'</span></button>';
+    }
+    const visible=calendarDay?(byDate.get(calendarDay)||[]):events;
+    const details=visible.map((event,index)=>{
+      const date=calendarDateLabel.format(new Date(event.date+'T12:00:00'));
+      const actions=event.kind==='reminder'?'<span class="cal-event-actions"><button type="button" class="btn btn-ghost" data-cal-edit="'+index+'">Modifica</button><button type="button" class="btn btn-ghost" data-cal-delete="'+index+'">Elimina</button></span>':'';
+      return '<article class="cal-event"><div><small><i class="cal-dot '+event.kind+'"></i> '+calendarKinds[event.kind]+(calendarDay?'':' · '+escapeHTML(date))+'</small><div><strong>'+escapeHTML(event.clientName)+'</strong> · '+escapeHTML(event.title)+'</div>'+(event.detail?'<p>'+escapeHTML(event.detail)+'</p>':'')+'</div>'+actions+'</article>';
+    }).join('');
+    const detailTitle=calendarDay?calendarDateLabel.format(new Date(calendarDay+'T12:00:00')):'Eventi del mese';
+    host.innerHTML='<div class="cal-heading"><h2 id="calendarHeading">Calendario</h2><button type="button" class="btn btn-ghost" id="calAdd" '+(clienti.length?'':'disabled')+'>Aggiungi promemoria</button></div>'+
+      '<div class="cal-bar"><button type="button" class="cal-nav" id="calPrev" aria-label="Mese precedente">'+I.chevL+'</button><span class="cal-title" aria-live="polite">'+calendarMonthLabel.format(calendarMonth)+'</span><button type="button" class="cal-nav" id="calNext" aria-label="Mese successivo">'+I.chevR+'</button><button type="button" class="btn btn-ghost" id="calToday">Oggi</button></div>'+
+      '<div class="cal-grid">'+weekdays+cells+'</div><div class="cal-legend">'+Object.entries(calendarKinds).map(([key,label])=>'<span><i class="cal-dot '+key+'"></i>'+label+'</span>').join('')+'</div>'+
+      '<div class="cal-detail"><div class="cal-detail-head"><h3>'+escapeHTML(detailTitle)+'</h3>'+(calendarDay?'<button type="button" class="btn btn-ghost" id="calAll">Tutto il mese</button>':'')+'</div><div class="cal-events">'+(details||'<p class="cal-empty">Nessun evento '+(calendarDay?'per questa data.':'questo mese.')+'</p>')+'</div></div>';
+    const changeMonth=(amount,id)=>{
+      calendarMonth=new Date(year,month+amount,1);
+      calendarDay=null;
+      renderHomeCalendar();
+      document.getElementById(id).focus();
+    };
+    document.getElementById('calPrev').onclick=()=>changeMonth(-1,'calPrev');
+    document.getElementById('calNext').onclick=()=>changeMonth(1,'calNext');
+    document.getElementById('calToday').onclick=()=>{
+      const now=new Date();
+      calendarMonth=new Date(now.getFullYear(),now.getMonth(),1);
+      calendarDay=today;
+      renderHomeCalendar();
+      document.getElementById('calToday').focus();
+    };
+    const firstDay=calendarKey(calendarMonth);
+    const defaultDate=today.startsWith(firstDay.slice(0,7))?today:firstDay;
+    document.getElementById('calAdd').onclick=()=>window.CoachDB.editCalendarReminder(null,calendarDay||defaultDate);
+    const all=document.getElementById('calAll');
+    if(all)all.onclick=()=>{calendarDay=null;renderHomeCalendar();document.getElementById('calToday').focus();};
+    host.querySelectorAll('[data-cal-date]').forEach(button=>button.onclick=()=>{
+      calendarDay=button.dataset.calDate;
+      renderHomeCalendar();
+      host.querySelector('[aria-pressed="true"]').focus();
+    });
+    host.querySelectorAll('[data-cal-edit]').forEach(button=>button.onclick=()=>window.CoachDB.editCalendarReminder(visible[Number(button.dataset.calEdit)]));
+    host.querySelectorAll('[data-cal-delete]').forEach(button=>button.onclick=()=>window.CoachDB.deleteCalendarReminder(visible[Number(button.dataset.calDelete)]));
   }
 
   // ---- MODALE generico ----
@@ -2038,89 +2017,6 @@
     return ov;
   }
 
-  // ---- REVISIONE CARICHI ----
-  function renderRevisione(){
-    main.innerHTML=pageHead('Revisione carichi','<button class="btn btn-primary" id="revAll">'+I.check+' Approva tutte</button>')+
-      `<div class="rev-sub">L'app propone, tu decidi: aggiustamenti calcolati dai RIR che i clienti segnano serie per serie.</div>`+
-      `<div class="rev-count" id="revCount"></div><div class="rev-list" id="revList"></div>`+
-      `<div class="rev-foot">Le proposte si basano sulle serie effettivamente registrate dai clienti.</div>`;
-    document.getElementById('back').onclick=()=>go('home');
-    document.getElementById('revAll').onclick=()=>{
-      const pend=revisioneCarichi.filter(i=>!i.stato);
-      if(!pend.length){ toast('Niente da approvare'); return; }
-      pend.forEach(it=>{ const p=calcolaProposta(it); it.stato='approvato'; it.nuovo=p.nuovo; window.CoachDB.storeSignal(it,'review'); });
-      toast(pend.length+' proposte approvate'); fillRev();
-    };
-    fillRev();
-  }
-  function propHTML(it,p){
-    const fin=(it.stato==='modificato')?it.nuovo:p.nuovo;
-    if(p.tipo==='osserva'||p.tipo==='mantieni') return `Mantieni <b>${it.carico>0?fmtKg(it.carico)+' kg':'C.L.'}</b>`;
-    if(it.carico===0) return `C.L. → <b>zavorra ${fmtKg(fin)} kg</b>`;
-    const diff=fin-it.carico, sign=diff>0?'+':'−';
-    return `${fmtKg(it.carico)} → <b>${fmtKg(fin)} kg</b> <span class="d ${diff>0?'up':'down'}">(${sign}${fmtKg(Math.abs(diff))})</span>`;
-  }
-  function fillRev(){
-    const list=document.getElementById('revList'); if(!list) return;
-    const ord={riduci:0,aumenta:1,osserva:2,mantieni:3};
-    const items=[...revisioneCarichi].sort((a,b)=>{
-      const da=!!a.stato, db=!!b.stato; if(da!==db) return da-db;
-      const pa=calcolaProposta(a), pb=calcolaProposta(b);
-      return (ord[pa.tipo]-ord[pb.tipo]) || (Math.abs(pb.d)-Math.abs(pa.d));
-    });
-    list.innerHTML=items.map(it=>{
-      const p=calcolaProposta(it);
-      const ini=it.cliente.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-      const setsChips=it.sets.map(x=>`<span class="rev-set"><b>${x.kg>0?fmtKg(x.kg):'C.L.'}</b> × ${x.reps} · R${x.rir}</span>`).join('');
-      let right;
-      if(it.stato){
-        const lbl = it.stato==='saltato' ? 'Saltato · nessuna modifica'
-          : (it.stato==='modificato'?'Modificato':'Approvato')+' · '+(it.nuovo>0?fmtKg(it.nuovo)+' kg':'C.L.')+(it.carico===0&&it.nuovo>0?' zavorra':'');
-        right=`<span class="rev-tag ${p.tipo}">${p.tag} · RIR Ø ${fmt1(p.avg)}</span>
-          <div class="rev-done ${it.stato==='saltato'?'skip':''}">${it.stato==='saltato'?'':I.check} ${lbl}</div>
-          <button class="rev-undo" data-rev-undo="${it.id}">Annulla</button>`;
-      } else {
-        right=`<span class="rev-tag ${p.tipo}">${p.tag} · RIR Ø ${fmt1(p.avg)}</span>
-          <div class="rev-prop">${propHTML(it,p)}</div>
-          <div class="rev-why">${p.perche}</div>
-          <div class="rev-acts">
-            <button class="btn btn-primary" data-rev-ok="${it.id}">${I.check} ${p.tipo==='osserva'?'Confermo':'Approva'}</button>
-            ${p.tipo!=='osserva'?`<button class="btn btn-ghost" data-rev-mod="${it.id}">Modifica</button>`:''}
-            <button class="btn btn-ghost" data-rev-skip="${it.id}">Salta</button>
-          </div>`;
-      }
-      return `<div class="rev-card ${it.stato?'done':''}">
-        <div class="rev-l"><span class="rev-av">${escapeHTML(ini)}</span><div class="rev-info">
-          <div class="rev-cli">${escapeHTML(it.cliente)}</div>
-          <div class="rev-ex">${escapeHTML(it.esercizio)} · ${escapeHTML(it.gruppo)}</div>
-          <div class="rev-ses">Sessione di ${it.sessione} · target RIR ${it.targetRir} · ${it.reps} reps</div>
-          <div class="rev-sets">${setsChips}</div>
-        </div></div>
-        <div class="rev-r">${right}</div>
-      </div>`;
-    }).join('');
-    const n=revisioneCarichi.filter(i=>!i.stato).length;
-    const rc=document.getElementById('revCount'); if(rc) rc.textContent = n ? (n+' proposte da rivedere') : 'Tutte le proposte sono state riviste ✓';
-    list.querySelectorAll('[data-rev-ok]').forEach(b=> b.onclick=()=>{ const it=revisioneCarichi.find(i=>i.id==+b.dataset.revOk); const p=calcolaProposta(it); it.stato='approvato'; it.nuovo=p.nuovo; window.CoachDB.storeSignal(it,'review'); toast(p.tipo==='osserva'?'Confermato: mantieni il carico':'Approvato: '+(it.nuovo>0?fmtKg(it.nuovo)+' kg':'C.L.')+' per '+it.cliente.split(' ')[0]); fillRev(); });
-    list.querySelectorAll('[data-rev-skip]').forEach(b=> b.onclick=()=>{ const it=revisioneCarichi.find(i=>i.id==+b.dataset.revSkip); it.stato='saltato'; it.nuovo=it.carico; window.CoachDB.storeSignal(it,'review'); toast('Saltato: nessuna modifica'); fillRev(); });
-    list.querySelectorAll('[data-rev-undo]').forEach(b=> b.onclick=()=>{ const it=revisioneCarichi.find(i=>i.id==+b.dataset.revUndo); delete it.stato; delete it.nuovo; window.CoachDB.storeSignal(it,'review'); fillRev(); });
-    list.querySelectorAll('[data-rev-mod]').forEach(b=> b.onclick=()=>openModificaRev(revisioneCarichi.find(i=>i.id==+b.dataset.revMod)));
-  }
-  function openModificaRev(it){
-    const p=calcolaProposta(it); let val=(it.stato==='modificato')?it.nuovo:p.nuovo;
-    openModal('<div class="modal-h"><h3>Modifica proposta</h3><button class="modal-x" id="mX">'+I.x+'</button></div>'+
-      `<div class="modal-b"><div class="rev-mcli">${escapeHTML(it.cliente)} · ${escapeHTML(it.esercizio)}</div>
-        <div class="rev-step"><button class="rs-btn" id="rsMinus">−</button><div class="rs-val"><b id="rsVal"></b> kg</div><button class="rs-btn" id="rsPlus">+</button></div>
-        <div class="rev-mnote">Attuale: ${it.carico>0?fmtKg(it.carico)+' kg':'corpo libero'} · proposta app: ${it.carico===0?'zavorra ':''}${fmtKg(p.nuovo)} kg · passi da ${fmtKg(it.step)} kg</div></div>`+
-      '<div class="modal-f"><button class="btn btn-ghost" id="rsAnn">Annulla</button><button class="btn btn-primary" id="rsOk">'+I.check+' Conferma carico</button></div>');
-    const set=v=>{ val=Math.max(0,Math.round(v*100)/100); document.getElementById('rsVal').textContent=fmtKg(val); };
-    set(val);
-    document.getElementById('rsMinus').onclick=()=>set(val-it.step);
-    document.getElementById('rsPlus').onclick=()=>set(val+it.step);
-    document.getElementById('mX').onclick=closeModal;
-    document.getElementById('rsAnn').onclick=closeModal;
-    document.getElementById('rsOk').onclick=()=>{ it.stato='modificato'; it.nuovo=val; window.CoachDB.storeSignal(it,'review'); closeModal(); toast('Carico aggiornato: '+(val>0?fmtKg(val)+' kg':'C.L.')); fillRev(); };
-  }
 
   // ---- PRIORITÀ OGGI ----
   const PO_GRUPPI=[
@@ -2134,7 +2030,7 @@
     main.innerHTML=pageHead('Priorità oggi')+
       `<div class="po-sub">L'app scansiona i tuoi clienti e ti porta in cima chi ha bisogno di attenzione oggi. Per ognuno: cosa è successo, cosa propongo di fare e un messaggio già scritto nella tua voce — pronto da inviare. Tu decidi sempre.</div>`+
       `<div class="po-count" id="poCount"></div><div class="po-groups" id="poGroups"></div>`+
-      `<div class="po-foot">Gli altri clienti sono in linea con la programmazione: nessun segnale aperto. Le priorità sono calcolate sulle schede e sugli allenamenti registrati.</div>`;
+      `<div class="po-foot">Le priorità si aggiornano in base alle schede e alle segnalazioni dei clienti.</div>`;
     document.getElementById('back').onclick=()=>go('home');
     fillPriorita();
   }
@@ -2183,8 +2079,8 @@
         `<div class="po-list">${items.map(poCard).join('')}</div></div>`;
     }).join('');
     wrap.querySelectorAll('[data-po-send]').forEach(b=> b.onclick=()=>{ const it=prioritaOggi.find(i=>i.id==+b.dataset.poSend); window.CoachDB.sendPriority(it,b); });
-    wrap.querySelectorAll('[data-po-snooze]').forEach(b=> b.onclick=()=>{ const it=prioritaOggi.find(i=>i.id==+b.dataset.poSnooze); it.stato='rimandato'; window.CoachDB.storeSignal(it,'priority'); toast('Rimandato a domani'); fillPriorita(); });
-    wrap.querySelectorAll('[data-po-undo]').forEach(b=> b.onclick=()=>{ const it=prioritaOggi.find(i=>i.id==+b.dataset.poUndo); delete it.stato; window.CoachDB.storeSignal(it,'priority'); fillPriorita(); });
+    wrap.querySelectorAll('[data-po-snooze]').forEach(b=> b.onclick=()=>{ const it=prioritaOggi.find(i=>i.id==+b.dataset.poSnooze); it.stato='rimandato'; window.CoachDB.storeSignal(it); toast('Rimandato a domani'); fillPriorita(); });
+    wrap.querySelectorAll('[data-po-undo]').forEach(b=> b.onclick=()=>{ const it=prioritaOggi.find(i=>i.id==+b.dataset.poUndo); delete it.stato; window.CoachDB.storeSignal(it); fillPriorita(); });
     wrap.querySelectorAll('[data-po-edit]').forEach(b=> b.onclick=()=>openModificaMsg(prioritaOggi.find(i=>i.id==+b.dataset.poEdit)));
   }
   function openModificaMsg(it){
@@ -2195,7 +2091,7 @@
       '<div class="modal-f"><button class="btn btn-ghost" id="poAnn">Annulla</button><button class="btn btn-primary" id="poOk">'+I.check+' Salva messaggio</button></div>');
     document.getElementById('mX').onclick=closeModal;
     document.getElementById('poAnn').onclick=closeModal;
-    document.getElementById('poOk').onclick=()=>{ const v=document.getElementById('poTa').value.trim(); if(v){it.messaggio=v;window.CoachDB.storeSignal(it,'priority');} closeModal(); toast('Messaggio aggiornato per '+escapeHTML(nome)); fillPriorita(); };
+    document.getElementById('poOk').onclick=()=>{ const v=document.getElementById('poTa').value.trim(); if(v){it.messaggio=v;window.CoachDB.storeSignal(it);} closeModal(); toast('Messaggio aggiornato per '+escapeHTML(nome)); fillPriorita(); };
   }
 
   // ---- CREAZIONE / BUILDER PROGRAMMA ----
@@ -2623,9 +2519,9 @@
   let _saveT;
   function saveStateNow(){ return window.CoachDB?.saveWorkspace(); }
   function scheduleSave(){ clearTimeout(_saveT); _saveT=setTimeout(saveStateNow,650); }
-  window.CoachMock = { I, main, COACH, clienti, programmi, libreria, pianiAlimentari, notifiche, metriche, scadenze, prioritaOggi, revisioneCarichi, go, render, toast, openModal, closeModal, pageHead, cliStrip, initials, fmt, renderCliMetriche, buildChart, renderProgramma, renderPiano, renderEsercizio, fillPriorita, fillRev, calcolaProposta, scheduleSave, openEsercizio, get view(){return view}, get currentClient(){return currentClient}, get currentProg(){return currentProg}, get currentPiano(){return currentPiano}, setClient(c,s=null){currentClient=c;clientSection=s;go('cliente')}, backClient(){clientSection=null;render()}, openProgramma, openPiano, setPliche(v,sex,age){plicheVals=v;plicheSex=sex;plicheAge=age}, getPliche(){return {v:plicheVals,sex:plicheSex,age:plicheAge}} };
+  window.CoachMock = { I, main, COACH, clienti, programmi, libreria, pianiAlimentari, notifiche, metriche, scadenze, prioritaOggi, go, render, toast, openModal, closeModal, pageHead, cliStrip, initials, fmt, renderCliMetriche, buildChart, renderProgramma, renderPiano, renderEsercizio, fillPriorita, renderHomeCalendar, scheduleSave, openEsercizio, get view(){return view}, get currentClient(){return currentClient}, get currentProg(){return currentProg}, get currentPiano(){return currentPiano}, setClient(c,s=null){currentClient=c;clientSection=s;go('cliente')}, backClient(){clientSection=null;render()}, openProgramma, openPiano, setPliche(v,sex,age){plicheVals=v;plicheSex=sex;plicheAge=age}, getPliche(){return {v:plicheVals,sex:plicheSex,age:plicheAge}} };
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/coach-mockup.mjs?v=20261113-client-dialog"></script>
+<script type="module" src="src/coach-mockup.mjs?v=20261113-home-calendar"></script>
 </body>
 </html>
