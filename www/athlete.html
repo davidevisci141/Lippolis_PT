@@ -43,7 +43,6 @@
     --shadow-card:0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.30);
   }
   html[data-tema="scuro"] .ab .bx{border-color:var(--line);}
-  html[data-tema="scuro"] .bk-card.warn{color:var(--text);}
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
   html,body{height:100%;}
   body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); background:var(--device); overflow:hidden; overscroll-behavior:none; -webkit-tap-highlight-color:transparent;}
@@ -59,9 +58,8 @@
     .topbar .identity{color:#adbbb7;}
     .topbar .identity b{color:#fff;}
     .topbar .account-tools{margin-left:auto;}
-    .topbar .account-exit,.topbar .account-password{border-color:#40504c;background:transparent;color:#fff;}
+    .topbar .account-exit{border-color:#40504c;background:transparent;color:#fff;}
     .view{width:100%;padding:18px clamp(24px,4vw,72px) 28px;}
-    #profileAccount{display:none;}
   }
 
   .topbar{display:flex; align-items:center; gap:10px; padding:8px 20px 12px;}
@@ -74,9 +72,8 @@
   .topbar .identity b,.topbar .identity span{display:block;}
   .topbar .identity b{color:var(--text);font-size:12px;}
   .topbar .account-tools{display:flex;align-items:center;gap:10px;margin-left:auto;}
-  .topbar .account-exit,.topbar .account-password{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;white-space:nowrap;}
+  .topbar .account-exit{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--text);padding:8px 11px;font:700 12px 'Manrope',system-ui,sans-serif;cursor:pointer;white-space:nowrap;}
   .topbar .account-exit svg{width:16px;height:16px;}
-  .topbar .account-password{display:none;}
   .pf-save-status{min-height:18px;margin:6px 2px 12px;color:var(--muted);font-size:11px;font-weight:700;}
   .pf-save-status.error{color:var(--danger-ink);}
   .password-modal{position:absolute;inset:0;z-index:100;display:none;align-items:center;justify-content:center;padding:20px;background:rgba(8,17,15,.58);}
@@ -88,8 +85,7 @@
   .password-feedback{display:none;margin:10px 0;padding:10px 12px;border-radius:11px;font-size:12px;font-weight:700;background:var(--accent-soft);color:var(--accent-ink);}
   .password-feedback.show{display:block;}
   .password-feedback.error{background:rgba(216,80,70,.1);color:var(--danger-ink);}
-  @media (min-width:900px){.topbar .account-password{display:flex;}}
-  @media (max-width:899px){.topbar .identity,.topbar .account-password{display:none}.topbar .avatar{margin-left:0}}
+  @media (max-width:899px){.topbar .identity{display:none}.topbar .avatar{margin-left:0}}
   @media (max-width:380px){.topbar .account-exit{padding:8px}.topbar .account-exit span{display:none}}
 
   .view{flex:1; overflow-y:auto; padding:6px 16px 24px; scrollbar-width:thin; scrollbar-color:#9aa0a8 transparent;}
@@ -644,15 +640,30 @@
   .sg-acts .inv{background:var(--accent); color:var(--on-accent);}
   .sg-acts .inv:disabled{opacity:.45; cursor:default;}
   .bk-card{background:var(--surface); border:1px solid var(--line-soft); border-radius:16px; padding:14px; margin-bottom:6px; box-shadow:var(--shadow-card);}
-  .bk-card.warn{border-color:rgba(185,118,26,.5); background:linear-gradient(0deg,var(--warn-soft),var(--warn-soft)),var(--surface);}
   .bk-l{font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.5px; color:var(--muted2);}
   .bk-v{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:17px; color:var(--text); margin-top:3px;}
-  .bk-card.warn .bk-v{color:var(--warn);}
   .bk-n{font-size:12px; color:var(--muted); margin-top:3px;}
-  .bk-acts{display:flex; gap:8px; margin-top:12px;}
   .bk-b{flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:11px 6px; border-radius:11px; border:1px solid var(--line); background:var(--surface2); color:var(--text); font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:12px; cursor:pointer;}
   .bk-b svg{width:15px;height:15px;}
-  .bia-summary{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}.bia-value{background:var(--surface2);border-radius:11px;padding:10px}.bia-value b{display:block;font:800 16px 'Archivo',system-ui,sans-serif}.bia-value span{font-size:10px;color:var(--muted)}.bia-history{display:grid;gap:7px;margin-top:12px}.bia-history-item{border-top:1px solid var(--line-soft);padding-top:8px;font-size:11px;color:var(--muted)}.bia-history-item b{color:var(--text);font-size:12px}
+  .bia-profile{padding:clamp(14px,2vw,24px);}
+  .bia-profile-head,.profile-account{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
+  .bia-profile-head time,.bia-empty{display:block;margin-top:3px;color:var(--muted);font-size:13px;}
+  .bia-profile-head h3,.bia-history h3{font:800 16px 'Archivo',system-ui,sans-serif;}
+  .bia-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(138px,100%),1fr));gap:10px;margin:16px 0;}
+  .bia-value{min-width:0;background:var(--surface2);border:1px solid var(--line-soft);border-radius:12px;padding:12px;}
+  .bia-value dt{color:var(--muted);font-size:12px;font-weight:700;}
+  .bia-value dd{font:800 clamp(19px,2.6vw,27px) 'Archivo',system-ui,sans-serif;margin:5px 0 0;}
+  .bia-value dd small{font:700 12px 'Manrope',system-ui,sans-serif;color:var(--muted);}
+  .bia-value .bia-change{margin-top:5px;color:var(--accent-ink);font:700 12px 'Manrope',system-ui,sans-serif;}
+  .bia-details,.bia-history{border-top:1px solid var(--line-soft);margin-top:14px;padding-top:12px;}
+  .bia-profile summary{padding:7px 0;cursor:pointer;font-size:13px;font-weight:800;}
+  .bia-details-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(145px,100%),1fr));gap:8px 16px;margin:6px 0 10px;}
+  .bia-details-list dt{color:var(--muted);font-size:12px;}
+  .bia-details-list dd{margin:2px 0;font-size:14px;font-weight:800;}
+  .bia-history-item{border-bottom:1px solid var(--line-soft);padding:6px 0;}
+  .bia-history-item:last-child{border-bottom:0;}
+  .bia-profile .bk-b,.profile-account .bk-b{flex:0 0 auto;padding-inline:14px;min-height:40px;}
+  .profile-account .bk-v{overflow-wrap:anywhere;}
   .ck-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:11px;}
   .ck-fr{width:32px;height:32px;border-radius:9px;border:1px solid var(--line-soft);background:var(--surface2);color:var(--muted);display:grid;place-items:center;cursor:pointer;}
   .ck-fr svg{width:15px;height:15px;} .ck-fr:disabled{opacity:.3;}
@@ -753,7 +764,6 @@
       <div class="name">LIPPOLIS<b>PT</b></div>
       <div class="account-tools">
         <div class="identity" id="athleteIdentity"></div>
-        <button class="account-password" id="athletePasswordTop" type="button" onclick="window.lippolisOpenPassword()">Cambia password</button>
         <div class="avatar" onclick="showTab('profilo')">LP</div>
         <button class="account-exit" id="athleteLogout" type="button" aria-label="Esci dall'account" onclick="window.lippolisLogoutNow()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Esci</span></button>
       </div>
@@ -812,8 +822,7 @@
   window.lippolisClosePassword = function(){ const modal=document.getElementById('athletePasswordModal'); if(modal){modal.classList.remove('show');modal.setAttribute('aria-hidden','true');} };
   // ====== DATI WORKOUT ======
   // ====== PROGRAMMA ======
-  // L'app nasce senza scheda: arriva dal file che il coach consegna al cliente
-  // (Profilo → Importa backup). La settimana corrente si sceglie dal calendario.
+  // La scheda pubblicata dal PT viene sincronizzata all'accesso.
   const PROGRAMMA_DEFAULT = {"nome":"","dal":"","al":"","settimane":[]};
   // La scheda vive nei dati salvati: un solo APK per tutti, un file per cliente.
   let PROGRAMMA = PROGRAMMA_DEFAULT;
@@ -990,7 +999,6 @@
     const vinceScuro = contrasto(Lacc, lumRel(sr,sg,sb)) >= contrasto(Lacc, 1);
     st.setProperty('--on-accent', accento==='lippolis' ? '#04231B' : (vinceScuro ? scuro : '#FFFFFF'));
   }
-  let ultimoBackup = null;
   let plicheSex='M', plicheAge=30;
   let plicheVals={petto:0, ascellare:0, tricipite:0, sottoscapolare:0, addome:0, soprailiaca:0, coscia:0};
 
@@ -1611,17 +1619,16 @@
     renderWorkout();
   }
   function physicalMetricsHTML(){
-    const bia=biaRecords.filter(x=>x&&x.measuredAt).slice().sort((a,b)=>new Date(a.measuredAt)-new Date(b.measuredAt)).at(-1)||null;
+    const bia=orderedBiaRecords()[0];
     const lastScale=pesi.filter(x=>x&&Number.isFinite(Number(x.v))&&Number.isFinite(Number(x.ts))).slice().sort((a,b)=>a.ts-b.ts).at(-1)||null;
     const biaTs=bia?new Date(bia.measuredAt).getTime():NaN;
     const useScale=!!lastScale&&(!Number.isFinite(biaTs)||lastScale.ts>biaTs);
     const weight=useScale?lastScale.v:bia?.weightKg;
-    const fatFree=bia?.fatFreeMassKg!=null?bia.fatFreeMassKg:(bia?.weightKg!=null&&bia?.bodyFatMassKg!=null?Number(bia.weightKg)-Number(bia.bodyFatMassKg):null);
     const item=(label,value)=>{
       const formatted=formatBia(value);
       return `<div class="physical-metric"><dt class="pm-label">${label}</dt><dd class="pm-value">${formatted}${formatted==='—'?'':' <small>kg</small>'}</dd></div>`;
     };
-    return `<section class="physical-panel physical-summary" aria-labelledby="physicalTitle"><h2 class="physical-title" id="physicalTitle">Dati fisici</h2><dl class="physical-grid">${item('Peso',weight)}${item('Massa muscolare',bia?.skeletalMuscleKg)}${item('Massa magra',fatFree)}${item('Obiettivo peso',bia?.targetWeightKg)}</dl></section>`;
+    return `<section class="physical-panel physical-summary" aria-labelledby="physicalTitle"><h2 class="physical-title" id="physicalTitle">Dati fisici</h2><dl class="physical-grid">${item('Peso',weight)}${item('Massa muscolare',bia?.skeletalMuscleKg)}${item('Massa magra',biaLeanMass(bia))}${item('Obiettivo peso',bia?.targetWeightKg)}</dl></section>`;
   }
   function dayStarted(i){
     const draft=stato[i]||{};
@@ -2596,8 +2603,83 @@
   function iniziali(){ const n=(profilo.nome||'').trim(), c=(profilo.cognome||'').trim(); return ((n[0]||'')+(c[0]||'')).toUpperCase() || 'LP'; }
   function aggiornaAvatar(){ const a=document.querySelector('.topbar .avatar'); if(a) a.textContent=iniziali(); }
   function esc(v){ return String(v??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-  function formatBia(value,digits=1){ return value==null||value===''||!Number.isFinite(Number(value))?'—':Number(value).toLocaleString('it-IT',{minimumFractionDigits:digits,maximumFractionDigits:digits}); }
-  function formatBiaDate(value){ const d=new Date(value); return Number.isNaN(d.getTime())?'Data non disponibile':new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:'short'}).format(d); }
+  const biaDateFormat=new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:'short'});
+  const biaChangeFormat=new Intl.NumberFormat('it-IT',{signDisplay:'exceptZero',minimumFractionDigits:1,maximumFractionDigits:1});
+  function biaNumber(value){
+    if(typeof value!=='number'&&(typeof value!=='string'||!value.trim()))return null;
+    const number=Number(value);
+    return Number.isFinite(number)?number:null;
+  }
+  function formatBia(value,digits=1){
+    return biaNumber(value)?.toLocaleString('it-IT',{minimumFractionDigits:digits,maximumFractionDigits:digits})??'—';
+  }
+  function orderedBiaRecords(){
+    return biaRecords.filter(record=>record?.measuredAt&&Number.isFinite(Date.parse(record.measuredAt)))
+      .sort((a,b)=>Date.parse(b.measuredAt)-Date.parse(a.measuredAt));
+  }
+  function biaLeanMass(record){
+    const saved=biaNumber(record?.fatFreeMassKg);
+    if(saved!==null)return saved;
+    const weight=biaNumber(record?.weightKg), fat=biaNumber(record?.bodyFatMassKg);
+    return weight>0&&fat!==null&&fat>=0&&fat<weight ? weight-fat : null;
+  }
+
+  const biaMainMetrics=[
+    ['Peso',record=>record.weightKg],
+    ['Massa muscolare',record=>record.skeletalMuscleKg],
+    ['Massa magra',biaLeanMass],
+    ['Obiettivo peso',record=>record.targetWeightKg]
+  ];
+  const biaDetailFields=[
+    ['bodyFatMassKg','Massa grassa','kg',1],['bodyFatPercent','Grasso corporeo','%',1],
+    ['bmi','Indice di massa corporea','',1],['totalBodyWaterL','Acqua corporea','L',1],
+    ['basalMetabolicRateKcal','Metabolismo basale','kcal',0]
+  ];
+  function biaDetailsHTML(record,includeMain=false){
+    const values=biaDetailFields.map(([key,label,unit,digits])=>[label,record[key],unit,digits]);
+    if(includeMain)values.unshift(...biaMainMetrics.map(([label,read])=>[label,read(record),'kg',1]));
+    const rows=values.filter(([,value])=>biaNumber(value)!==null).map(([label,value,unit,digits])=>
+      `<div><dt>${label}</dt><dd>${formatBia(value,digits)}${unit?' '+unit:''}</dd></div>`).join('');
+    return rows?`<dl class="bia-details-list">${rows}</dl>`:'';
+  }
+  function biaReportButton(record,index){
+    return record.reportPath?`<button type="button" class="bk-b" data-bia-report="${index}">Apri referto originale</button>`:'';
+  }
+  function biaProfileHTML(records){
+    const [latest,previous]=records;
+    if(!latest)return '<p class="bia-empty">Le misure compariranno qui quando il PT caricherà il primo referto BIA.</p>';
+    const time=record=>`<time datetime="${new Date(record.measuredAt).toISOString()}">${biaDateFormat.format(new Date(record.measuredAt))}</time>`;
+    const cards=biaMainMetrics.map(([label,read],index)=>{
+      const value=biaNumber(read(latest));
+      if(value===null)return '';
+      const before=previous&&index<3?biaNumber(read(previous)):null;
+      const change=before===null?'':`<dd class="bia-change">${biaChangeFormat.format(value-before)} kg dal referto precedente</dd>`;
+      return `<div class="bia-value"><dt>${label}</dt><dd>${formatBia(value)} <small>kg</small></dd>${change}</div>`;
+    }).join('');
+    const details=biaDetailsHTML(latest);
+    const history=records.slice(1).map((record,index)=>{
+      return `<details class="bia-history-item"><summary>${time(record)}</summary>
+        ${biaDetailsHTML(record,true)||'<p class="bia-empty">Nessun valore disponibile.</p>'}
+        ${biaReportButton(record,index+1)}</details>`;
+    }).join('');
+    return `<div class="bia-profile-head"><div><h3>Ultima rilevazione BIA</h3>${time(latest)}</div>${biaReportButton(latest,0)}</div>
+      ${cards?`<dl class="bia-summary">${cards}</dl>`:'<p class="bia-empty">Nessun valore principale disponibile per questo referto.</p>'}
+      ${details?`<details class="bia-details"><summary>Altri valori del referto</summary>${details}</details>`:''}
+      ${history?`<div class="bia-history"><h3>Storico rilevazioni</h3>${history}</div>`:''}`;
+  }
+
+  function bindBiaReportButtons(records){
+    view.querySelectorAll('[data-bia-report]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;
+      try{
+        const {getCoachFile}=await import('./src/athlete-coach-sections.mjs');
+        const url=await getCoachFile('bia-reports',records[Number(button.dataset.biaReport)].reportPath);
+        if(button.isConnected)location.assign(url);
+      }catch{
+        if(button.isConnected)toastMsg('Referto non disponibile. Riprova.');
+      }finally{button.disabled=false;}
+    });
+  }
 
   function openNotificationSettings(){
     showTab('profilo');
@@ -2606,12 +2688,7 @@
   }
 
   function renderProfilo(){
-    const bk = ultimoBackup ? fmtDataOra(ultimoBackup) : 'mai';
-    const giorniDaBk = ultimoBackup ? Math.floor((Date.now()-ultimoBackup)/86400000) : null;
-    const avviso = (giorniDaBk===null && sessioni.length) || (giorniDaBk!==null && giorniDaBk>=7);
-    const storicoBia=biaRecords.slice().filter(x=>x&&x.measuredAt).sort((a,b)=>new Date(a.measuredAt)-new Date(b.measuredAt));
-    const ultimaBia=storicoBia[storicoBia.length-1];
-    const storicoBiaHtml=storicoBia.slice().reverse().slice(0,5).map(x=>`<div class="bia-history-item"><b>${formatBiaDate(x.measuredAt)}</b><div>${formatBia(x.weightKg)} kg · BMI ${formatBia(x.bmi)} · Grasso ${formatBia(x.bodyFatPercent)}% · Muscolo ${formatBia(x.skeletalMuscleKg)} kg</div></div>`).join('');
+    const reports=orderedBiaRecords();
     view.innerHTML=`
       <div class="pagetitle">Profilo</div>
       <div class="pf-avatar"><div class="av">${iniziali()}<div class="cam">${I.camsmall}</div></div></div>
@@ -2624,27 +2701,8 @@
       <div class="pf-sec">Scheda</div>
       <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Programma in corso</div><div class="bk-v">${senzaScheda()?'Nessuna scheda':esc(PROGRAMMA.nome)}</div><div class="bk-n">${senzaScheda()?'Il PT non ha ancora assegnato una scheda':`${PROGRAMMA.settimane.length} settimane · ${PROGRAMMA.dal} → ${PROGRAMMA.al}`}</div></div>
 
-      <div class="pf-sec">Dati</div>
-      <div class="bk-card${avviso?' warn':''}">
-        <div class="bk-l">Ultimo backup</div>
-        <div class="bk-v">${bk}</div>
-        <div class="bk-n">${sessioni.length} allenamenti · ${Object.keys(giornate).length} giornate · ${pesi.length} pesate</div>
-        <div class="bk-acts">
-          <button class="bk-b" id="bkExp">${I.download} Esporta backup</button>
-          <button class="bk-b" id="bkImp">${I.upload||I.download} Importa backup personale</button>
-        </div>
-        <input type="file" id="bkFile" accept="application/json,.json" hidden>
-      </div>
-
-      <div class="pf-sec">Composizione corporea</div>
-      <div class="bk-card" id="biaProfileCard">
-        <div class="bk-l">${ultimaBia?'Ultima rilevazione BIA':'Referto InBody'}</div>
-        <div class="bk-v">${ultimaBia?formatBiaDate(ultimaBia.measuredAt):'Nessuna BIA caricata'}</div>
-        <div class="bk-n">La composizione corporea e lo storico inseriti dal tuo Personal Trainer.</div>
-        ${ultimaBia?`<div class="bia-summary"><div class="bia-value"><b>${formatBia(ultimaBia.weightKg)} kg</b><span>Peso</span></div><div class="bia-value"><b>${formatBia(ultimaBia.bmi)}</b><span>Indice di massa corporea</span></div><div class="bia-value"><b>${formatBia(ultimaBia.bodyFatPercent)}%</b><span>Grasso corporeo</span></div><div class="bia-value"><b>${formatBia(ultimaBia.skeletalMuscleKg)} kg</b><span>Muscolo scheletrico</span></div><div class="bia-value"><b>${formatBia(ultimaBia.totalBodyWaterL)} L</b><span>Acqua corporea</span></div><div class="bia-value"><b>${formatBia(ultimaBia.basalMetabolicRateKcal,0)} kcal</b><span>Metabolismo basale</span></div></div>`:''}
-        ${!ultimaBia?'<div class="bk-n">Nessuna rilevazione registrata.</div>':''}
-        ${storicoBiaHtml?`<div class="bia-history"><div class="bk-l">Storico recente</div>${storicoBiaHtml}</div>`:''}
-      </div>
+      <h2 class="pf-sec" id="biaProfileHeading">Composizione corporea</h2>
+      <section class="bk-card bia-profile" id="biaProfileCard" aria-labelledby="biaProfileHeading">${biaProfileHTML(reports)}</section>
 
       <div class="pf-sec">Colore</div>
       <div class="col-grid">${ACCENTI.map(a=>`<button class="col${accento===a.id?' on':''}" data-col="${a.id}" title="${a.nome}"><span style="background:${a.hex}"></span></button>`).join('')}</div>
@@ -2655,15 +2713,18 @@
       <div class="vol-row"><input type="range" id="pfVol" min="10" max="100" step="5" value="${volTimer}" aria-label="Volume del timer"><span class="vol-v" id="pfVolV">${volTimer}%</span><button class="vol-prova" id="pfVolProva">Prova</button></div>
       <div class="vol-hint">Nell'app installata il timer suona sul volume <b>Sveglia</b> del telefono: questo cursore ne regola una parte.</div>
 
-      <div class="pf-sec">Account</div>
-      <div class="bk-card" id="profileAccount" style="margin-bottom:14px"><div class="bk-l">Accesso personale</div><div class="bk-v" id="accountEmail">${esc((window.__LIPPOLIS_PROFILE__&&window.__LIPPOLIS_PROFILE__.email)||'')}</div><div class="bk-n">I dati sono separati per account e sincronizzati con Supabase.</div><div class="bk-actions" style="margin-top:10px"><button class="bk-b" id="accountPassword">Cambia password</button></div></div>
-
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>
       <div class="pf-sec" id="athleteAlertHeading">Notifiche</div>
       <div class="bk-card" id="athleteAlertSettings" aria-labelledby="athleteAlertHeading"></div>
-      <div class="pf-link danger" id="pfReset">${I.trash} Cancella tutti i dati</div>`;
+      <div class="pf-link danger" id="pfReset">${I.trash} Cancella tutti i dati</div>
+      <h2 class="pf-sec" id="profileAccountHeading">Account</h2>
+      <section class="bk-card profile-account" aria-labelledby="profileAccountHeading">
+        <div><div class="bk-l">Email di accesso</div><div class="bk-v">${esc(window.__LIPPOLIS_PROFILE__?.email)}</div></div>
+        <button type="button" class="bk-b" id="accountPassword">Cambia password</button>
+      </section>`;
 
+    bindBiaReportButtons(reports);
     window.lippolisAlerts?.mount(document.getElementById('athleteAlertSettings'));
     const sv=document.getElementById('save');
     sv.onclick=async()=>{
@@ -2685,96 +2746,20 @@
     pv.oninput=()=>{ volTimer=+pv.value; pvv.textContent=volTimer+'%'; };
     pv.onchange=()=>{ volTimer=+pv.value; saveStateNow(); riapplicaVolume(); };
     document.getElementById('pfVolProva').onclick=()=>{ ensureAudio(); provaSuono(); };
-    document.getElementById('bkExp').onclick=esportaBackup;
-    const fi=document.getElementById('bkFile');
-    document.getElementById('bkImp').onclick=()=>fi.click();
-    fi.onchange=()=>{ const f=fi.files&&fi.files[0]; if(f) importaBackupFile(f); fi.value=''; };
-    const ap=document.getElementById('accountPassword'), al=document.getElementById('accountLogout');
-    if(ap) ap.onclick=()=>window.lippolisAccount&&window.lippolisAccount.changePassword();
-    if(al) al.onclick=()=>window.lippolisAccount&&window.lippolisAccount.logout();
+    document.getElementById('accountPassword').onclick=window.lippolisOpenPassword;
     document.getElementById('pfReset').onclick=()=>{
       if(!confirm('Cancellare tutti i dati salvati su questo telefono? Allenamenti, check-in, pesate e foto andranno persi.')) return;
-      if(!confirm('Ultima conferma: l\'operazione non si può annullare. Hai esportato un backup?')) return;
+      if(!confirm('Ultima conferma: l\'operazione non si può annullare. Vuoi continuare?')) return;
       bloccaSalvataggi = true;
       try{ localStorage.removeItem(LS_KEY); }catch(e){}
       cancellaCopieNative().then(()=>location.reload());
     };
   }
 
-  // ====== BACKUP ======
-  // Con i dati solo sul telefono, il backup è l'unica copia di sicurezza: un file JSON
-  // che si salva dove si vuole (Download, Drive, e-mail) e si reimporta su qualsiasi dispositivo.
+  // ====== STATO DELL’ATLETA ======
   function snapshot(){
-    return { v:1, app:'lippolis-pt-atleta', esportato:Date.now(), bia:biaRecords, PROGRAMMA, versioneSchedaLocale, statoSett, noteSessione, sessioni, profilo, abitudini, giornate, pesi, thread, diario, differite, tema, accento, ultimoBackup,
+    return { v:1, app:'lippolis-pt-atleta', esportato:Date.now(), bia:biaRecords, PROGRAMMA, versioneSchedaLocale, statoSett, noteSessione, sessioni, profilo, abitudini, giornate, pesi, thread, diario, differite, tema, accento,
       progressi, plicheVals, plicheSex, plicheAge, metriche: metriche.map(m=>({nome:m.nome, dati:m.dati})), seqIdx, giornoCorr, volTimer };
-  }
-  function esportaBackup(){
-    const d=new Date(), ymd=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-    const blob=new Blob([JSON.stringify(snapshot())],{type:'application/json'});
-    const nome='lippolis-pt-backup-'+ymd+'.json';
-    const fatto=()=>{ ultimoBackup=Date.now(); saveStateNow(); if(activeTab==='profilo') renderProfilo(); toastMsg('Backup esportato'); };
-    const P=window.Capacitor && window.Capacitor.Plugins;
-    if(P && P.Filesystem && P.Share){
-      P.Filesystem.writeFile({path:nome, data:JSON.stringify(snapshot()), directory:'CACHE', encoding:'utf8'})
-        .then(r=>P.Share.share({title:'Backup LIPPOLIS PT', dialogTitle:'Salva il backup', files:[r.uri]}))
-        .then(fatto)
-        .catch(e=>{ if(!/cancel/i.test(String(e&&e.message||e))) toastMsg('Esportazione non riuscita'); });
-      return;
-    }
-    // Su Android la condivisione permette di salvarlo direttamente su Drive o inviarlo via e-mail
-    try{
-      const file=new File([blob], nome, {type:'application/json'});
-      if(navigator.canShare && navigator.canShare({files:[file]})){
-        navigator.share({files:[file], title:'Backup LIPPOLIS PT'}).then(fatto).catch(()=>{});
-        return;
-      }
-    }catch(e){}
-    const url=URL.createObjectURL(blob), a=document.createElement('a');
-    a.href=url; a.download=nome; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    fatto();
-  }
-  function validaBackup(d){
-    if(!d || typeof d!=='object') return 'File non leggibile';
-    if(d.app!=='lippolis-pt-atleta') return 'Non è un backup di LIPPOLIS PT';
-    if(d.v!==1) return 'Versione del backup non supportata';
-    if(d.tipo==='scheda') return 'Le schede possono essere pubblicate soltanto dal Personal Trainer';
-    if(!Array.isArray(d.sessioni)) return 'Backup incompleto';
-    return null;
-  }
-  // File "scheda" del coach: sostituisce solo il programma. Allenamenti fatti, check giornalieri,
-  // pesate, misure, messaggi e impostazioni restano. Gli allenamenti fatti con la scheda precedente
-  // vengono marcati con il suo nome, così non risultano svolti nelle giornate della nuova.
-  function importaSchedaDati(d){
-    const P=d.PROGRAMMA, NS=P.settimane.length;
-    if(!confirm('Caricare la nuova scheda «'+P.nome+'» ('+NS+' settimane, dal '+P.dal+')?\n\nAllenamenti fatti, check giornalieri e pesate restano sul telefono. Si sostituisce solo la scheda'+(senzaScheda()?'':' «'+PROGRAMMA.nome+'»')+'.')) return 'annullato';
-    const vecchio = senzaScheda() ? '' : PROGRAMMA.nome;
-    sessioni.forEach(x=>{ if(x.prog==null) x.prog=vecchio; });
-    PROGRAMMA=P; statoSett={}; noteSessione={}; seqIdx=0; giornoCorr=0;
-    bloccaSalvataggi = false; saveStateNow(); bloccaSalvataggi = true;
-    setTimeout(()=>location.reload(), 60);
-    return null;
-  }
-  function importaBackupTesto(txt){
-    let d; try{ d=JSON.parse(txt); }catch(e){ return 'File non leggibile'; }
-    const err=validaBackup(d); if(err) return err;
-    if(d.tipo==='scheda') return 'Le schede possono essere pubblicate soltanto dal Personal Trainer';
-    const tot=d.sessioni.length;
-    if(!confirm('Importare il backup del '+fmtDataOra(d.esportato||Date.now())+' ('+tot+' allenamenti)? I dati attuali su questo telefono verranno sostituiti.')) return 'annullato';
-    d.ultimoBackup = d.esportato || Date.now();
-    d.salvato = Date.now();
-    d.PROGRAMMA = PROGRAMMA;
-    d.versioneSchedaLocale = versioneSchedaLocale;
-    bloccaSalvataggi = true;
-    try{ const t=JSON.stringify(d); localStorage.setItem(LS_KEY, t); scriviCopiaNativa(t); }
-    catch(e){ bloccaSalvataggi=false; return 'Spazio insufficiente per importare'; }
-    setTimeout(()=>location.reload(), 60);
-    return null;
-  }
-  function importaBackupFile(f){
-    const r=new FileReader();
-    r.onload=()=>{ const err=importaBackupTesto(String(r.result)); if(err && err!=='annullato') toastMsg(err); };
-    r.readAsText(f);
   }
 
   // ====== PERSISTENZA LOCALE (offline-first) ======
@@ -2783,13 +2768,13 @@
   let ACCOUNT_UID = (()=>{ try{return sessionStorage.getItem('lippolis_uid')||'anonymous';}catch(e){return 'anonymous';} })();
   let LS_KEY = 'lippolis_pt_atleta_v1_'+ACCOUNT_UID.replace(/[^a-zA-Z0-9_-]/g,'_');
   let _saveT = null;
-  let bloccaSalvataggi = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());   // durante un import in corso nulla deve sovrascrivere il file appena scritto
+  let bloccaSalvataggi = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
   function saveStateNow(){
     if(bloccaSalvataggi) return;
     clearTimeout(_saveT); _saveT=null;
     try{
       const _txt=JSON.stringify({
-        v:1, salvato:Date.now(), PROGRAMMA, versioneSchedaLocale, statoSett, noteSessione, sessioni, profilo, tema, accento, ultimoBackup, abitudini, giornate, pesi, thread, diario, differite, bia:biaRecords, progressi, plicheVals, plicheSex, plicheAge,
+        v:1, salvato:Date.now(), PROGRAMMA, versioneSchedaLocale, statoSett, noteSessione, sessioni, profilo, tema, accento, abitudini, giornate, pesi, thread, diario, differite, bia:biaRecords, progressi, plicheVals, plicheSex, plicheAge,
         metriche: metriche.map(m=>({nome:m.nome, dati:m.dati})), seqIdx, giornoCorr, volTimer
       });
       scriviCopiaNativa(_txt);
@@ -2847,7 +2832,6 @@
       if(d.tema==='scuro'||d.tema==='chiaro') tema=d.tema;
       if(typeof d.volTimer==='number' && d.volTimer>=10 && d.volTimer<=100) volTimer=d.volTimer;
       if(d.accento) accento = ACCENTI.some(a=>a.id===d.accento) ? d.accento : 'lippolis';
-      if(Object.hasOwn(d,'ultimoBackup')) ultimoBackup=d.ultimoBackup;
       if(Array.isArray(d.abitudini) && d.abitudini.length) abitudini=d.abitudini;
       abitudini.forEach(a=>{ if(a.id==='acqua' && /litri/i.test(a.nome)) a.nome='Acqua a target'; });
       if(d.giornate && typeof d.giornate==='object') giornate=d.giornate;
@@ -2980,6 +2964,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261113-notification-banner"></script>
+<script type="module" src="src/athlete.mjs?v=20261113-athlete-profile"></script>
 </body>
 </html>

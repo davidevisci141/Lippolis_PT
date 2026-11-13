@@ -220,8 +220,7 @@ async function bootstrap(session) {
       const identityName = document.querySelector("#athleteIdentity b");
       if (identityName) identityName.textContent = data.display_name || `${data.first_name} ${data.last_name}`.trim();
       return window.__LIPPOLIS_PROFILE__;
-    },
-    changePassword: () => window.lippolisOpenPassword?.()
+    }
   };
 
   const savePasswordButton = document.getElementById("athleteSavePassword");
