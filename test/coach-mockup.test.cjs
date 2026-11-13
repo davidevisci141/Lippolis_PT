@@ -19,6 +19,7 @@ test("la home PT integra il calendario e mantiene la scheda cliente e i due edit
   }
   assert.doesNotMatch(html, /id:'(?:revisione|abbonamenti|agenda|impostazioni)'/);
   assert.match(html, /id="coachSettings"/);
+  assert.match(html, /id="pdDelete".*Elimina giornata/);
   assert.match(html, /id="homeCalendar"/);
   assert.match(html, /id="calAdd"/);
   for (const field of ["copyWk", "addWk", "addDay", "assignMockProgram", "assignPiano", "savePianoDraft", "pdDelete", "impBtn", "impPiano", "addEx"]) {

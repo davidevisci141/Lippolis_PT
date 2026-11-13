@@ -475,10 +475,9 @@
   .pday{background:var(--surface);border:1px solid var(--line-soft);border-radius:16px;box-shadow:var(--shadow-card);padding:18px;margin-top:14px;}
   .pday-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
   .pday-title{font-family:'Archivo',system-ui,sans-serif;font-weight:900;font-size:20px;color:var(--text);}
-  .pday-acts{display:flex;align-items:center;gap:8px;}
-  .pday-acts{flex-wrap:wrap;justify-content:flex-end;}
-  #pdDelete{color:var(--danger);}
-  #pdDelete:hover:not(:disabled){border-color:var(--danger);background:var(--surface2);}
+  .pday-acts{display:flex;align-items:center;flex-wrap:wrap;gap:8px;}
+  #pdDelete{min-height:34px;padding:6px 10px;color:#a32e29;}
+  #pdDelete:hover:not(:disabled){border-color:var(--danger);background:#fbeae9;}
   #pdDelete:disabled{opacity:.45;cursor:default;}
   .pday-targets{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;padding-bottom:16px;border-bottom:1px solid var(--line-soft);}
   .tgt{display:flex;flex-direction:column;gap:6px;min-width:0;}
@@ -1709,6 +1708,7 @@
     if(pianoDay>=p.giorni.length) pianoDay=0;
     const d=p.giorni[pianoDay];
     const tot=dayTotals(d);
+    const deleteDayDisabled=p.giorni.length===1?' disabled title="Il piano deve contenere almeno una giornata"':'';
     const actions='<button class="btn btn-primary" id="assignPiano">'+I.send+' Assegna</button><button class="btn btn-ghost" id="impPiano">'+I.upload+' Importa</button><button class="btn btn-ghost" id="savePianoDraft">Salva bozza</button><button class="btn btn-primary" id="savePiano">'+I.check+' Salva</button>';
     const tabs=p.giorni.map((g,i)=>'<button class="wtab '+(i===pianoDay?'on':'')+'" data-pday="'+i+'">'+escapeHTML(g.nome)+'</button>').join('');
     main.innerHTML=pageHead(escapeHTML(p.nome), actions)+
@@ -1716,7 +1716,7 @@
         '<div class="piano-main">'+
           '<div class="wtabs-row">'+tabs+'<button class="wtab add" id="addPday">'+I.plus+' Giorno</button></div>'+
           '<div class="pday">'+
-            '<div class="pday-head"><div class="pday-title">'+escapeHTML(d.nome)+'</div><div class="pday-acts"><button class="ic-btn" id="pdEdit" title="Rinomina">'+I.edit+'</button><button class="ic-btn" id="pdCopy" title="Duplica giorno">'+I.copy+'</button><button type="button" class="ic-btn" id="pdDelete" aria-label="Elimina giornata" title="'+(p.giorni.length===1?'Il piano deve contenere almeno una giornata':'Elimina giornata')+'"'+(p.giorni.length===1?' disabled':'')+'>'+I.trash+'</button><button class="btn btn-soft" id="addPasto">'+I.plus+' Aggiungi pasto</button></div></div>'+
+            '<div class="pday-head"><div class="pday-title">'+escapeHTML(d.nome)+'</div><div class="pday-acts"><button class="ic-btn" id="pdEdit" title="Rinomina">'+I.edit+'</button><button class="ic-btn" id="pdCopy" title="Duplica giorno">'+I.copy+'</button><button type="button" class="btn btn-ghost" id="pdDelete"'+deleteDayDisabled+'>'+I.trash+' Elimina giornata</button><button class="btn btn-soft" id="addPasto">'+I.plus+' Aggiungi pasto</button></div></div>'+
             '<div class="pday-targets">'+
               pTgt('Tipologia inserimento','<select class="detf-sel" data-pf="tipologia"><option>Grammi</option><option>Calorie</option></select>','')+
               pTgt('Energia (kcal)','<input class="detf-in" data-pf="energia" placeholder="Calorie">','<span id="calcEn">Calcolate: '+r100(tot.kcal)+' kcal</span>')+
@@ -2523,6 +2523,6 @@
   window.CoachMock = { I, main, COACH, clienti, programmi, libreria, pianiAlimentari, metriche, scadenze, prioritaOggi, go, render, toast, openModal, closeModal, pageHead, cliStrip, initials, fmt, renderCliMetriche, buildChart, renderProgramma, renderPiano, renderEsercizio, fillPriorita, renderHomeCalendar, calendarEvents, calendarKinds, openNotificationSettings, scheduleSave, openEsercizio, get view(){return view}, get currentClient(){return currentClient}, get currentProg(){return currentProg}, get currentPiano(){return currentPiano}, setClient(c,s=null){currentClient=c;clientSection=s;go('cliente')}, backClient(){clientSection=null;render()}, openProgramma, openPiano, setPliche(v,sex,age){plicheVals=v;plicheSex=sex;plicheAge=age}, getPliche(){return {v:plicheVals,sex:plicheSex,age:plicheAge}} };
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/coach-mockup.mjs?v=20261113-dashboard"></script>
+<script type="module" src="src/coach-mockup.mjs?v=20261113-nutrition-day"></script>
 </body>
 </html>
