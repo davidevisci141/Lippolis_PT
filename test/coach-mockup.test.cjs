@@ -53,6 +53,29 @@ test("salva e rilegge prescrizioni, istruzioni, video privato e superserie", asy
   assert.equal(reopened[0].rip, "8-10");
 });
 
+test("lo storico PT legge pesate e serie eseguite anche da salvataggi precedenti", async () => {
+  const { athleteWeightHistory } = await editor;
+  const ts = Date.parse("2026-11-13T12:00:00Z");
+  const history = athleteWeightHistory({
+    pesi: [{ ts: "2026-11-10", v: "81,4" }, { ts, v: 80.2 }, { ts, v: "" }, { ts: "errato", v: 88 }],
+    sessioni: [
+      { ts, titolo: "Seduta A", esercizi: [
+        { nome: "Affondi", perLato: true, lati: ["SX", "DX"], sets: [{ kg: 10, reps: 8 }, { slot: 3, kg: "12,5", reps: 7, rir: 0 }] },
+        { nome: "Plank", unita: "sec", sets: [{ kg: 0, reps: 30 }] },
+        { nome: "Vuoto", sets: [{ kg: "", reps: null }] }
+      ] },
+      { ts: "2026-11-10", titolo: "Seduta B", esercizi: [{ nome: " affondi ", perLato: true, sets: [{ kg: 8, reps: 9 }] }] }
+    ]
+  });
+  assert.deepEqual(history.weighIns.map(item => item.v), [80.2, 81.4]);
+  assert.deepEqual(history.exercises.map(item => item.name), ["Affondi", "Plank"]);
+  assert.deepEqual(history.exercises[0].entries.map(entry => entry.title), ["Seduta A", "Seduta B"]);
+  assert.deepEqual(history.exercises[0].entries[0].sets[1], { series: "2 DX", kg: 12.5, reps: 7, rir: 0 });
+  assert.equal(history.exercises[1].unit, "sec");
+  assert.equal(history.exercises[1].entries[0].sets[0].kg, 0);
+  assert.deepEqual(athleteWeightHistory(), { weighIns: [], exercises: [] });
+});
+
 test("l'importazione a tempo registra secondi e l'editor blocca le prescrizioni incomplete", async () => {
   const { mockupToProgram } = await editor;
   const { toAthleteProgram } = await runtime;

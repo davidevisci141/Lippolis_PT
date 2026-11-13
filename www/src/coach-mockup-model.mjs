@@ -98,3 +98,51 @@ export function nutritionSummary(plan) {
     })).filter(item=>item.text)
   };
 }
+
+export function athleteWeightHistory(snapshot = {}) {
+  const timestamp = value => {
+    if (typeof value !== "number" && (typeof value !== "string" || !value.trim())) return null;
+    const ms = typeof value === "string" && !/^\d+$/.test(value) ? Date.parse(value) : Number(value);
+    return ms > 0 && Number.isFinite(new Date(ms).getTime()) ? ms : null;
+  };
+  const number = value => {
+    if (typeof value !== "number" && (typeof value !== "string" || !value.trim())) return null;
+    const result = Number(String(value).replace(",", "."));
+    return Number.isFinite(result) && result >= 0 ? result : null;
+  };
+  const list = value => Array.isArray(value) ? value : [];
+  const newestFirst = (a, b) => b.ts - a.ts;
+  const weighIns = list(snapshot.pesi).map(item => ({ ts: timestamp(item?.ts), v: number(item?.v) }))
+    .filter(item => item.ts !== null && item.v > 0)
+    .sort(newestFirst);
+
+  const sessions = list(snapshot.sessioni).map(session => ({ ...session, ts: timestamp(session?.ts) }))
+    .filter(session => session.ts !== null).sort(newestFirst);
+  const exercises = new Map();
+  for (const session of sessions) {
+    for (const exercise of list(session.esercizi)) {
+      const name = clean(exercise?.nome);
+      if (!name) continue;
+      const unit = exercise.unita === "sec" ? "sec" : "reps";
+      const perSide = exercise.perLato === true;
+      const sides = new Map();
+      const sets = list(exercise.sets).flatMap((set, index) => {
+        const kg = number(set?.kg), reps = number(set?.reps), rir = number(set?.rir);
+        if (kg === null && reps === null && rir === null) return [];
+        const slot = Number.isInteger(set.slot) && set.slot >= 0 ? set.slot : null;
+        const side = clean(exercise.lati?.[index]);
+        const sideCount = (sides.get(side) || 0) + 1;
+        sides.set(side, sideCount);
+        const series = side ? `${slot===null ? sideCount : Math.floor(slot / 2) + 1} ${side}` : String((slot??index) + 1);
+        return [{ series, kg, reps, rir }];
+      });
+      if (!sets.length) continue;
+      const key = JSON.stringify([name.toLocaleLowerCase("it"), unit, perSide]);
+      if (!exercises.has(key)) exercises.set(key, { key, name, unit, perSide, entries: [] });
+      exercises.get(key).entries.push({
+        ts: session.ts, title: clean(session.titolo), program: clean(session.prog), sets
+      });
+    }
+  }
+  return { weighIns, exercises: [...exercises.values()].sort((a, b) => a.name.localeCompare(b.name, "it")) };
+}

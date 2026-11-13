@@ -1,6 +1,6 @@
 import { adminCall, supabase, profileFromRow } from "./supabase.mjs";
 import { getAuthorizedSession, friendlyAuthError, logout } from "./auth.mjs";
-import { mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
+import { athleteWeightHistory, mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
 import { parseExerciseVideo } from "./exercise-video.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
 import { markChatRead } from "./chat.mjs";
@@ -125,9 +125,7 @@ async function loadClientRows(client) {
     supabase.from("program_drafts").select("*").eq("athlete_id",client.id).eq("coach_id",uid).eq("status","draft").order("updated_at",{ascending:false}).limit(40),
     supabase.from("coach_client_sections").select("*").eq("athlete_id",client.id)
   ]);
-  const state=checked(snapshot);
-  snapshots.set(client.id,state?.snapshot||{});
-  stateRevisions.set(client.id,state?.revision||0);
+  cacheClientSnapshot(client.id,checked(snapshot));
   const plan=checked(current); if(plan)published.set(client.id,plan); else published.delete(client.id);
   versions.set(client.id,checked(history)); drafts.set(client.id,checked(clientDrafts));
   for(const section of checked(sections)){
@@ -135,12 +133,18 @@ async function loadClientRows(client) {
     if(Number(section.revision)>=Number(sectionRows.get(id)?.revision||0))sectionRows.set(id,section);
   }
 }
+function cacheClientSnapshot(clientId,state){
+  const revision=state?.revision||0;
+  if(state&&revision<=(stateRevisions.get(clientId)??-1))return false;
+  snapshots.set(clientId,state?.snapshot||{});
+  stateRevisions.set(clientId,revision);
+  return true;
+}
 async function loadDirectory() {
   const epoch=++loadEpoch;
-  const [people,plans,states,sections,clientDrafts,urgent]=await Promise.all([
+  const [people,plans,sections,clientDrafts,urgent]=await Promise.all([
     supabase.from("profiles").select("*").eq("trainer_id",uid).eq("role","athlete").order("last_name"),
     supabase.from("programs").select("*").eq("coach_id",uid),
-    supabase.from("athlete_states").select("user_id,snapshot"),
     supabase.from("coach_client_sections").select("*"),
     supabase.from("program_drafts").select("*").eq("coach_id",uid).eq("status","draft"),
     supabase.from("messages").select("id,athlete_id,text,created_at").eq("type","urgenza").order("created_at",{ascending:false}).limit(100)
@@ -148,7 +152,6 @@ async function loadDirectory() {
   if(epoch!==loadEpoch)return;
   replace(ui.clienti,checked(people).map(p=>({...p,nome:p.display_name||`${p.first_name} ${p.last_name}`,reg:p.created_at?.slice(0,10)||today(),attivo:p.status==="active"})));
   published.clear(); for(const p of checked(plans))published.set(p.athlete_id,p);
-  snapshots.clear(); for(const p of checked(states))snapshots.set(p.user_id,p.snapshot||{});
   for(const p of checked(sections)){
     const id=`${p.athlete_id}:${p.section}`;
     if(!sectionRows.has(id)||Number(p.revision)>=Number(sectionRows.get(id).revision))sectionRows.set(id,p);
@@ -531,6 +534,7 @@ function clientNutrition(c){
 }
 function clientSection(c,section){
   if(section==="alimentari")clientNutrition(c);
+  else if(section==="storico-pesi")clientWeightHistory(c);
   else if(section==="progressi")listFiles(c,"progress","Progressi fisici");
   else if(section==="questionari")questionnaire(c);
   else if(section==="documenti")listFiles(c,"documents","Documenti");
@@ -538,6 +542,70 @@ function clientSection(c,section){
   else if(section==="info")clientInfo(c);
   else return false;
   return true;
+}
+
+const weightNumber=new Intl.NumberFormat("it-IT",{maximumFractionDigits:2});
+const weightSigned=new Intl.NumberFormat("it-IT",{signDisplay:"exceptZero",maximumFractionDigits:2});
+const weightShortDate=new Intl.DateTimeFormat("it-IT",{day:"numeric",month:"short"});
+const weightHistory=client=>athleteWeightHistory(snapshots.get(client.id));
+const countLabel=(count,singular,plural)=>`${count} ${count===1?singular:plural}`;
+
+function weightHistoryOverview(client){
+  const {weighIns,exercises}=weightHistory(client), latest=weighIns[0];
+  return `<button type="button" class="weight-overview" data-sec="storico-pesi">
+    <span class="weight-overview-icon" aria-hidden="true">${ui.I.chart}</span>
+    <span class="weight-overview-copy"><strong>Storico pesi</strong><small>${countLabel(exercises.length,"esercizio con serie","esercizi con serie")} · ${countLabel(weighIns.length,"pesata","pesate")}</small></span>
+    ${latest?`<span class="weight-overview-last"><strong>${weightNumber.format(latest.v)} kg</strong><small>Ultima pesata</small></span>`:""}
+    <span class="weight-overview-arrow" aria-hidden="true">${ui.I.chevR}</span>
+  </button>`;
+}
+
+function clientWeightHistory(client){
+  drawClient(client,"Storico pesi",'<div id="clientWeightHistory"></div>');
+  paintWeightHistory(weightHistory(client));
+}
+
+function paintWeightHistory({weighIns,exercises}){
+  const host=$("clientWeightHistory"), selected=$("weightExercise")?.value;
+  const [latest,first]=[weighIns[0],weighIns.at(-1)];
+  const chartPoints=weighIns.slice(0,30).reverse().map(item=>({...item,l:weightShortDate.format(item.ts)}));
+  const body=latest?`<dl class="weight-stats"><div><dt>Ultima pesata</dt><dd>${weightNumber.format(latest.v)} kg</dd><small>${displayDate(latest.ts)}</small></div>
+    ${weighIns.length>1?`<div><dt>Dalla prima pesata</dt><dd>${weightSigned.format(latest.v-first.v)} kg</dd><small>${displayDate(first.ts)}</small></div>`:""}</dl>
+    ${chartPoints.length>1?`<figure class="weight-chart"><figcaption>Andamento delle pesate${weighIns.length>30?" · ultime 30":""}</figcaption>${ui.buildChart(chartPoints,{timeAxis:true})}</figure>`:""}
+    <details class="weight-list" ${weighIns.length<=5?"open":""}><summary>${countLabel(weighIns.length,"pesata registrata","pesate registrate")}</summary>
+      <table class="weight-table"><thead><tr><th scope="col">Data</th><th scope="col">Peso</th></tr></thead><tbody>${weighIns.map(item=>
+        `<tr><td>${displayDate(item.ts)}</td><td>${weightNumber.format(item.v)} kg</td></tr>`).join("")}</tbody></table></details>`
+    :'<p class="weight-empty">Il cliente non ha ancora registrato pesate.</p>';
+  host.innerHTML=`<section class="weight-panel"><h2>Carichi in allenamento</h2>
+    ${exercises.length?`<label class="fld">Esercizio<select class="sel" id="weightExercise">${exercises.map(exercise=>
+      `<option value="${escape(exercise.key)}">${escape(exercise.name)}${exercise.unit==="sec"?" · a tempo":""}${exercise.perSide?" · per lato":""}</option>`).join("")}</select></label>
+      <div id="weightSessions"></div>`:'<p class="weight-empty">Le serie compariranno qui dopo che il cliente avrà concluso un allenamento.</p>'}
+    </section><section class="weight-panel"><h2>Peso corporeo</h2>${body}</section>`;
+  const select=$("weightExercise");
+  if(!select)return;
+  if(exercises.some(exercise=>exercise.key===selected))select.value=selected;
+  select.onchange=()=>{
+    const exercise=exercises.find(item=>item.key===select.value);
+    $("weightSessions").innerHTML=exercise.entries.map((entry,index)=>`<details class="weight-list" ${index===0?"open":""}>
+      <summary>${displayDate(entry.ts)}${entry.title?` · ${escape(entry.title)}`:""}</summary>
+      ${entry.program?`<p class="weight-session-program">${escape(entry.program)}</p>`:""}
+      <table class="weight-table"><thead><tr><th scope="col">Serie</th><th scope="col">Carico</th><th scope="col">${exercise.unit==="sec"?"Tempo":"Rip."}</th><th scope="col">RIR</th></tr></thead><tbody>
+      ${entry.sets.map(set=>`<tr><td>${escape(set.series)}</td><td>${set.kg===null?"—":set.kg===0?"C.L.":`${weightNumber.format(set.kg)} ${exercise.perSide?"kg/lato":"kg"}`}</td>
+        <td>${set.reps===null?"—":weightNumber.format(set.reps)+(exercise.unit==="sec"?" s":"")}</td><td>${set.rir===null?"—":weightNumber.format(set.rir)}</td></tr>`).join("")}</tbody></table></details>`).join("");
+  };
+  select.onchange();
+}
+
+async function refreshSelectedSnapshot(client){
+  if(ui.view!=="cliente"||ui.currentClient?.id!==client.id)return;
+  const state=checked(await supabase.from("athlete_states").select("snapshot,revision").eq("user_id",client.id).maybeSingle());
+  if(ui.view!=="cliente"||ui.currentClient?.id!==client.id)return;
+  const before=weightHistory(client);
+  if(!cacheClientSnapshot(client.id,state)||(!$("clientWeightHistory")&&!$("clientWeightOverview")))return;
+  const after=weightHistory(client);
+  if(JSON.stringify(before)===JSON.stringify(after))return;
+  if($("clientWeightHistory"))paintWeightHistory(after);
+  else if($("clientWeightOverview"))ui.render();
 }
 
 function programHistory(c){
@@ -861,14 +929,21 @@ async function start(){
     let update;
     const reload=()=>{clearTimeout(update);update=setTimeout(async()=>{try{await loadDirectory();if(["home","priorita"].includes(ui.view))ui.render();}catch(error){fail(error);}},300);};
     let feed=supabase.channel("coach-mockup:"+uid);
-    for(const table of ["athlete_states","programs","coach_client_sections"])feed=feed.on("postgres_changes",{event:"*",schema:"public",table},reload);
+    for(const table of ["programs","coach_client_sections"])feed=feed.on("postgres_changes",{event:"*",schema:"public",table},reload);
+    const refreshSelectedClient=()=>{
+      if(ui.currentClient)void refreshSelectedSnapshot(ui.currentClient).catch(fail);
+    };
+    feed.on("postgres_changes",{event:"*",schema:"public",table:"athlete_states"},event=>{
+      if((event.new?.user_id||event.old?.user_id)===ui.currentClient?.id)refreshSelectedClient();
+    });
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSelectedClient();});
     feed.on("postgres_changes",{event:"*",schema:"public",table:"profiles"},async()=>{
       try{await loadDirectory();refreshChat();if(["home","clienti"].includes(ui.view))ui.render();}catch(error){fail(error);}
     }).on("postgres_changes",{event:"*",schema:"public",table:"messages"},event=>{
       if(event.new?.channel!=="thread")return;
       refreshChat();
       if(event.eventType==="INSERT"&&event.new.sender_id!==uid&&event.new.type==="urgenza")reload();
-    }).subscribe(status=>{if(status==="SUBSCRIBED")refreshChat();});
+    }).subscribe(status=>{if(status==="SUBSCRIBED"){refreshChat();refreshSelectedClient();}});
   }catch(error){
     ui.main.innerHTML=empty("Connessione non riuscita",friendlyAuthError(error))+button("mockRetry","Riprova",true);
     $("mockRetry").onclick=()=>location.reload();
@@ -885,6 +960,6 @@ function openNotification(destination,clientId){
     $("homeCalendar")?.scrollIntoView({block:"nearest"});
   }
 }
-window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
+window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,weightHistoryOverview,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
 $("coachLogout").onclick=signOutCoach;
 void start();
