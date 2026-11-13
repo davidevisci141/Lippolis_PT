@@ -81,14 +81,19 @@ async function getWorker() {
 
 export function createNotifications({ role, uid, types, onOpen, onChange }) {
   const key = `lippolis-notifications:${role}:${uid}`;
-  const defaults = { enabled: false, sound: true };
+  const defaults = { sound: true };
   for (const type of types) defaults[type.id] = type.enabled;
-  let preferences = { ...defaults, ...readLocal(key, {}) };
-  let panel, busy = false, checkingCalendar = false, feedback = "";
-  const refresh = () => preferences = { ...preferences, ...readLocal(key, {}) };
+  let overrides = {}, preferences;
+  let panel, activationBanner, busy = false, checkingCalendar = false, feedback = "";
+  const refresh = () => {
+    overrides = readLocal(key, overrides);
+    preferences = { ...defaults, enabled: role === "athlete" && systemPermission() === "granted", ...overrides };
+    return preferences;
+  };
   const save = (updates) => {
-    preferences = { ...refresh(), ...updates };
-    writeLocal(key, preferences);
+    refresh();
+    overrides = { ...overrides, ...updates };
+    writeLocal(key, overrides);
   };
   function unlockAudio() {
     if (refresh().enabled && preferences.sound) resumeAudio();
@@ -127,6 +132,7 @@ export function createNotifications({ role, uid, types, onOpen, onChange }) {
     if (busy) return;
     busy = true;
     feedback = "";
+    paintStatus();
     if (refresh().sound) resumeAudio();
     try {
       if (systemPermission() === "default") await Notification.requestPermission();
@@ -141,10 +147,40 @@ export function createNotifications({ role, uid, types, onOpen, onChange }) {
     }
   }
 
+  function mountActivationBanner(container) {
+    activationBanner = container;
+    container.querySelector("button").onclick = authorize;
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) paintStatus(); });
+    if (systemPermission() !== "unsupported" && navigator.permissions) {
+      void navigator.permissions.query({ name: "notifications" }).then(status => {
+        status.addEventListener("change", paintStatus);
+      }).catch(() => {});
+    }
+    paintStatus();
+  }
+
+  function paintActivationBanner(permission) {
+    if (!activationBanner?.isConnected) return;
+    activationBanner.hidden = !busy && !feedback && preferences.enabled && (permission === "granted" || permission === "unsupported");
+    if (activationBanner.hidden) return;
+    const message = activationBanner.querySelector("p");
+    const blocked = permission === "denied";
+    const appOnly = blocked || permission === "unsupported";
+    activationBanner.querySelector("h2").textContent = blocked ? "Notifiche bloccate nel browser" : "Attiva le notifiche";
+    message.textContent = feedback || (blocked
+      ? "Apri le impostazioni del sito nel browser e consenti le notifiche per riceverle anche in secondo piano."
+      : "Ricevi un avviso quando il tuo PT ti scrive o pubblica una nuova scheda.");
+    const button = activationBanner.querySelector("button");
+    button.hidden = blocked && preferences.enabled;
+    button.disabled = busy;
+    button.textContent = busy ? "Attivazione…" : appOnly ? "Attiva gli avvisi nell’app" : "Attiva notifiche";
+  }
+
   function paintStatus() {
-    if (!panel?.isConnected) return;
     refresh();
     const permission = systemPermission();
+    paintActivationBanner(permission);
+    if (!panel?.isConnected) return;
     const status = panel.querySelector("[data-alert-status]");
     status.textContent = feedback || (!preferences.enabled ? "Attiva gli avvisi su questo dispositivo." : ({
       granted: "Il browser ha autorizzato le notifiche di sistema.",
@@ -221,5 +257,5 @@ export function createNotifications({ role, uid, types, onOpen, onChange }) {
       if (sent) writeLocal(dayKey, { date, ids: [...seen, ...pending.map(event => event.id)] });
     } finally { checkingCalendar = false; }
   }
-  return { mount, notify, calendar };
+  return { mount, mountActivationBanner, notify, calendar };
 }

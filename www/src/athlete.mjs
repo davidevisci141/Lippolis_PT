@@ -277,6 +277,8 @@ async function bootstrap(session) {
     timerDone:()=>alerts.notify("timer",{title:"Recupero terminato",body:"È ora della prossima serie.",
       destination:"workout",backgroundOnly:true,silent:true})
   };
+  const activationBanner=document.getElementById("athleteNotificationBanner");
+  if(activationBanner)alerts.mountActivationBanner(activationBanner);
   const settings=document.getElementById("athleteAlertSettings");
   if(settings)alerts.mount(settings);
   const chatSettings=document.getElementById("athleteChatNotify");
