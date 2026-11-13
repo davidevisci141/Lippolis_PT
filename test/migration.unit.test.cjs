@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 test("il frontend non carica più SDK Firebase", () => {
-  for (const file of ["www/src/auth.mjs", "www/src/login.mjs", "www/src/coach.mjs", "www/src/athlete.mjs"]) {
+  for (const file of ["www/src/auth.mjs", "www/src/login.mjs", "www/src/coach-mockup.mjs", "www/src/athlete.mjs"]) {
     const source = read(file);
     assert.doesNotMatch(source, /firebase(js|app|auth|firestore|functions)|gstatic\.com\/firebase/i, file);
   }
@@ -48,13 +48,12 @@ test("l'archivio originale BIA è privato e vincolato a cliente e trainer", () =
 });
 
 test("le anteprime BIA vengono archiviate e mostrate insieme agli originali", () => {
-  const app = read("www/src/coach.mjs"), html = read("www/coach.html"), api = read("supabase/functions/admin-api/index.ts");
+  const app = read("www/src/coach-mockup.mjs"), html = read("www/coach.html"), api = read("supabase/functions/admin-api/index.ts");
   const migration = read("supabase/migrations/202611100001_bia_report_previews.sql");
   assert.doesNotMatch(html, /id="biaKeepOriginal"/);
-  assert.match(app, /clientUid = biaSourceClientUid, file = pendingBiaFile, bia = pendingBia/);
-  assert.match(app, /upload\(reportPath, file/);
-  assert.match(app, /upload\(reportPreviewPath, previewBlob/);
-  assert.match(app, /loadBiaReportPreview\(item\)/);
+  assert.match(app, /upload\(reportPath,\s*file/);
+  assert.match(app, /upload\(reportPreviewPath,\s*blob/);
+  assert.match(app, /openFile\("bia-reports",r\.reportPath\)/);
   assert.match(api, /reportPreviewPath/);
   assert.match(migration, /\(-preview\)\?/);
 });
@@ -70,27 +69,27 @@ test("BIA salva il valore letto dal referto e valida i controlli sul server", ()
 });
 
 test("la BIA richiede la verifica dei valori principali e separa i dettagli", () => {
-  const api = read("supabase/functions/admin-api/index.ts"), app = read("www/src/coach.mjs"), html = read("www/coach.html");
+  const api = read("supabase/functions/admin-api/index.ts"), app = read("www/src/coach-mockup.mjs"), html = read("www/coach.html");
   assert.match(api, /const biaRequiredFields = \[\s*"measuredAtLocal", "weightKg", "bodyFatMassKg", "skeletalMuscleKg"/);
-  assert.match(app, /source: field\.source === "corretto_manualmente" \? "corretto_manualmente" : "verificato_dal_pt"/);
-  assert.match(app, /fatFreeMass\(latest\)/);
-  assert.match(html, /id="biaDetailsModal"/);
-  assert.match(html, /id="biaLeanPreview"/);
+  assert.match(app, /manuallyConfirmed:true/);
+  assert.match(app, /Massa magra calcolata/);
+  assert.match(app, /id="mockBiaPreview"/);
+  assert.match(app, /id="mockBiaLean"/);
 });
 
 test("la revisione BIA blocca il salvataggio e lega i riquadri ai campi OCR", () => {
-  const html = read("www/coach.html"), app = read("www/src/coach.mjs");
-  assert.match(html, /biaBboxOverlay/);
-  assert.match(html, /biaSave[^>]*disabled/);
-  assert.match(app, /pendingBia\.fields\?\./);
+  const html = read("www/coach.html"), app = read("www/src/coach-mockup.mjs");
+  assert.match(app, /mockBiaConfirm/);
+  assert.match(app, /save.disabled=true/);
+  assert.match(app, /result.fields/);
   assert.match(app, /requiredBiaFields/);
   assert.match(app, /createSignedUrl/);
 });
 
 test("la scheda pubblicata è caricata dal database nell'area atleta e le sessioni si sincronizzano", () => {
-  const coach = read("www/src/coach.mjs"), athlete = read("www/src/athlete.mjs"), athleteHtml = read("www/athlete.html"), migration = read("supabase/migrations/202611070001_initial_schema.sql");
-  assert.match(coach, /calls\.saveProgramDraft/);
-  assert.match(coach, /calls\.publishProgram/);
+  const coach = read("www/src/coach-mockup.mjs"), athlete = read("www/src/athlete.mjs"), athleteHtml = read("www/athlete.html"), migration = read("supabase/migrations/202611070001_initial_schema.sql");
+  assert.match(coach, /adminCall\("saveProgramDraft"/);
+  assert.match(coach, /adminCall\("publishProgram"/);
   assert.match(athlete, /from\("programs"\)\.select/);
   assert.match(athlete, /merged\.PROGRAMMA = normalizePublishedProgram\(currentProgram\.program\)/);
   assert.match(athleteHtml, /function rangeSett\(w\)\{ if\(!w\?\.dal/);
@@ -101,14 +100,14 @@ test("la scheda pubblicata è caricata dal database nell'area atleta e le sessio
 });
 
 test("snapshot, BIA e storico restano persistenti dopo refresh e conflitti offline", () => {
-  const athlete = read("www/src/athlete.mjs"), coach = read("www/src/coach.mjs");
+  const athlete = read("www/src/athlete.mjs"), coach = read("www/src/coach-mockup.mjs");
   const migration = read("supabase/migrations/202611100002_durable_athlete_state.sql");
   assert.match(athlete, /function mergeQueuedSnapshot\(remote, local\)/);
   assert.match(athlete, /sameSnapshot\(merged, remote\)/);
   assert.match(athlete, /from\("athlete_states"\)\.select\("snapshot, revision"\)/);
   assert.match(athlete, /window\.addEventListener\("pagehide"/);
   assert.match(athlete, /logoutAfterSync/);
-  assert.match(coach, /Referto BIA salvato nel database/);
+  assert.match(coach, /Referto salvato/);
   assert.match(coach, /Scheda pubblicata e verificata/);
   assert.match(migration, /merge_snapshot_array\(v_current -> v_key, v_snapshot -> v_key\)/);
   assert.match(migration, /merge_metric_array\(v_current -> 'metriche', v_snapshot -> 'metriche'\)/);

@@ -597,7 +597,9 @@ export function toAthleteProgram(input) {
               setTypes: rows.map((row) => row.set_type), prescriptions: athleteRows,
               muscolo: (exercise.primary_muscles || []).join(", "),
               equipment: exercise.equipment || "", video_ref: exercise.video_ref || null,
-              instructions: toText(exercise.instructions)
+              instructions: toText(exercise.instructions),
+              videoStoragePath: typeof old.videoStoragePath === "string" && old.videoStoragePath ? old.videoStoragePath : undefined,
+              alternativa: old.alternativa === true ? true : undefined
             });
           }
         }

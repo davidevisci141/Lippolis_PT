@@ -236,6 +236,15 @@ async function deleteClient(authorizationHeader: AuthorizationHeader, body: Reco
     const { error: storageError } = await admin.storage.from("bia-reports").remove(reportPaths);
     if (storageError) throw new ApiError("storage-cleanup-failed", "Non è stato possibile rimuovere gli originali BIA. Account non eliminato.", 500);
   }
+  const clientFiles = admin.storage.from("coach-client-files");
+  for (let page = 0; page < 100; page++) {
+    const { data: files, error: listError } = await clientFiles.list(target.id, { limit: 100 });
+    if (listError) throw new ApiError("storage-cleanup-failed", "Non è stato possibile leggere gli allegati del cliente. Account non eliminato.", 500);
+    if (!files?.length) break;
+    const { error: removalError } = await clientFiles.remove(files.map((file) => `${target.id}/${file.name}`));
+    if (removalError) throw new ApiError("storage-cleanup-failed", "Non è stato possibile rimuovere gli allegati del cliente. Account non eliminato.", 500);
+    if (page === 99) throw new ApiError("storage-cleanup-failed", "Restano allegati da rimuovere. Ripeti l’eliminazione.", 500);
+  }
   await admin.from("profiles").update({ status: "deleting", updated_at: new Date().toISOString() }).eq("id", target.id);
   const { error } = await admin.auth.admin.deleteUser(target.id); if (error) throw error;
   return { deleted: true, uid: target.id };

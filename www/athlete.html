@@ -916,6 +916,7 @@
   let storicoEx = null;
   let storicoExerciseId = null;
   let nutrition = {plan:null,state:'loading'};
+  let coachSections = {};
   let tmr = {sec:0, total:0, label:'', running:false, finished:false, iv:null, endAt:0, nodes:[], keepAlive:null, nativo:false};
   let audioCtx = null;
   let wakeLock = null;
@@ -1070,11 +1071,11 @@
         `;
     } else {
       html+=`<div class="co-rule">
-          <b>Questo canale è riservato alle urgenze.</b>
+          <b>Scrivi al tuo PT o segnala un’urgenza.</b>
           </div>
         <button class="co-urg" id="coUrg">${I.alertTri}<span><b>Segnala un'urgenza</b><i>Dolore, problema di salute, stop prolungato</i></span></button>
         <button class="co-alt" id="coDif">${I.coach}<span><b>Lascia una domanda per Vittorio</b><i>${inAttesa?inAttesa+' in attesa':'Risponde al prossimo controllo scheda'}</i></span></button>`;
-      if(thread.length) html+=`<div class="co-sep">Conversazioni</div><div class="co-thread" id="coThread"></div>`;
+      html+=`<div class="co-sep">Conversazioni</div><div class="co-thread" id="coThread"></div><div class="co-comp"><textarea id="coTa" placeholder="Scrivi al tuo PT…" rows="1"></textarea><button class="co-send" id="coSend" aria-label="Invia">${I.send}</button></div>`;
     }
     view.innerHTML=html;
 
@@ -1090,7 +1091,7 @@
       if(coachDraft){ ta.value=coachDraft; coachDraft=''; }
       document.getElementById('coSend').onclick=()=>{
         const v=ta.value.trim(); if(!v) return;
-        pushToCoach('dettaglio', v); ta.value=''; renderCoach(); view.scrollTop=view.scrollHeight;
+        pushToCoach('message', esc(v)); ta.value=''; renderCoach(); view.scrollTop=view.scrollHeight;
       };
     }
     setTimeout(()=>{ if(casoAperto()) view.scrollTop=view.scrollHeight; },0);
@@ -1105,7 +1106,7 @@
         d.innerHTML=`<b>${I.alertTri} Urgenza inviata${m.chiuso?' · chiusa':''}</b>${m.testo}<span class="ts">${fmtDataOra(m.ts)}</span>`;
       } else {
         d.className='co-msg '+(m.from==='coach'?'coach':'atleta');
-        d.innerHTML=`${m.testo}<span class="ts">${fmtDataOra(m.ts)}</span>`;
+        d.innerHTML=`${m.from==='coach'?esc(m.testo):m.testo}<span class="ts">${fmtDataOra(m.ts)}</span>`;
       }
       th.appendChild(d);
     });
@@ -1722,11 +1723,12 @@
       targets=`<div class="tg">Serie <b>${esc(ex.serie)}</b>${uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':''}</div><div class="tg">${ex.unita==='sec'?'Tempo':'Reps'} <b>${esc(ex.reps)}</b></div>${rmChip}${rirChip}${recChip}`;
     }
     const hasSets=registraSerie(ex), stor = hasSets ? getStorico(ex.nome,ex.id) : null;
-    const hasExec = !!(ex.video_ref || ex.video || ex.instructions || ex.note);
+    const hasExec = !!(ex.video_ref || ex.video || ex.videoStoragePath || ex.instructions || ex.note);
     const lastStor=stor&&stor[0];
     const lastLoads=lastStor?.serie?.slice(0,4).map((s,i)=>`${i+1}: ${Number(s.kg)>0?fmtKgS(Number(s.kg))+' kg':'corpo libero'} × ${s.reps??'—'}`).join(' · ');
     const historyPanel=hasSets?`<button type="button" class="exercise-history duo-stor"><span class="eh-icon">${I.dumbbell}</span><span class="eh-content"><span class="eh-title">Storico pesi</span><span class="eh-copy">${lastStor?`Ultima volta · ${lastStor.data}: ${esc(lastLoads)}${lastStor.serie.length>4?' · …':''}`:'Nessuna serie registrata. Le serie compariranno qui dopo la conclusione dell’allenamento.'}</span></span><span class="eh-go">${I.chevR}</span></button>`:'';
     const duo=hasExec?`<div class="duo"><button class="duo-btn duo-exec"><span class="di">${I.play}</span><span class="dl">Esecuzione</span></button></div>`:'';
+    const approvedLoad=(coachSections.loads?.items||[]).findLast(item=>item.versionId===versioneSchedaLocale&&(item.exerciseId===ex.id||item.exerciseName===ex.nome));
     let sets='';
     if(hasSets){
       const typeLabel={warmup:'Riscaldamento',working:'Lavoro',top:'Top set',back_off:'Back-off',drop:'Drop',mini_set:'Mini-set',cluster_group:'Gruppo',failure:'Cedimento'};
@@ -1767,6 +1769,8 @@
       <div class="card-body">
         <div class="targets">${targets}</div>
         ${historyPanel}
+        ${approvedLoad?`<div class="note">Carico indicato dal PT: <b>${esc(fmtKgS(Number(approvedLoad.kg)))} kg</b></div>`:''}
+        ${ex.alternativa?`<div class="note">Esercizio alternativo</div>`:''}
         ${duo}
         ${(ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim()?`<div class="note"><span class="nl">Note</span> ${esc((ex.note||'').replace(NOTA_UNILAT_VECCHIA,'').trim())}</div>`:''}
         ${(ex.carico&&ex.rir!=null)?`<div class="rir-hint" hidden><b>RIR ${ex.rir}</b> = a fine serie devono restarti <b>${ex.rir}</b> ripetizioni «in canna». ${ex.rir===0?'Qui si arriva al cedimento: nessuna ripetizione di riserva.':'Se ne avevi di più, il carico era leggero; se eri al limite, era pesante.'} Segnalo a ogni serie: il coach lo usa per calibrare i carichi della settimana dopo.</div>`:''}
@@ -1865,12 +1869,16 @@
     const notes=m.querySelector('.em-notes'), link=m.querySelector('.em-link');
     notes.textContent=String(ex.instructions||ex.note||'').trim();
     const ref=ex.video_ref||ex.video;
-    if(!ref) return;
+    if(!ref&&!ex.videoStoragePath) return;
     link.textContent='Caricamento del video…';
     try{
       const {parseExerciseVideo}=await import('./src/exercise-video.mjs');
+      let media=parseExerciseVideo(ref);
+      if(!media&&ex.videoStoragePath){
+        const {getCoachFile}=await import('./src/athlete-coach-sections.mjs');
+        media={kind:'file',url:await getCoachFile('coach-exercise-files',ex.videoStoragePath)};
+      }
       if(!link.isConnected)return;
-      const media=parseExerciseVideo(ref);
       if(!media)throw new Error('Video non disponibile');
       const frame=document.createElement('div'); frame.className='em-frame';
       const player=document.createElement(media.kind==='file'?'video':'iframe');
@@ -2115,6 +2123,14 @@
 
   // ====== CONSIGLI ALIMENTARI ======
   function renderConsigli(){
+    const assigned=coachSections.nutrition?.plan;
+    if(assigned){
+      const dish=(item)=>`${esc(item.nome)}${item.g?' · '+esc(item.g)+' g':''}${item.alternative?.length?`<div>Alternative: ${item.alternative.map(a=>esc(a.nome)+(a.g?' · '+esc(a.g)+' g':'')).join(', ')}</div>`:''}`;
+      const targets=day=>[[day.energia,'kcal'],[day.proteine,'g proteine'],[day.carboidrati,'g carboidrati'],[day.grassi,'g grassi']]
+        .filter(([value])=>value!==''&&value!=null).map(([value,unit])=>esc(value)+' '+unit).join(' · ');
+      view.innerHTML=`<div class="pagetitle">Consigli alimentari</div><section class="physical-panel"><h2 class="physical-title">${esc(assigned.nome)}</h2>${assigned.descrizione?`<p class="nutrition-notes">${esc(assigned.descrizione)}</p>`:''}</section>`+(assigned.giorni||[]).map((day,i)=>`<section class="physical-panel"><h3 class="physical-title">${esc(day.nome||'Giorno '+(i+1))}</h3>${targets(day)?`<p class="nutrition-notes">${targets(day)}</p>`:''}${day.note?`<p class="nutrition-notes">${esc(day.note)}</p>`:''}${(day.pasti||[]).map(meal=>`<div class="nutrition-meal"><b>${esc(meal.tipo)}</b>${(meal.items||[]).map(item=>`<p>${dish(item)}</p>`).join('')}</div>`).join('')}</section>`).join('');
+      return;
+    }
     const {plan,state}=nutrition;
     view.innerHTML=`<div class="pagetitle">Consigli alimentari</div>${plan?`<section class="physical-panel"><h2 class="physical-title">${esc(plan.title)}</h2>${plan.notes?`<p class="nutrition-notes">${esc(plan.notes)}</p>`:''}${(plan.meals||[]).map(meal=>`<div class="nutrition-meal"><b>${esc(meal.label)}</b><p>${esc(meal.text)}</p></div>`).join('')}</section>`:`<div class="empty"><div class="ic">${I.apple}</div><h2>${state==='loading'?'Caricamento…':state==='error'?'Consigli non disponibili':'Nessun consiglio pubblicato'}</h2><p>${state==='error'?'Controlla la connessione e riapri l’app per riprovare.':state==='loading'?'Sto cercando le indicazioni del tuo PT.':'Quando il tuo PT pubblicherà le indicazioni, le troverai qui.'}</p></div>`}`;
   }
@@ -2126,6 +2142,8 @@
     {t:'Metriche', icon:I.body},
     {t:'Progressi fisici', icon:I.camera},
     {t:'Documenti', icon:I.doc},
+    {t:'Questionari', icon:I.doc},
+    {t:'Agenda', icon:I.chart},
     {t:'Abbonamenti', icon:I.wallet},
   ];
   function renderAltro(){
@@ -2134,15 +2152,44 @@
     ALTRO.forEach(it=>{ const c=document.createElement('div'); c.className='mcard'; c.innerHTML=`<span class="lbl">${it.t}</span><span class="big">${it.icon}</span>`; c.onclick=()=>{ altroDetail=it.t; altroStoricoEx=null; view.scrollTop=0; renderView(); }; m.appendChild(c); });
   }
   function renderDetail(title){
-    view.innerHTML=`<div class="dhead"><div class="back" id="back">${I.chevL}</div><h2>${title}</h2></div>
-      <div class="empty"><div class="ic">${I.chart}</div><h2>Sezione in sviluppo</h2><p>Qui andremo ad approfondire “${title}”. La costruiamo nel prossimo passo.</p></div>`;
-    document.getElementById('back').onclick=()=>{ altroDetail=null; view.scrollTop=0; renderView(); };
+    const section={Questionari:'questionnaires',Agenda:'agenda',Abbonamenti:'subscriptions'}[title];
+    const list=coachSections[section]?.items||[];
+    const question=section==='questionnaires';
+    const content=list.map((item,i)=>`<section class="physical-panel"><h3 class="physical-title">${esc(item.title)}</h3><p class="nutrition-notes">${esc(item.date||'')} ${esc(item.detail||'')}</p>${question?`<form data-question="${i}">${(item.questions||[]).map((q,j)=>`<label class="pf-field">${esc(q)}<textarea class="pf-input" required maxlength="1000" ${item.answers?'readonly':''}>${esc(item.answers?.[j]||'')}</textarea></label>`).join('')}${item.answers?'<p>Questionario inviato</p>':'<button type="submit" class="btn-accent">Invia risposte</button>'}<p role="status"></p></form>`:''}</section>`).join('');
+    coachSectionPage(title,content||'<div class="nodata">Nessuna voce condivisa</div>');
+    view.querySelectorAll('[data-question]').forEach(form=>form.onsubmit=async(e)=>{
+      e.preventDefault();
+      const submit=form.querySelector('button'), status=form.querySelector('[role=status]');
+      if(!submit||!window.lippolisCoachSections)return;
+      submit.disabled=true;
+      try{await window.lippolisCoachSections.answer(list[+form.dataset.question].id,Array.from(form.querySelectorAll('textarea'),input=>input.value.trim()));}
+      catch{status.textContent='Invio non riuscito. Controlla le risposte e riprova.';}
+      finally{submit.disabled=false;}
+    });
+  }
+
+  function coachSectionPage(title,body){
+    view.innerHTML=`<div class="dhead"><button class="back" id="back" type="button" aria-label="Indietro">${I.chevL}</button><h2>${esc(title)}</h2></div>`+body;
+    document.getElementById('back').onclick=()=>{altroDetail=null;view.scrollTop=0;renderView();};
+  }
+  function coachFiles(section,title){
+    const list=coachSections[section]?.items||[];
+    coachSectionPage(title,list.map((item,i)=>`<section class="physical-panel"><h3 class="physical-title">${esc(item.title)}</h3>${section==='progress'?`<img data-photo="${i}" alt="${esc(item.title)}" style="max-width:100%;border-radius:12px" loading="lazy">`:''}<button type="button" class="btn-accent" data-file="${i}">Apri file</button></section>`).join('')||'<div class="nodata">Nessun file condiviso</div>');
+    const signed=async(item)=>{const {getCoachFile}=await import('./src/athlete-coach-sections.mjs');return getCoachFile('coach-client-files',item.path);};
+    view.querySelectorAll('[data-photo]').forEach(img=>signed(list[+img.dataset.photo]).then(url=>{if(img.isConnected)img.src=url;}).catch(()=>img.remove()));
+    view.querySelectorAll('[data-file]').forEach(button=>button.onclick=async()=>{
+      button.disabled=true;
+      try{location.assign(await signed(list[+button.dataset.file]));}
+      catch{toastMsg('File non disponibile');}
+      finally{button.disabled=false;}
+    });
   }
 
   // ====== DOCUMENTI (file condivisi dal coach) ======
   const documenti = [];
   let docAperto=null;
   function renderDocumenti(){
+    if(Object.hasOwn(coachSections,'documents'))return coachFiles('documents','Documenti');
     if(docAperto!=null){
       const d=documenti[docAperto];
       view.innerHTML=`<div class="dhead"><div class="back" id="back">${I.chevL}</div><h2>${d.nome}</h2></div><div class="doc-view">${d.html}</div>`;
@@ -2162,6 +2209,7 @@
 
   // ====== PROGRESSI ======
   function renderProgressi(){
+    if(Object.hasOwn(coachSections,'progress'))return coachFiles('progress','Progressi fisici');
     fab.style.display='grid';
     let html=`<div class="dhead"><div class="back" id="back">${I.chevL}</div><h2>Progressi fisici</h2></div>
       <div class="pg-toggle"><div class="t">Oscura il volto nelle foto</div><button class="tgl ${oscuraVolto?'on':''}" id="blurTgl"></button></div>`;
@@ -2215,9 +2263,12 @@
       renderPliche();
     } else {
       metriche.forEach((m,i)=>{
+        const records=[...m.dati,...(coachSections.metrics?.measures||[]).filter(r=>r.name===m.nome)]
+          .filter(r=>Number.isFinite(Number(r.v))).map(r=>({...r,v:Number(r.v),l:esc(r.l)}))
+          .sort((a,b)=>Number(a.ts||0)-Number(b.ts||0));
         html+=`<div class="metric"><div class="mhead"><div class="mt">${m.nome} (cm)</div><button class="add" data-i="${i}">Aggiungi</button></div>`;
-        if(m.dati.length>=2) html+=`<div class="chartcard">${buildChart(m.dati)}</div>`;
-        else if(m.dati.length===1) html+=`<div class="chartcard"><div class="onepoint">Ultima misura: <b>${m.dati[0].v} cm</b> · ${m.dati[0].l}</div></div>`;
+        if(records.length>=2) html+=`<div class="chartcard">${buildChart(records)}</div>`;
+        else if(records.length===1) html+=`<div class="chartcard"><div class="onepoint">Ultima misura: <b>${records[0].v} cm</b> · ${records[0].l}</div></div>`;
         else html+=`<div class="nodata">Nessun dato inserito</div>`;
         html+=`</div>`;
       });
@@ -2700,7 +2751,7 @@
       let cached=null; try{ cached=JSON.parse(localStorage.getItem(nextKey)||'null'); }catch(e){}
       ACCOUNT_UID=next; LS_KEY=nextKey; COPIE=['stato_'+next+'_a.json','stato_'+next+'_b.json'];
       try{ sessionStorage.setItem('lippolis_uid',uid); }catch(e){}
-      nutrition={plan:null,state:'loading'}; workoutView='list'; storicoEx=null;
+      nutrition={plan:null,state:'loading'}; coachSections={}; workoutView='list'; storicoEx=null;
       const defaults=structuredClone(accountDefaults);
       loadState({...defaults,...(cached?.v===1?cached:{})});
       impostaSettimana(settimanaPerData(Date.now())); ricalcolaUltimi(); applicaTema(); aggiornaAvatar(); renderView();
@@ -2729,6 +2780,7 @@
       return true;
     },
     applyNutrition: (value)=>{ nutrition=value; if(activeTab==='consigli')renderConsigli(); },
+    applyCoachSections: (value)=>{coachSections=value||{};if(activeTab==='consigli'||(activeTab==='altro'&&altroDetail)||activeTab==='workout'&&workoutView==='detail'&&!view.contains(document.activeElement))renderView();},
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
     applyMessages: (messages)=>{
       thread=messages.filter(x=>x.channel==='thread');
@@ -2758,6 +2810,6 @@
   renderView();
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/athlete.mjs?v=20261113-program-v5"></script>
+<script type="module" src="src/athlete.mjs?v=20261113-program-v6"></script>
 </body>
 </html>

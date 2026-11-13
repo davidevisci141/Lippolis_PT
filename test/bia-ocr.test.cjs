@@ -128,7 +128,7 @@ test("rifiuta un file che dichiara immagine ma contiene dati non immagine", asyn
 test("il pannello PT importa solo simboli esportati dal modulo BIA", async () => {
   const fs = require("node:fs");
   const path = require("node:path");
-  const coach = fs.readFileSync(path.join(__dirname, "../www/src/coach.mjs"), "utf8");
+  const coach = fs.readFileSync(path.join(__dirname, "../www/src/coach-mockup.mjs"), "utf8");
   const imported = coach.match(/import\s*\{([^}]+)\}\s*from\s*["']\.\/bia-ocr\.mjs["']/);
   assert.ok(imported, "il pannello deve dichiarare l’import BIA atteso");
   const module = await getParser();

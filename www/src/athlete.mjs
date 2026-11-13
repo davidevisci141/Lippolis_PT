@@ -1,7 +1,7 @@
 import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 import { watchAthleteNutrition } from "./nutrition-athlete.mjs";
-import { toAthleteProgram } from "./workout-metrics.mjs?v=20261113-program-v5";
+import { toAthleteProgram } from "./workout-metrics.mjs?v=20261113-program-v6";
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
 let knownRevision = 0;
@@ -12,6 +12,7 @@ let pendingRemoteState = null;
 let pendingRemoteProgram;
 let programEventSequence = 0;
 let stopNutritionWatch = null;
+let coachSectionsWatch = null;
 let saving = false;
 let saveTimer = null;
 let retryCount = 0;
@@ -240,6 +241,7 @@ async function bootstrap(session) {
   supabase.channel(`athlete-profile:${user.uid}`).on("postgres_changes", { event: "UPDATE", schema: "public", table: "profiles", filter: `id=eq.${user.uid}` }, async (payload) => {
     if (payload.new?.status === "active") return;
     stopNutritionWatch?.();
+    coachSectionsWatch?.stop();
     await supabase.auth.signOut(); alert("Il tuo accesso non è più attivo."); location.replace("index.html");
   }).subscribe();
   supabase.channel(`athlete-program:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "programs", filter: `athlete_id=eq.${user.uid}` }, (payload) => {
@@ -261,6 +263,10 @@ async function bootstrap(session) {
   applyRemoteChanges(user.uid);
   void loadMessages(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
   stopNutritionWatch = watchAthleteNutrition(user.uid, (value) => api.applyNutrition(value));
+  void import("./athlete-coach-sections.mjs").then(({watchCoachSections})=>{
+    coachSectionsWatch=watchCoachSections(user.uid,(value)=>api.applyCoachSections(value));
+    window.lippolisCoachSections=coachSectionsWatch;
+  }).catch((error)=>badgeText(friendlyAuthError(error),true));
   return true;
 }
 
@@ -319,6 +325,7 @@ async function logoutAfterSync(uid) {
     return false;
   }
   stopNutritionWatch?.();
+  coachSectionsWatch?.stop();
   await logout(); return true;
 }
 
