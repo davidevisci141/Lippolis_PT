@@ -2,6 +2,7 @@ import { supabase, supabaseConfigured } from "./supabase.mjs";
 import { friendlyAuthError, getAuthorizedSession, logout } from "./auth.mjs";
 import { watchAthleteNutrition } from "./nutrition-athlete.mjs";
 import { toAthleteProgram } from "./workout-metrics.mjs?v=20261113-program-v6";
+import { enableChatNotifications, markChatRead, notificationLabel, notifyChat } from "./chat.mjs";
 const api = window.lippolisAthleteApi;
 const badge = document.getElementById("syncBadge");
 let knownRevision = 0;
@@ -38,7 +39,7 @@ function mergeArray(current, incoming) {
 }
 function mergeQueuedSnapshot(remote, local) {
   const merged = { ...(remote || {}), ...(local || {}) };
-  for (const key of ["bia", "sessioni", "pesi", "progressi"]) merged[key] = mergeArray(remote?.[key], local?.[key]);
+  for (const key of ["sessioni", "pesi", "progressi"]) merged[key] = mergeArray(remote?.[key], local?.[key]);
   if (Array.isArray(remote?.metriche) || Array.isArray(local?.metriche)) {
     const metrics = new Map();
     for (const item of [...(remote?.metriche || []), ...(local?.metriche || [])]) {
@@ -93,6 +94,7 @@ function normalizePublishedProgram(value) {
 }
 function mergeRemote(remoteState, currentProgram, profile, preferLocal = false) {
   const local = localData(); const merged = preferLocal ? mergeQueuedSnapshot(remoteState, local) : mergeQueuedSnapshot(local, remoteState);
+  if (remoteState != null) merged.bia = Array.isArray(remoteState.bia) ? remoteState.bia : [];
   if (currentProgram?.program) merged.PROGRAMMA = normalizePublishedProgram(currentProgram.program);
   else if (currentProgram === false) merged.PROGRAMMA = null;
   else if (local.PROGRAMMA) merged.PROGRAMMA = local.PROGRAMMA;
@@ -144,9 +146,28 @@ function applyRemoteChanges(uid) {
   if (programChanged || !sameSnapshot(merged, localData())) api.applySnapshot(merged);
   sessionStorage.setItem(`lippolis_cloud_boot_${uid}`, `${knownRevision}:${knownProgramVersion}`);
 }
+let messageRequest = 0, latestMessages = [], markingChat = false;
 async function loadMessages(uid) {
-  const { data, error } = await supabase.from("messages").select("*").eq("athlete_id", uid).order("created_at").limit(200); if (error) throw error;
-  api.applyMessages(data.map((item) => ({ id: item.id, ts: new Date(item.created_at).getTime(), from: item.sender_id === uid ? "atleta" : "coach", tipo: item.type || "messaggio", testo: item.text, meta: item.metadata || null, channel: item.channel || "thread", letto: true })));
+  const request=++messageRequest;
+  const { data, error } = await supabase.from("messages").select("*").eq("athlete_id", uid).order("created_at",{ascending:false}).limit(200);
+  if (error) throw error;
+  if(request!==messageRequest)return;
+  latestMessages=data.reverse();
+  api.applyMessages(latestMessages.map(item=>({
+    id:item.id, ts:new Date(item.created_at).getTime(), from:item.sender_id===uid?"atleta":"coach",
+    tipo:item.type||"messaggio", testo:item.text, meta:item.metadata||null, channel:item.channel||"thread", letto:!!item.read_at
+  })));
+}
+async function readAthleteChat(uid) {
+  const unread=latestMessages.filter(item=>item.channel==="thread"&&item.sender_id!==uid&&!item.read_at);
+  if(!unread.length||document.hidden||markingChat)return;
+  markingChat=true;
+  try{
+    await markChatRead(uid,unread,uid);
+    await loadMessages(uid);
+  }finally{
+    markingChat=false;
+  }
 }
 async function bootstrap(session) {
   if (!api) throw new Error("Area atleta non inizializzata."); const { user, profile } = session; const storedUid = sessionStorage.getItem("lippolis_uid");
@@ -228,10 +249,27 @@ async function bootstrap(session) {
     queue(snapshot) { pendingSnapshot = mergeQueuedSnapshot(pendingSnapshot, sanitizeSnapshot(snapshot)); if (cloudReady) scheduleFlush(user.uid); },
     async sendMessage(message, channel) {
       const text = String(message?.testo || "").trim(); if (!text) return;
-      try { const { error } = await supabase.from("messages").insert({ athlete_id: user.uid, sender_id: user.uid, target_id: user.uid, channel, type: String(message.tipo || "message").slice(0, 40), text: text.slice(0, 4000), metadata: message.meta || null }); if (error) throw error; }
-      catch (error) { badgeText(friendlyAuthError(error), true); }
+      try { const { error } = await supabase.from("messages").insert({ athlete_id: user.uid, sender_id: user.uid, target_id: user.uid, channel, type: String(message.tipo || "message").slice(0, 40), text: text.slice(0, 4000), metadata: message.meta || null }); if (error) throw error; return true; }
+      catch (error) { badgeText(friendlyAuthError(error), true); return false; }
     }
   };
+  window.lippolisChat={
+    send:async text=>{
+      const sent=await window.lippolisCloudSync.sendMessage({tipo:"message",testo:text,meta:{plainText:true}},"thread");
+      if(sent)void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));
+      return sent;
+    },
+    read:()=>readAthleteChat(user.uid).catch(error=>badgeText(friendlyAuthError(error),true)),
+    notificationLabel,enableChatNotifications
+  };
+  if(api.setChatCoach)void supabase.rpc("athlete_chat_coach_name").then(({data,error})=>{
+    if(!error&&data)api.setChatCoach(data);
+  });
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));});
+  if(typeof navigator!=="undefined")navigator.serviceWorker?.addEventListener("message",event=>{
+    if(event.data?.type==="open-chat")api.openChat?.();
+  });
+  if(location.hash==="#chat")api.openChat?.();
 
   supabase.channel(`athlete-state:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "athlete_states", filter: `user_id=eq.${user.uid}` }, (payload) => {
     applyRemoteState(user.uid, payload.new);
@@ -256,7 +294,13 @@ async function bootstrap(session) {
   }).subscribe((status) => {
     if (status === "SUBSCRIBED") void refreshRemoteProgram(user.uid).catch((error) => badgeText(friendlyAuthError(error), true));
   });
-  supabase.channel(`athlete-messages:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `athlete_id=eq.${user.uid}` }, () => loadMessages(user.uid).catch((error) => badgeText(friendlyAuthError(error), true))).subscribe();
+  supabase.channel(`athlete-messages:${user.uid}`).on("postgres_changes", { event: "*", schema: "public", table: "messages", filter: `athlete_id=eq.${user.uid}` }, event=>{
+    if(event.eventType==="INSERT"&&event.new?.channel==="thread"&&event.new.sender_id!==user.uid){
+      if(!document.hidden&&!api.isChatOpen?.())badgeText("Nuovo messaggio dal PT");
+      void notifyChat("athlete");
+    }
+    void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));
+  }).subscribe(status=>{if(status==="SUBSCRIBED")void loadMessages(user.uid).catch(error=>badgeText(friendlyAuthError(error),true));});
   cloudReady = true;
   if (pendingSnapshot) void flush(user.uid);
   else if (!stateDoc) window.lippolisCloudSync.queue(api.snapshot());
@@ -277,6 +321,7 @@ async function flush(uid) {
   const reconciledState = remoteRevision >= knownRevision ? pendingRemoteState : null;
   if (reconciledState) knownRevision = remoteRevision;
   let working = reconciledState ? mergeQueuedSnapshot(reconciledState.snapshot, snapshot) : snapshot;
+  if (reconciledState) working.bia = reconciledState.snapshot?.bia || [];
   let needsReconciliation = Boolean(reconciledState);
   let failure = null;
   try {
@@ -297,6 +342,7 @@ async function flush(uid) {
       knownRevision = Number(latest?.revision || 0);
       recordRemoteState(latest);
       working = mergeQueuedSnapshot(latest?.snapshot, mergeQueuedSnapshot(working, pendingSnapshot));
+      working.bia = latest?.snapshot?.bia || [];
       needsReconciliation = true;
       pendingSnapshot = null; failure = error;
     }

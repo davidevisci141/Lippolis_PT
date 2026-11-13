@@ -23,3 +23,6 @@ minimum_password_length = 12
 
 [functions.admin-api]
 verify_jwt = true
+
+[functions.client-invite]
+verify_jwt = false

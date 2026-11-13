@@ -662,6 +662,7 @@
   .mock-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.mock-multiline{white-space:pre-wrap;overflow-wrap:anywhere}.mock-photo{max-width:100%;height:auto;border-radius:12px}.sec>h2{margin:18px 0 8px}.sec>.row,.sec>details{margin-bottom:8px}.modal-b input[type=file]{width:100%}.modal-b #mockModalError{color:var(--danger,#b03026)}.modal-b .fld>span{font-weight:700}.mock-tools .btn{flex-shrink:0}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="chat.css">
 </head>
 <body>
   <header class="topbar">
@@ -674,6 +675,7 @@
       <div class="coach">
         <div class="coach-meta"><div class="cn">PT</div><div class="cr">Coach</div></div>
         <div class="coach-av">PT</div>
+        <button class="btn btn-ghost" id="coachChat" type="button" disabled>Chat <span id="coachChatUnread" class="chat-count" hidden></span></button>
         <button class="btn btn-ghost coach-logout" id="coachLogout" type="button" aria-label="Esci dall’account" disabled>Esci</button>
       </div>
     </div>
@@ -1510,6 +1512,7 @@
     if(view==='home') renderHome();
     else if(view==='priorita') renderPriorita();
     else if(view==='clienti') renderClienti();
+    else if(view==='chat') window.CoachDB?.renderInbox();
     else if(view==='cliente') renderCliente();
     else if(view==='workout') renderWorkout();
     else if(view==='revisione') renderRevisione();

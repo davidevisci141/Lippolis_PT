@@ -7,18 +7,22 @@ export function cleanText(value, max = 120) {
   return String(value ?? "").trim().replace(/\s+/g, " ").slice(0, max);
 }
 
-export function validateCreateClient(input = {}) {
+export function validateClientRegistration(input = {}) {
   const firstName = cleanText(input.firstName, 60);
   const lastName = cleanText(input.lastName, 60);
   const email = cleanText(input.email, 254).toLowerCase();
   const password = String(input.password ?? "");
-  const idempotencyKey = cleanText(input.idempotencyKey, 80);
   if (!firstName || !lastName) throw new Error("Nome e cognome sono obbligatori.");
   if (!EMAIL_RX.test(email)) throw new Error("Email non valida.");
   if (password.length < 12 || password.length > 128) throw new Error("La password deve avere tra 12 e 128 caratteri.");
   if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) throw new Error("La password deve includere maiuscola, minuscola e numero.");
+  return { firstName, lastName, email, password };
+}
+
+export function validateCreateClient(input = {}) {
+  const idempotencyKey = cleanText(input.idempotencyKey, 80);
   if (!ID_RX.test(idempotencyKey)) throw new Error("Identificativo richiesta non valido.");
-  return { firstName, lastName, email, password, idempotencyKey };
+  return { ...validateClientRegistration(input), idempotencyKey };
 }
 
 function dateMs(value) {

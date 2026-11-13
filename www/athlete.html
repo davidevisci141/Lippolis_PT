@@ -576,7 +576,10 @@
   .co-hi{flex:1; min-width:0;}
   .co-hn{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14.5px; color:var(--text);}
   .co-hs{font-size:11px; color:var(--muted); margin-top:2px;}
-  .co-thread{display:flex; flex-direction:column; gap:10px; padding-bottom:8px;}
+  .co-thread{display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--surface2);border:1px solid var(--line-soft);border-radius:16px;min-height:180px;}
+  .co-thread .co-msg{white-space:pre-wrap;overflow-wrap:anywhere;}
+  .co-notify{margin-left:auto;flex:none;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--surface2);color:var(--text);cursor:pointer;font:700 11px 'Manrope',system-ui,sans-serif;}
+  .co-send-status{font-size:12px;color:var(--danger-ink);margin:4px 0;}
   .co-msg{max-width:84%; padding:11px 13px; border-radius:16px; font-size:13px; line-height:1.5;}
   .co-msg.coach{align-self:flex-start; background:var(--surface); border:1px solid var(--line-soft); color:var(--text); border-bottom-left-radius:6px;}
   .co-msg.atleta{align-self:flex-end; background:var(--accent); color:var(--on-accent); border-bottom-right-radius:6px;}
@@ -1004,9 +1007,10 @@
   // escalation infortunio, segnalazioni su singolo esercizio, feedback di fine sessione,
   // check-in biofeedback. In produzione ogni item diventa una riga leggibile dal coach.
   const COACH_NOME='Vittorio Lippolis';
+  let chatCoachName=COACH_NOME;
   function seedThread(){ /* nessun messaggio precompilato */ }
   function unreadCoach(){ return thread.filter(m=>m.from==='coach' && !m.letto).length; }
-  function markCoachRead(){ let ch=false; thread.forEach(m=>{ if(m.from==='coach' && !m.letto){ m.letto=true; ch=true; } }); if(ch) saveState(); }
+  function markCoachRead(){ if(!document.hidden)void window.lippolisChat?.read(); }
 
   // Il canale verso il coach è riservato alle urgenze: notifica Vittorio e lo obbliga
   // a rispondere. Tutto il resto (check-in, feedback, dubbi) va nel diario o nella coda
@@ -1040,20 +1044,20 @@
   let urgSel=null, urgTesto='', difSel=null, difTesto='';
 
   function renderCoach(){
-    markCoachRead();
     if(coVista==='urgenza') return renderCoachUrgenza();
     if(coVista==='differita') return renderCoachDifferita();
     renderCoachHome();
   }
 
   function renderCoachHome(){
-    const iniz=COACH_NOME.split(' ').map(w=>w[0]).join('');
+    const iniz=chatCoachName.split(/\s+/).slice(0,2).map(w=>w[0]).join('');
     const caso=casoAperto();
     const inAttesa=differite.filter(d=>d.stato==='in attesa').length;
     let html=`<div class="pagetitle">Coach</div>
       <div class="co-head">
-        <div class="co-av">${iniz}</div>
-        <div class="co-hi"><div class="co-hn">${COACH_NOME}</div><div class="co-hs">${caso?'Caso aperto · ti risponde a breve':'Nessuna urgenza aperta'}</div></div>
+        <div class="co-av">${esc(iniz)}</div>
+        <div class="co-hi"><div class="co-hn" id="chatCoachName">${esc(chatCoachName)}</div></div>
+        ${window.lippolisChat?`<button type="button" class="co-notify" id="athleteChatNotify">${esc(window.lippolisChat.notificationLabel())}</button>`:''}
       </div>`;
 
     if(caso){
@@ -1068,40 +1072,55 @@
           <b>Scrivi al tuo PT o segnala un’urgenza.</b>
           </div>
         <button class="co-urg" id="coUrg">${I.alertTri}<span><b>Segnala un'urgenza</b><i>Dolore, problema di salute, stop prolungato</i></span></button>
-        <button class="co-alt" id="coDif">${I.coach}<span><b>Lascia una domanda per Vittorio</b><i>${inAttesa?inAttesa+' in attesa':'Risponde al prossimo controllo scheda'}</i></span></button>`;
+        <button class="co-alt" id="coDif">${I.coach}<span><b>Lascia una domanda per il tuo PT</b><i>${inAttesa?inAttesa+' in attesa':'Risponde al prossimo controllo scheda'}</i></span></button>`;
       html+=`<div class="co-sep">Conversazioni</div><div class="co-thread" id="coThread"></div><div class="co-comp"><textarea id="coTa" placeholder="Scrivi al tuo PT…" rows="1"></textarea><button class="co-send" id="coSend" aria-label="Invia">${I.send}</button></div>`;
     }
-    view.innerHTML=html;
+    view.innerHTML=html+'<p class="co-send-status" id="coSendStatus" role="status"></p>';
 
     const th=document.getElementById('coThread');
     if(th) dipingiThread(th);
+    markCoachRead();
+    const notify=document.getElementById('athleteChatNotify');
+    if(notify)notify.onclick=async()=>{notify.textContent=await window.lippolisChat.enableChatNotifications();};
 
     const u=document.getElementById('coUrg'); if(u) u.onclick=()=>{ urgSel=null; urgTesto=''; coVista='urgenza'; renderCoach(); };
     const df=document.getElementById('coDif'); if(df) df.onclick=()=>{ difSel=null; difTesto=''; coVista='differita'; renderCoach(); };
 
     const ta=document.getElementById('coTa');
     if(ta){
-      ta.addEventListener('input',()=>{ ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,110)+'px'; });
-      if(coachDraft){ ta.value=coachDraft; coachDraft=''; }
-      document.getElementById('coSend').onclick=()=>{
+      ta.maxLength=4000;
+      ta.setAttribute('aria-label','Scrivi al tuo PT');
+      ta.value=coachDraft;
+      ta.addEventListener('input',()=>{ coachDraft=ta.value; ta.style.height='auto'; ta.style.height=Math.min(ta.scrollHeight,110)+'px'; });
+      const send=document.getElementById('coSend'), status=document.getElementById('coSendStatus');
+      send.onclick=async()=>{
         const v=ta.value.trim(); if(!v) return;
-        pushToCoach('message', esc(v)); ta.value=''; renderCoach(); view.scrollTop=view.scrollHeight;
+        if(send.disabled)return;
+        if(!window.lippolisChat){status.textContent='Chat non disponibile. Controlla la connessione.';return;}
+        send.disabled=true;status.textContent='';
+        try{
+          if(!await window.lippolisChat.send(v)){status.textContent='Invio non riuscito. Riprova.';return;}
+          if(coachDraft.trim()===v){coachDraft='';ta.value='';}
+          view.scrollTop=view.scrollHeight;
+        }finally{send.disabled=false;}
       };
+      ta.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();send.click();}};
     }
-    setTimeout(()=>{ if(casoAperto()) view.scrollTop=view.scrollHeight; },0);
+    setTimeout(()=>{ if(activeTab==='coach'&&coVista==='home'&&thread.length) view.scrollTop=view.scrollHeight; },0);
   }
 
   function dipingiThread(th){
+    th.replaceChildren();
+    th.setAttribute('role','log');
+    th.setAttribute('aria-label','Messaggi');
+    if(!thread.length){const empty=document.createElement('p');empty.className='nodata';empty.textContent='Nessun messaggio. Scrivi al tuo PT.';th.appendChild(empty);}
     thread.slice().sort((a,b)=>a.ts-b.ts).forEach(m=>{
       const d=document.createElement('div');
-      if(m.from==='sistema'){ d.className='co-msg sys'; d.innerHTML=m.testo; }
-      else if(m.tipo==='urgenza'){
-        d.className='co-msg esc';
-        d.innerHTML=`<b>${I.alertTri} Urgenza inviata${m.chiuso?' · chiusa':''}</b>${m.testo}<span class="ts">${fmtDataOra(m.ts)}</span>`;
-      } else {
-        d.className='co-msg '+(m.from==='coach'?'coach':'atleta');
-        d.innerHTML=`${m.from==='coach'?esc(m.testo):m.testo}<span class="ts">${fmtDataOra(m.ts)}</span>`;
-      }
+      d.className='co-msg '+(m.tipo==='urgenza'?'esc':m.from==='coach'?'coach':m.from==='sistema'?'sys':'atleta');
+      if(m.tipo==='urgenza'){const title=document.createElement('b');title.textContent='Urgenza';d.appendChild(title);}
+      const text=String(m.testo||'');
+      d.append(m.meta?.plainText||m.from==='coach'?text:text.replace(/<br\s*\/?>/gi,'\n').replace(/<\/?b>/gi,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
+      const stamp=document.createElement('span');stamp.className='ts';stamp.textContent=fmtDataOra(m.ts)+(m.from==='atleta'&&m.letto?' · Letto':'');d.appendChild(stamp);
       th.appendChild(d);
     });
   }
@@ -2897,12 +2916,29 @@
     applyNutrition: (value)=>{ nutrition=value; if(activeTab==='consigli')renderConsigli(); },
     applyCoachSections: (value)=>{coachSections=value||{};if(activeTab==='consigli'||(activeTab==='altro'&&altroDetail)||activeTab==='workout'&&workoutView==='detail'&&!view.contains(document.activeElement))renderView();},
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
+    openChat: ()=>showTab('coach'),
+    isChatOpen: ()=>activeTab==='coach'&&coVista==='home',
+    setChatCoach: name=>{
+      chatCoachName=String(name);
+      const heading=document.getElementById('chatCoachName');
+      if(heading){
+        heading.textContent=chatCoachName;
+        view.querySelector('.co-av').textContent=chatCoachName.split(/\s+/).slice(0,2).map(w=>w[0]).join('');
+      }
+    },
     applyMessages: (messages)=>{
       thread=messages.filter(x=>x.channel==='thread');
       diario=messages.filter(x=>x.channel==='diary');
       differite=messages.filter(x=>x.channel==='deferred');
       try{ const d=window.lippolisAthleteApi.snapshot(); d.thread=thread; d.diario=diario; d.differite=differite; d.salvato=Date.now(); localStorage.setItem(LS_KEY,JSON.stringify(d)); }catch(e){}
-      if(activeTab==='coach') renderCoach();
+      const log=document.getElementById('coThread');
+      if(activeTab==='coach'&&coVista==='home'&&log){
+        const atBottom=view.scrollHeight-view.scrollTop-view.clientHeight<90;
+        dipingiThread(log);
+        if(atBottom)view.scrollTop=view.scrollHeight;
+        markCoachRead();
+      }else if(activeTab==='coach'&&coVista==='home')renderCoach();
+      renderNav();
     }
   };
 

@@ -3,6 +3,7 @@ import { getAuthorizedSession, friendlyAuthError, logout } from "./auth.mjs";
 import { mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
 import { parseExerciseVideo } from "./exercise-video.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
+import { enableChatNotifications, markChatRead, notificationLabel, notifyChat } from "./chat.mjs";
 
 const ui = window.CoachMock, $ = (id) => document.getElementById(id);
 const escape = (v) => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -18,7 +19,7 @@ const field = (id,label,type="text",value="",required=false,autocomplete="") =>
 const textarea = (id,label,value="") => `<label class="fld"><span>${label}</span><textarea class="ta" id="${id}" rows="4">${escape(value)}</textarea></label>`;
 const fail = (err) => ui.toast(friendlyAuthError(err));
 const checked = ({data,error}) => { if(error) throw error; return data; };
-const sectionRows = new Map(), snapshots = new Map(), published = new Map(), versions = new Map(), drafts = new Map();
+const sectionRows = new Map(), snapshots = new Map(), stateRevisions = new Map(), published = new Map(), versions = new Map(), drafts = new Map();
 const sectionWrites = new Map();
 let profile, uid, workspaceRevision=0, workspaceSignature="", saveQueue=Promise.resolve(), selectEpoch=0, loadEpoch=0, workspaceLoaded=false;
 let workspace = {exerciseEdits:{}, templates:[], collaborators:[], review:{}, priority:{}, recipes:[], preferences:{}};
@@ -116,13 +117,15 @@ function changeSection(client,section,change){
 }
 async function loadClientRows(client) {
   const [snapshot,current,history,clientDrafts,sections]=await Promise.all([
-    supabase.from("athlete_states").select("snapshot").eq("user_id",client.id).maybeSingle(),
+    supabase.from("athlete_states").select("snapshot,revision").eq("user_id",client.id).maybeSingle(),
     supabase.from("programs").select("*").eq("athlete_id",client.id).maybeSingle(),
     supabase.from("program_versions").select("*").eq("athlete_id",client.id).order("published_at",{ascending:false}).limit(40),
     supabase.from("program_drafts").select("*").eq("athlete_id",client.id).eq("coach_id",uid).eq("status","draft").order("updated_at",{ascending:false}).limit(40),
     supabase.from("coach_client_sections").select("*").eq("athlete_id",client.id)
   ]);
-  snapshots.set(client.id,checked(snapshot)?.snapshot||{});
+  const state=checked(snapshot);
+  snapshots.set(client.id,state?.snapshot||{});
+  stateRevisions.set(client.id,state?.revision||0);
   const plan=checked(current); if(plan)published.set(client.id,plan); else published.delete(client.id);
   versions.set(client.id,checked(history)); drafts.set(client.id,checked(clientDrafts));
   for(const section of checked(sections)){
@@ -239,18 +242,16 @@ function publishNutrition(plan) {
 }
 
 function createClient(){
-  const fields=field("mockFirst","Nome","text","",true,"off")
-    +field("mockLast","Cognome","text","",true,"off")
-    +field("mockEmail","Email","email","",true,"off")
-    +field("mockPassword","Password iniziale","password","",true,"new-password")
-    +button("mockGenerate","Genera password");
-  showModal("Aggiungi cliente",fields,"Crea account",async ()=>{
-    const email=val("mockEmail"),password=val("mockPassword");
-    await adminCall("createClient",{firstName:val("mockFirst"),lastName:val("mockLast"),email,password,idempotencyKey:crypto.randomUUID()});
-    await loadDirectory();ui.go("clienti");
-    ui.closeModal();showModal("Account creato",`<p>${escape(email)}</p><p><b>${escape(password)}</b></p>`,"Chiudi",async()=>{});
+  showModal("Aggiungi cliente","<p>Genera un link da inviare al cliente. Potrà usarlo una volta entro 7 giorni per creare il suo account.</p>","Genera invito",async ()=>{
+    const token=checked(await supabase.rpc("create_client_invite"));
+    const link=new URL("invito.html",location.href);
+    link.hash=new URLSearchParams({token}).toString();
+    showModal("Invito cliente",`<p>Condividi questo link con il cliente.</p><label class="fld">Link di invito<input class="inp" id="mockInvite" readonly value="${escape(link.href)}"></label>${button("mockCopyInvite","Copia link")}<p id="mockInviteStatus" role="status"></p>`,"Chiudi",async()=>{});
+    $("mockCopyInvite").onclick=async()=>{
+      try{await navigator.clipboard.writeText(link.href);$("mockInviteStatus").textContent="Link copiato.";}
+      catch{$("mockInvite").select();$("mockInviteStatus").textContent="Copia il link selezionato.";}
+    };
   });
-  $("mockGenerate").onclick=()=>{$("mockPassword").value="Aa7!"+crypto.randomUUID().replaceAll("-","").slice(0,16);$("mockPassword").type="text";};
 }
 async function openClient(c){
   const epoch=++selectEpoch;
@@ -378,19 +379,96 @@ function editableList(c,section,title,isSubscription=false) {
     $("mockDelEntry"+i).onclick=async()=>{if(!confirm("Eliminare la voce?"))return;try{await saveSection(c,section,{items:items(c,section).filter(x=>x.id!==it.id)});refreshSignals();editableList(c,section,title,isSubscription);}catch(error){fail(error);}};
   });
 }
-async function messageList(c){
-  drawClient(c,"Messaggi",row("Caricamento…")+textarea("mockMessage","Scrivi un messaggio")+button("mockSend","Invia",true));
-  const root=ui.main.querySelector(".sec");
-  try{
-    const messages=checked(await supabase.from("messages").select("*").eq("athlete_id",c.id).eq("channel","thread").order("created_at",{ascending:false}).limit(100)).reverse();
-    if(!root.isConnected)return;
-    root.firstElementChild.outerHTML=messages.length?messages.map(m=>row(m.sender_id===uid?"Tu":c.nome,m.text)).join(""):row("Nessun messaggio");
-    $("mockSend").onclick=async(e)=>{
-      const text=val("mockMessage"); if(!text||text.length>4000)return ui.toast("Scrivi da 1 a 4000 caratteri.");
-      e.currentTarget.disabled=true;
-      try{await sendMessage(c.id,text);messageList(c);}catch(error){fail(error);if($("mockSend"))$("mockSend").disabled=false;}
-    };
-  }catch(error){fail(error);}
+let chatClient=null, inbox=[], inboxRequest=0, threadRequest=0, inboxLoaded=false;
+const chatTime=(value)=>value?new Intl.DateTimeFormat("it-IT",{hour:"2-digit",minute:"2-digit"}).format(new Date(value)):"";
+function paintChatContacts(){
+  const list=$("chatContacts");
+  if(!list)return;
+  const search=val("chatSearch").toLocaleLowerCase("it");
+  const contacts=inbox.filter(c=>c.nome.toLocaleLowerCase("it").includes(search)||c.email?.toLocaleLowerCase("it").includes(search));
+  list.innerHTML=contacts.map(c=>`<button type="button" class="chat-contact" data-chat-id="${escape(c.id)}" aria-current="${chatClient===c.id}"><span class="chat-avatar">${escape(ui.initials(c.nome))}</span><span class="chat-contact-copy"><strong>${escape(c.nome)}</strong><small>${escape(c.latest_text||"Nessun messaggio")}</small></span><span class="chat-contact-meta">${chatTime(c.latest_at)}${c.unread?`<span class="chat-count" aria-label="${c.unread} non letti">${c.unread}</span>`:""}</span></button>`).join("")||'<p class="chat-empty">Nessuna conversazione trovata</p>';
+  list.querySelectorAll("[data-chat-id]").forEach(button=>button.onclick=()=>openCoachChat(button.dataset.chatId));
+}
+async function refreshInbox(){
+  const request=++inboxRequest;
+  const data=checked(await supabase.rpc("coach_chat_inbox"));
+  if(request!==inboxRequest)return;
+  const byId=new Map(data.map(item=>[item.athlete_id,item]));
+  const previous=new Map(inbox.map(item=>[item.id,item]));
+  inbox=ui.clienti.map(c=>({...c,...byId.get(c.id)})).sort((a,b)=>
+    Number(!!b.unread)-Number(!!a.unread)||(Date.parse(b.latest_at)||0)-(Date.parse(a.latest_at)||0)||a.nome.localeCompare(b.nome,"it"));
+  if(inboxLoaded&&inbox.some(item=>Number(item.unread||0)>Number(previous.get(item.id)?.unread||0))
+      &&ui.notifiche.find(n=>n.t==="Nuovo messaggio")?.on){
+    if(ui.view!=="chat"&&!document.hidden)ui.toast("Nuovo messaggio da un cliente");
+    void notifyChat("coach");
+  }
+  inboxLoaded=true;
+  const total=inbox.reduce((sum,item)=>sum+Number(item.unread||0),0);
+  const badge=$("coachChatUnread");
+  badge.hidden=!total;badge.textContent=total>99?"99+":String(total);
+  paintChatContacts();
+}
+async function refreshCoachThread(){
+  const log=$("chatLog"), client=chatClient;
+  if(!log||!client)return;
+  const request=++threadRequest;
+  const messages=checked(await supabase.from("messages").select("*").eq("athlete_id",client).eq("channel","thread")
+    .order("created_at",{ascending:false}).order("id",{ascending:false}).limit(150)).reverse();
+  if(request!==threadRequest||!log.isConnected||chatClient!==client)return;
+  const atBottom=!log.dataset.loaded||log.scrollHeight-log.scrollTop-log.clientHeight<64;
+  log.innerHTML=messages.map(m=>`<div class="chat-bubble${m.sender_id===uid?" mine":""}">${m.type==="urgenza"?"<strong>Urgenza</strong><br>":""}${escape(m.text)}<time datetime="${escape(m.created_at)}">${escape(displayDate(m.created_at))} · ${chatTime(m.created_at)}${m.sender_id===uid&&m.read_at?" · Letto":""}</time></div>`).join("")||'<p class="chat-empty">Nessun messaggio. Inizia la conversazione.</p>';
+  log.dataset.loaded="1";
+  if(atBottom)log.scrollTop=log.scrollHeight;
+  if(!document.hidden&&messages.some(m=>m.sender_id!==uid&&!m.read_at)){
+    await markChatRead(client,messages,uid);
+    await refreshInbox();
+  }
+}
+const chatDrafts=new Map();
+function openCoachChat(clientId){
+  chatClient=clientId;
+  if(ui.view!=="chat"){ui.go("chat");return;}
+  paintChatContacts();
+  paintChatPanel();
+}
+function paintChatPanel(){
+  const panel=$("chatPanel"), client=ui.clienti.find(c=>c.id===chatClient);
+  if(!panel)return;
+  $("chatShell").classList.toggle("has-chat",!!client);
+  if(!client){panel.innerHTML='<p class="chat-empty">Seleziona un cliente</p>';return;}
+  panel.innerHTML=`<div class="chat-title"><button type="button" class="back" data-mobile-back aria-label="Torna alle conversazioni">${ui.I.chevL}</button><span class="chat-avatar">${escape(ui.initials(client.nome))}</span><strong>${escape(client.nome)}</strong></div>
+    <div class="chat-log" id="chatLog" role="log" aria-label="Messaggi"></div>
+    <div class="chat-compose"><textarea id="chatText" rows="1" maxlength="4000" aria-label="Scrivi un messaggio" placeholder="Scrivi un messaggio…"></textarea><button type="button" id="chatSend" class="btn btn-primary">Invia</button></div><p id="chatStatus" class="chat-status" role="status"></p>`;
+  panel.querySelector("[data-mobile-back]").onclick=()=>openCoachChat(null);
+  const send=$("chatSend"), input=$("chatText"), status=$("chatStatus");
+  input.value=chatDrafts.get(client.id)||"";
+  input.oninput=()=>chatDrafts.set(client.id,input.value);
+  input.onkeydown=event=>{
+    if(event.key==="Enter"&&!event.shiftKey&&!event.isComposing){event.preventDefault();send.click();}
+  };
+  send.onclick=async()=>{
+    const text=input.value.trim();
+    if(!text||send.disabled)return;
+    send.disabled=true;status.textContent="";
+    try{
+      await sendMessage(client.id,text);
+      if(input.value.trim()===text){input.value="";chatDrafts.delete(client.id);}
+      if(input.isConnected){input.focus();await refreshCoachThread();}
+      await refreshInbox();
+    }catch(error){status.textContent=friendlyAuthError(error);}
+    finally{send.disabled=false;}
+  };
+  void refreshCoachThread().catch(error=>{status.textContent=friendlyAuthError(error);});
+}
+function renderInbox(){
+  ui.main.innerHTML=ui.pageHead("Chat",button("chatNotify",notificationLabel()))+
+    '<div class="chat-shell" id="chatShell"><aside class="chat-sidebar" aria-label="Conversazioni"><input id="chatSearch" type="search" aria-label="Cerca cliente" placeholder="Cerca cliente…"><div id="chatContacts" class="chat-contacts"></div></aside><section class="chat-panel" id="chatPanel"></section></div>';
+  $("back").onclick=()=>ui.go("home");
+  $("chatSearch").oninput=paintChatContacts;
+  $("chatNotify").onclick=async event=>{const control=event.currentTarget;control.textContent=await enableChatNotifications();};
+  paintChatContacts();
+  paintChatPanel();
+  void refreshInbox().catch(fail);
 }
 async function sendMessage(clientId,text){
   checked(await supabase.from("messages").insert({athlete_id:clientId,sender_id:uid,target_id:clientId,channel:"thread",text}));
@@ -451,7 +529,7 @@ function clientSection(c,section){
   else if(section==="questionari")questionnaire(c);
   else if(section==="documenti")listFiles(c,"documents","Documenti");
   else if(section==="agenda")editableList(c,"agenda","Agenda");
-  else if(section==="messaggi")messageList(c);
+  else if(section==="messaggi")openCoachChat(c.id);
   else if(section==="info")clientInfo(c);
   else return false;
   return true;
@@ -617,17 +695,55 @@ function settings(panel,tab){
   entries.forEach((it,i)=>{$("mockSettingEdit"+i).onclick=()=>edit(it);$("mockSettingRemove"+i).onclick=async()=>{if(confirm("Rimuovere la voce?")){entries.splice(i,1);if(await saveWorkspace())settings(panel,tab);}};});
 }
 
+const biaFields={
+  weightKg:"Peso (kg)",skeletalMuscleKg:"Massa muscolare (kg)",bodyFatMassKg:"Massa grassa (kg)",targetWeightKg:"Peso obiettivo (kg)",
+  age:"Età",heightCm:"Altezza (cm)",bmi:"IMC",obesityDegreePercent:"Grado di obesità (%)",bodyFatPercent:"Grasso corporeo (%)",
+  totalBodyWaterL:"Acqua corporea (L)",proteinKg:"Proteine (kg)",mineralsKg:"Minerali (kg)",visceralFatLevel:"Grasso viscerale",
+  basalMetabolicRateKcal:"Metabolismo basale (kcal)",waistHipRatio:"Rapporto vita/fianchi",score:"Punteggio",
+  weightControlKg:"Controllo peso (kg)",fatControlKg:"Controllo grasso (kg)",muscleControlKg:"Controllo muscolo (kg)"
+};
+const requiredBiaNumbers=new Set(["weightKg","skeletalMuscleKg","bodyFatMassKg"]);
+function editBia(c,record){
+  const revision=stateRevisions.get(c.id);
+  const date=new Date(record.measuredAt);
+  const local=Number.isFinite(date.valueOf())?new Date(date.valueOf()-date.getTimezoneOffset()*60000).toISOString().slice(0,16):"";
+  const fields=Object.entries(biaFields).map(([key,label])=>field("editBia_"+key,label,"text",record[key]??"",requiredBiaNumbers.has(key))).join("");
+  const sex=`<label class="fld">Sesso<select class="sel" id="editBiaSex"><option value="">Non indicato</option><option value="male" ${record.sex==="male"?"selected":""}>Maschile</option><option value="female" ${record.sex==="female"?"selected":""}>Femminile</option></select></label>`;
+  showModal("Modifica referto BIA",field("editBiaDate","Data e ora","datetime-local",local,true)+`<div class="bia-edit-grid">${sex}${fields}</div>`,"Salva modifiche",async()=>{
+    const measuredAt=new Date(val("editBiaDate"));
+    const values=Object.fromEntries(Object.keys(biaFields).map(key=>{
+      const input=val("editBia_"+key);
+      return [key,input===""?null:Number(input.replace(",","."))];
+    }));
+    if(!Number.isFinite(measuredAt.valueOf())||Object.values(values).some(n=>n!==null&&!Number.isFinite(n)))throw new Error("Controlla data e valori numerici.");
+    try{
+      await adminCall("updateBia",{clientUid:c.id,biaId:record.id,expectedRevision:revision,measuredAt:measuredAt.toISOString(),sex:val("editBiaSex")||null,...values});
+    }catch(error){
+      if(error.code==="aborted"){await loadClientRows(c);clientBia(c);}
+      throw error;
+    }
+    await loadClientRows(c);clientBia(c);ui.toast("Referto aggiornato");
+  });
+}
 function clientBia(c){
   const data=(snapshots.get(c.id)?.bia||[]).slice().sort((a,b)=>Date.parse(b.measuredAt)-Date.parse(a.measuredAt));
   const plots=[["weightKg","Peso"],["skeletalMuscleKg","Massa muscolare"],["fatFreeMassKg","Massa magra"]].map(([key,title])=>{
     const points=data.slice().reverse().filter(r=>r[key]!=null&&Number.isFinite(Number(r[key]))).map(r=>({v:Number(r[key]),l:displayDate(r.measuredAt)}));
     return points.length>1?`<section class="metric"><h3>${title}</h3>${ui.buildChart(points.slice(-12))}</section>`:"";
   }).join("");
-  const records=data.map((r,i)=>row(displayDate(r.measuredAt),`Peso ${r.weightKg} kg · Muscolo ${r.skeletalMuscleKg} kg · Massa magra ${r.fatFreeMassKg??"—"} kg`,r.reportPath?button("mockBiaFile"+i,"Apri referto"):"")).join("");
+  const records=data.map((r,i)=>row(displayDate(r.measuredAt),`Peso ${r.weightKg} kg · Muscolo ${r.skeletalMuscleKg} kg · Massa magra ${r.fatFreeMassKg??"—"} kg`,`<span class="bia-row-actions">${r.reportPath?button("mockBiaFile"+i,"Apri referto"):""}${r.id?button("mockBiaEdit"+i,"Modifica")+button("mockBiaDelete"+i,"Elimina"):""}</span>`)).join("");
   drawClient(c,"Referti BIA",plots+records||empty("Nessuna rilevazione"),button("mockBiaAdd","Carica referto",true)+button("mockBiaMetrics","Metriche")+(plots?button("mockBiaPrint","Stampa andamento"):""));
   $("mockBiaMetrics").onclick=()=>ui.renderCliMetriche(c);
   if(plots)$("mockBiaPrint").onclick=()=>window.print();
-  data.forEach((r,i)=>{if(r.reportPath)$("mockBiaFile"+i).onclick=()=>openFile("bia-reports",r.reportPath).catch(fail);});
+  data.forEach((r,i)=>{
+    if(r.reportPath)$("mockBiaFile"+i).onclick=()=>openFile("bia-reports",r.reportPath).catch(fail);
+    if(!r.id)return;
+    $("mockBiaEdit"+i).onclick=()=>editBia(c,r);
+    $("mockBiaDelete"+i).onclick=()=>showModal("Elimina referto",`<p>Eliminare il referto del ${escape(displayDate(r.measuredAt))}, il file originale e la sua anteprima?</p>`,"Elimina referto",async()=>{
+      await adminCall("deleteBia",{clientUid:c.id,biaId:r.id});
+      await loadClientRows(c);clientBia(c);ui.toast("Referto eliminato");
+    });
+  });
   $("mockBiaAdd").onclick=()=>{
     let result,file;
     const fields={measuredAtLocal:"Data e ora del referto",weightKg:"Peso (kg)",skeletalMuscleKg:"Massa muscolare (kg)",bodyFatMassKg:"Massa grassa (kg)",targetWeightKg:"Peso obiettivo (kg)"};
@@ -712,17 +828,30 @@ async function start(){
     badge.className="autosave";
     badge.innerHTML='<span class="as-dot"></span><span id="asTxt" role="status">Salvataggio automatico</span>';
     document.body.append(badge);
-    $("brand").disabled=false;ui.go("home");
+    $("brand").disabled=false;
+    $("coachChat").disabled=false;
+    $("coachChat").onclick=()=>ui.go("chat");
+    ui.go(location.hash==="#chat"?"chat":"home");
+    void refreshInbox().catch(fail);
+    const refreshChat=()=>{void refreshInbox().catch(fail);if(ui.view==="chat")void refreshCoachThread().catch(fail);};
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshChat();});
+    navigator.serviceWorker?.addEventListener("message",event=>{if(event.data?.type==="open-chat")ui.go("chat");});
     let update;
     const reload=()=>{clearTimeout(update);update=setTimeout(async()=>{try{await loadDirectory();if(["home","priorita","revisione","agenda"].includes(ui.view))ui.render();}catch(error){fail(error);}},300);};
     let feed=supabase.channel("coach-mockup:"+uid);
-    for(const table of ["athlete_states","programs","profiles","messages","coach_client_sections"])feed=feed.on("postgres_changes",{event:"*",schema:"public",table},reload);
-    feed.subscribe();
+    for(const table of ["athlete_states","programs","coach_client_sections"])feed=feed.on("postgres_changes",{event:"*",schema:"public",table},reload);
+    feed.on("postgres_changes",{event:"*",schema:"public",table:"profiles"},async()=>{
+      try{await loadDirectory();refreshChat();if(["home","clienti"].includes(ui.view))ui.render();}catch(error){fail(error);}
+    }).on("postgres_changes",{event:"*",schema:"public",table:"messages"},event=>{
+      if(event.new?.channel!=="thread")return;
+      refreshChat();
+      if(event.eventType==="INSERT"&&event.new.sender_id!==uid&&event.new.type==="urgenza")reload();
+    }).subscribe(status=>{if(status==="SUBSCRIBED")refreshChat();});
   }catch(error){
     ui.main.innerHTML=empty("Connessione non riuscita",friendlyAuthError(error))+button("mockRetry","Riprova",true);
     $("mockRetry").onclick=()=>location.reload();
   }
 }
-window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,subscriptions,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes};
+window.CoachDB={saveWorkspace,saveProgram,assignProgram,publishNutrition,createClient,openClient,programHistory,clientSection,subscriptions,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox};
 $("coachLogout").onclick=signOutCoach;
 void start();

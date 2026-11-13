@@ -70,6 +70,10 @@ async function startAthlete({ onSave, getState, getProgram } = {}) {
     sessionStorage: { getItem: (key) => sessionStorage.get(key), setItem: (key, value) => sessionStorage.set(key, value) },
     getAuthorizedSession: async () => ({ user: { uid: "athlete-1" }, profile: { firstName: "Ari", lastName: "Rossi" } }),
     watchAthleteNutrition(uid, callback) { callback({ state: "ready", plan: { uid } }); return () => {}; },
+    notificationLabel: () => "Attiva notifiche",
+    enableChatNotifications() {},
+    markChatRead() {},
+    notifyChat() {},
     friendlyAuthError: (error) => error.message,
     alert: (message) => alerts.push(message),
     location: { replace: (value) => alerts.push(value) },
@@ -148,6 +152,22 @@ test("dopo un conflitto il dispositivo mostra anche la cronologia ricevuta dal s
   assert.equal(athlete.rpcCalls[1].p_expected_revision, 2);
   assert.equal(athlete.rpcCalls[1].p_snapshot.bia[0].id, "bia-from-coach");
   assert.equal(athlete.snapshot().bia[0].id, "bia-from-coach");
+  assert.equal(athlete.snapshot().noteSessione["0-0"], "Seduta in corso");
+});
+
+test("la correzione e la rimozione BIA del PT prevalgono sulla copia offline", async () => {
+  const report = { id: "bia-1", measuredAt: "2026-11-12", weightKg: 80 };
+  let state = { revision: 1, snapshot: { ...initialSnapshot(), bia: [report] } };
+  const athlete = await startAthlete({ getState: () => state });
+  state = { revision: 2, snapshot: { ...state.snapshot, bia: [{ ...report, weightKg: 81 }] } };
+  await athlete.emit("athlete_states", state);
+  assert.equal(athlete.snapshot().bia[0].weightKg, 81);
+  athlete.write({ bia: [report], noteSessione: { "0-0": "Seduta in corso" } });
+  state = { revision: 3, snapshot: { ...state.snapshot, bia: [] } };
+  await athlete.emit("athlete_states", state);
+  await athlete.runScheduledSave();
+  assert.equal(athlete.rpcCalls.at(-1).p_snapshot.bia.length, 0);
+  assert.equal(athlete.snapshot().bia.length, 0);
   assert.equal(athlete.snapshot().noteSessione["0-0"], "Seduta in corso");
 });
 

@@ -1,0 +1,29 @@
+.chat-count{display:inline-grid;min-width:22px;height:22px;place-items:center;padding:0 5px;border-radius:999px;background:#12c7a2;color:#092721;font:800 11px system-ui}
+.chat-count[hidden]{display:none}
+.chat-shell{display:grid;grid-template-columns:minmax(225px,31%) minmax(0,1fr);min-height:560px;height:calc(100dvh - 170px);background:#fff;color:#182824;border:1px solid #d7e4df;border-radius:18px;overflow:hidden}
+.chat-sidebar,.chat-panel{display:flex;min-height:0;min-width:0;flex-direction:column}
+.chat-sidebar{border-right:1px solid #d7e4df}
+.chat-sidebar>input,.chat-compose textarea{min-width:0;padding:10px 12px;border:1px solid #c9d9d3;border-radius:10px;background:#fff;color:#182824;font:inherit}
+.chat-sidebar>input{margin:12px}
+.chat-contacts,.chat-log{overflow:auto;min-height:0;flex:1}
+.chat-contact{width:100%;display:flex;align-items:center;gap:10px;padding:12px;border:0;border-bottom:1px solid #ebf0ee;background:#fff;text-align:left;color:inherit;cursor:pointer;font:inherit}
+.chat-contact:hover,.chat-contact[aria-current=true]{background:#e8f7f2}
+.chat-avatar{width:38px;height:38px;flex:none;display:grid;place-items:center;border-radius:50%;background:#cceee4;color:#075c4b;font-weight:800}
+.chat-contact-copy{min-width:0;flex:1}.chat-contact-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#4f6961;margin-top:4px}
+.chat-contact-meta{display:grid;justify-items:end;gap:4px;color:#4f6961;font-size:11px;white-space:nowrap}
+.chat-title,.chat-compose{display:flex;gap:10px;align-items:center;padding:12px;border-bottom:1px solid #d7e4df}
+.chat-title button[data-mobile-back]{display:none}
+.chat-log{background:#eef5f1;display:flex;flex-direction:column;gap:9px;padding:16px}
+.chat-bubble{align-self:flex-start;max-width:min(85%,540px);padding:8px 11px;background:#fff;border-radius:5px 13px 13px 13px;white-space:pre-wrap;overflow-wrap:anywhere;color:#182824}
+.chat-bubble.mine{align-self:flex-end;background:#d6f6eb;border-radius:13px 5px 13px 13px}
+.chat-bubble time{display:block;text-align:right;color:#4a665e;font-size:11px;margin-top:4px}
+.chat-compose{border:0;border-top:1px solid #d7e4df}.chat-compose textarea{flex:1;resize:vertical}
+.chat-status{margin:0;padding:0 12px;color:#465f57;font-size:12px}.chat-status:not(:empty){padding-bottom:9px}
+.chat-empty{margin:auto;padding:16px;color:#4f6961;text-align:center}
+.bia-edit-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:8px}.bia-row-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:5px}
+@media(max-width:680px){
+  .chat-shell{display:block;min-height:380px;height:calc(100dvh - 150px)}
+  .chat-sidebar,.chat-panel{height:100%}.chat-shell:not(.has-chat) .chat-panel,.chat-shell.has-chat .chat-sidebar{display:none}
+  .chat-title button[data-mobile-back]{display:inline-flex}.chat-sidebar{border:0}
+  #coachChat{padding-inline:7px}
+}

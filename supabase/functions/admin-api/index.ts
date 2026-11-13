@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from "npm:@supabase/supabase-js@2";
-import { cleanText, validateCreateClient, validateId, validateProgram } from "../_shared/validation.mjs";
+import { cleanText, validateId, validateProgram } from "../_shared/validation.mjs";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 class ApiError extends Error { code: string; status: number; constructor(code: string, message: string, status = 400) { super(message); this.code = code; this.status = status; } }
@@ -39,32 +39,6 @@ async function ownedAthlete(coachId: string, athleteId: unknown) {
   const { data, error } = await admin.from("profiles").select("*").eq("id", id).eq("role", "athlete").eq("trainer_id", coachId).maybeSingle();
   if (error || !data) throw new ApiError("permission-denied", "Cliente non assegnato a questo PT.", 403);
   return data;
-}
-
-async function createAthleteAccount(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
-  const coach = await requireCoach(authorizationHeader); const input = validateCreateClient(body);
-  const { data: previous } = await admin.from("admin_operations").select("*").eq("actor_id", coach.user.id).eq("operation_type", "createClient").eq("idempotency_key", input.idempotencyKey).maybeSingle();
-  if (previous?.status === "completed") return previous.result;
-  if (previous && previous.request?.email !== input.email) throw new ApiError("already-exists", "Identificativo richiesta già utilizzato.", 409);
-  if (!previous) {
-    const { error } = await admin.from("admin_operations").insert({ actor_id: coach.user.id, operation_type: "createClient", idempotency_key: input.idempotencyKey, status: "reserved", request: { email: input.email } });
-    if (error?.code === "23505") return createAthleteAccount(authorizationHeader, body);
-    if (error) throw error;
-  }
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email: input.email, password: input.password, email_confirm: true,
-    user_metadata: { first_name: input.firstName, last_name: input.lastName, role: "athlete" }
-  });
-  if (createError || !created.user) {
-    if (/already|registered|exists/i.test(createError?.message || "")) throw new ApiError("already-exists", "Esiste già un account con questa email.", 409);
-    throw createError || new Error("Creazione account non riuscita.");
-  }
-  const profile = { id: created.user.id, first_name: input.firstName, last_name: input.lastName, display_name: `${input.firstName} ${input.lastName}`, email: input.email, role: "athlete", trainer_id: coach.user.id, status: "active", onboarding_complete: false };
-  const { error: profileError } = await admin.from("profiles").insert(profile);
-  if (profileError) { await admin.auth.admin.deleteUser(created.user.id); throw profileError; }
-  const result = { uid: created.user.id, email: input.email, firstName: input.firstName, lastName: input.lastName };
-  await admin.from("admin_operations").update({ status: "completed", target_user_id: created.user.id, result, updated_at: new Date().toISOString() }).eq("actor_id", coach.user.id).eq("operation_type", "createClient").eq("idempotency_key", input.idempotencyKey);
-  return result;
 }
 
 async function completeOnboarding(authorizationHeader: AuthorizationHeader) {
@@ -169,11 +143,26 @@ function validateBiaMath(values: Record<string, number | null>) {
   if (leanMass <= 0 || v("skeletalMuscleKg") > leanMass + 0.2) throw new ApiError("invalid-argument", "Massa muscolare incompatibile con la massa magra. Controlla i valori sul referto.");
 }
 async function recordBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  return writeBia(authorizationHeader,body,false);
+}
+async function updateBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  return writeBia(authorizationHeader,body,true);
+}
+async function writeBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>, editing: boolean) {
   const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
   const { data: rateAllowed, error: rateError } = await admin.rpc("consume_bia_rate_limit", { p_actor: coach.user.id });
   if (rateError) throw rateError;
   if (rateAllowed !== true) throw new ApiError("rate-limited", "Hai raggiunto il limite temporaneo di salvataggi BIA. Riprova tra qualche minuto.", 429);
-  const sourceAudit = validatedSourceAudit(body.sourceAudit);
+  const sourceAudit = editing ? null : validatedSourceAudit(body.sourceAudit);
+  const { data: current, error: readError } = await admin.from("athlete_states").select("snapshot, revision").eq("user_id", athlete.id).maybeSingle();
+  if (readError) throw readError;
+  const snapshot = current?.snapshot && typeof current.snapshot === "object" ? current.snapshot as Record<string, unknown> : {};
+  const bia = Array.isArray(snapshot.bia) ? snapshot.bia as Record<string, unknown>[] : [];
+  const previous = editing ? bia.find(item => item.id === body.biaId) : undefined;
+  if (editing && !previous) throw new ApiError("not-found", "Referto non trovato.", 404);
+  if (previous && Number(body.expectedRevision) !== Number(current?.revision)) {
+    throw new ApiError("aborted", "Lo storico è stato aggiornato. Riapri il referto e riprova.", 409);
+  }
   const parsedDate = new Date(String(body.measuredAt || ""));
   if (!Number.isFinite(parsedDate.getTime()) || parsedDate.getTime() > Date.now() + 5 * 60 * 1000) throw new ApiError("invalid-argument", "Data e ora del referto non valide.");
   const ranges: Record<string, [number, number, string]> = {
@@ -186,44 +175,59 @@ async function recordBia(authorizationHeader: AuthorizationHeader, body: Record<
   };
   const values: Record<string, number | null> = {};
   for (const [key, [min, max, label]] of Object.entries(ranges)) {
-    const value = optionalNumber(body[key], label, min, max);
+    const value = optionalNumber(Object.hasOwn(body,key) ? body[key] : previous?.[key], label, min, max);
     values[key] = value;
   }
   for (const key of ["weightKg", "bodyFatMassKg", "skeletalMuscleKg"]) if (values[key] === null) throw new ApiError("invalid-argument", `${key}: campo obbligatorio.`);
-  if (body.sex != null && body.sex !== "male" && body.sex !== "female") throw new ApiError("invalid-argument", "Sesso non valido.");
+  const sex = Object.hasOwn(body,"sex") ? body.sex : previous?.sex;
+  if (sex != null && sex !== "male" && sex !== "female") throw new ApiError("invalid-argument", "Sesso non valido.");
   validateBiaMath(values);
-  const reportPath = await validateArchivedBiaReport(body.reportPath, athlete.id);
-  const reportPreviewPath = await validateArchivedBiaReport(body.reportPreviewPath, athlete.id);
-  if (!reportPath || !reportPreviewPath) throw new ApiError("invalid-argument", "L’originale e la sua anteprima devono essere archiviati prima del salvataggio.");
-  if (reportPreviewPath !== reportPath.replace(/\.[^.]+$/, "-preview.jpg")) throw new ApiError("invalid-argument", "Il referto e la sua anteprima non corrispondono.");
-  const reportId = body.reportId == null ? null : cleanText(body.reportId, 40);
-  const { data: current, error: readError } = await admin.from("athlete_states").select("snapshot, revision").eq("user_id", athlete.id).maybeSingle();
-  if (readError) throw readError;
-  const snapshot = current?.snapshot && typeof current.snapshot === "object" ? current.snapshot as Record<string, unknown> : {};
-  const bia = Array.isArray(snapshot.bia) ? snapshot.bia as Record<string, unknown>[] : [];
-  if (bia.some((item) => Math.floor(new Date(String(item.measuredAt || "")).getTime() / 60000) === Math.floor(parsedDate.getTime() / 60000))) throw new ApiError("already-exists", "Esiste già una rilevazione BIA per questa data e ora.", 409);
+  const reportPath = previous ? previous.reportPath : await validateArchivedBiaReport(body.reportPath, athlete.id);
+  const reportPreviewPath = previous ? previous.reportPreviewPath : await validateArchivedBiaReport(body.reportPreviewPath, athlete.id);
+  if (!editing) {
+    if (typeof reportPath !== "string" || !reportPreviewPath) throw new ApiError("invalid-argument", "L’originale e la sua anteprima devono essere archiviati prima del salvataggio.");
+    if (reportPreviewPath !== reportPath.replace(/\.[^.]+$/, "-preview.jpg")) throw new ApiError("invalid-argument", "Il referto e la sua anteprima non corrispondono.");
+  }
+  const reportId = previous ? previous.reportId : body.reportId == null ? null : cleanText(body.reportId, 40);
+  if (bia.some(item => item !== previous && Math.floor(new Date(String(item.measuredAt || "")).getTime() / 60000) === Math.floor(parsedDate.getTime() / 60000))) throw new ApiError("already-exists", "Esiste già una rilevazione BIA per questa data e ora.", 409);
   const measuredAt = parsedDate.toISOString();
   const bodyFatMassKg = values.bodyFatMassKg as number;
   const weightKg = values.weightKg as number;
   const record = {
-    id: crypto.randomUUID(), measuredAt, age: values.age, sex: body.sex ?? null, heightCm: values.heightCm,
+    ...previous,
+    id: previous?.id ?? crypto.randomUUID(), measuredAt, age: values.age, sex: sex ?? null, heightCm: values.heightCm,
     weightKg, bmi: values.bmi, obesityDegreePercent: values.obesityDegreePercent,
     bodyFatPercent: values.bodyFatPercent, bodyFatMassKg, fatFreeMassKg: Math.round((weightKg - bodyFatMassKg) * 100) / 100,
     skeletalMuscleKg: values.skeletalMuscleKg, totalBodyWaterL: values.totalBodyWaterL, proteinKg: values.proteinKg,
     mineralsKg: values.mineralsKg, visceralFatLevel: values.visceralFatLevel, basalMetabolicRateKcal: values.basalMetabolicRateKcal,
     waistHipRatio: values.waistHipRatio, score: values.score, targetWeightKg: values.targetWeightKg,
     weightControlKg: values.weightControlKg, fatControlKg: values.fatControlKg, muscleControlKg: values.muscleControlKg,
-    reportId, device: "InBody120", reportPath, reportPreviewPath, sourceAudit
+    reportId, device: previous?.device ?? "InBody120", reportPath, reportPreviewPath,
+    sourceAudit: previous?.sourceAudit ?? sourceAudit,
+    ...(previous ? { manuallyEditedAt: new Date().toISOString() } : {})
   };
   if (!current) {
     const { error } = await admin.from("athlete_states").insert({ user_id: athlete.id, snapshot: { ...snapshot, bia: [record] }, revision: 1 });
     if (error) { if (error.code === "23505") throw new ApiError("aborted", "Lo storico è stato aggiornato. Riprova.", 409); throw error; }
   } else {
     const revision = Number(current.revision || 0);
-    const { data, error } = await admin.from("athlete_states").update({ snapshot: { ...snapshot, bia: [...bia, record] }, revision: revision + 1, updated_at: new Date().toISOString() }).eq("user_id", athlete.id).eq("revision", revision).select("revision").maybeSingle();
+    const records = previous ? bia.map(item => item === previous ? record : item) : [...bia, record];
+    const { data, error } = await admin.from("athlete_states").update({ snapshot: { ...snapshot, bia: records }, revision: revision + 1, updated_at: new Date().toISOString() }).eq("user_id", athlete.id).eq("revision", revision).select("revision").maybeSingle();
     if (error) throw error; if (!data) throw new ApiError("aborted", "I dati dell’atleta sono cambiati. Ricarica e riprova.", 409);
   }
   return { record };
+}
+async function deleteBia(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader);
+  const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  const id = validateId(body.biaId, "ID referto");
+  const { data: paths, error } = await admin.rpc("remove_bia_record", { p_coach: coach.user.id, p_athlete: athlete.id, p_record: id });
+  if (error) throw error;
+  if (paths?.length) {
+    const { error: storageError } = await admin.storage.from("bia-reports").remove(paths);
+    if (storageError) throw new ApiError("storage-cleanup-failed", "Referto rimosso dallo storico. Riprova per completare la rimozione del file.", 503);
+  }
+  return { deleted: true };
 }
 async function deleteClient(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
   const coach = await requireCoach(authorizationHeader); const target = await ownedAthlete(coach.user.id, body.clientUid);
@@ -308,7 +312,7 @@ Deno.serve(async (request) => {
     const authorizationHeader = request.headers?.get?.("Authorization") || null;
     const body = await request.json(); const action = String(body.action || "");
     const handlers: Record<string, (authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) => Promise<unknown>> = {
-      createClient: createAthleteAccount, completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, recordBia, deleteClient,
+      completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, recordBia, updateBia, deleteBia, deleteClient,
       saveProgramDraft, publishProgram, archiveProgramDraft, health: async () => ({ ok: true, time: new Date().toISOString() })
     };
     if (!handlers[action]) throw new ApiError("invalid-argument", "Azione non valida.");

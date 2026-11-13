@@ -65,3 +65,15 @@ export async function adminCall(action, payload = {}) {
   if (!response.ok) throw Object.assign(new Error(body.error || "Operazione non riuscita."), { code: body.code || `http-${response.status}` });
   return body.data;
 }
+
+export async function clientInviteCall(action, token, fields = {}) {
+  assertSupabaseConfigured();
+  const response = await fetch(`${config.url}/functions/v1/client-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: config.publishableKey },
+    body: JSON.stringify({ ...fields, action, token })
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.error || "Registrazione momentaneamente non disponibile.");
+  return body;
+}
