@@ -264,7 +264,7 @@ async function saveProgramDraft(authorizationHeader: AuthorizationHeader, body: 
     p_expected_revision: expected, p_program: program
   });
   if (error) {
-    if (error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove. Ricaricala prima di salvare.", 409);
+    if (error.code === "PT409" || error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove. Ricaricala prima di salvare.", 409);
     if (error.code === "P0001") throw new ApiError("not-found", "Bozza non trovata o già archiviata.", 404);
     throw error;
   }
@@ -294,7 +294,7 @@ async function publishProgram(authorizationHeader: AuthorizationHeader, body: Re
     if (!refreshed) throw new ApiError("aborted", "La bozza è stata modificata altrove. Ricaricala prima di pubblicare.", 409);
   }
   const { data, error } = await admin.rpc("publish_program", { p_coach_id: coach.user.id, p_athlete_id: athlete.id, p_draft_id: draftId, p_expected_revision: Number(body.expectedRevision || 0) });
-  if (error) { if (error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove.", 409); throw error; }
+  if (error) { if (error.code === "PT409" || error.code === "40001") throw new ApiError("aborted", "La bozza è stata modificata altrove.", 409); throw error; }
   return data;
 }
 

@@ -164,7 +164,7 @@ test("dopo un conflitto il dispositivo mostra anche la cronologia ricevuta dal s
   const athlete = await startAthlete({
     getState: () => state,
     onSave: (count, args) => count === 1
-      ? { data: null, error: { code: "40001", message: "STATE_CONFLICT" } }
+      ? { data: null, error: { code: "PT409", message: "STATE_CONFLICT" } }
       : { data: args.p_expected_revision + 1, error: null }
   });
   state = { revision: 2, snapshot: { ...initialSnapshot(), salvato: 2, bia: [{ id: "bia-from-coach", measuredAt: "2026-11-12", weightKg: 80 }] } };
