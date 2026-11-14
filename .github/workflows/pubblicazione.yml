@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 3.1.0
       - name: Controllo
         id: controllo
         continue-on-error: true
@@ -62,11 +62,11 @@ jobs:
             [ -n "$SUPABASE_ACCESS_TOKEN" ] && echo "SUPABASE_ACCESS_TOKEN presente" || echo "SUPABASE_ACCESS_TOKEN MANCANTE"
             [ -n "$SUPABASE_DB_PASSWORD" ] && echo "SUPABASE_DB_PASSWORD presente" || echo "SUPABASE_DB_PASSWORD MANCANTE"
             echo "### supabase link"
-            supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD" 2>&1
+            supabase link --project-ref "$SUPABASE_PROJECT_REF" 2>&1
             echo "### supabase migration list"
-            supabase migration list --password "$SUPABASE_DB_PASSWORD" 2>&1
+            supabase migration list --remote --password "$SUPABASE_DB_PASSWORD" 2>&1
             echo "### supabase db push --dry-run"
-            supabase db push --dry-run --password "$SUPABASE_DB_PASSWORD" 2>&1
+            supabase db push --dry-run --remote --password "$SUPABASE_DB_PASSWORD" 2>&1
           } > esito.txt 2>&1
       - name: Scrivi l'esito nella pull request
         if: always()
@@ -129,12 +129,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
-      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+          version: 3.1.0
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
       - name: Applica le migration nuove
-        run: supabase db push --password "$SUPABASE_DB_PASSWORD"
+        run: supabase db push --remote --password "$SUPABASE_DB_PASSWORD" --yes
       - name: Pubblica le funzioni
-        run: supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+        run: supabase functions deploy --remote="$SUPABASE_PROJECT_REF" --use-api --yes
       - run: npm run build:bia-ocr
       - name: Pubblica il sito
         uses: FirebaseExtended/action-hosting-deploy@v0
