@@ -74,6 +74,17 @@ npm run deploy:hosting
 
 Non occorre attivare Blaze, Firestore o Cloud Functions nel progetto Firebase.
 
+## Pubblicazione automatica (GitHub Actions)
+
+Il file `.github/workflows/pubblicazione.yml` gestisce test e pubblicazione:
+
+- **Pull request verso `main`:** esegue i test, mostra quali migration verrebbero applicate al database (senza applicarle) e pubblica un'anteprima del sito su un indirizzo temporaneo di Firebase (valido 7 giorni), indicato nei commenti della pull request.
+- **Merge su `main`:** esegue i test, applica le migration nuove (`supabase db push`), pubblica le Edge Functions e infine il sito su `https://lippolispt.web.app`.
+
+Secrets da impostare in **Settings > Secrets and variables > Actions**: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `FIREBASE_SERVICE_ACCOUNT_LIPPOLISPT`. Non vanno mai scritti nel codice.
+
+L'anteprima usa lo stesso database di produzione: i dati che si modificano lì sono quelli reali.
+
 ## Test
 
 Test rapidi:

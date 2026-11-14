@@ -1,0 +1,145 @@
+# Pubblicazione automatica LIPPOLIS PT
+#
+# - Pull request verso main: test + controllo delle migration (senza applicarle)
+#   + anteprima del sito su un indirizzo temporaneo di Firebase.
+# - Merge/push su main: test -> migration database -> funzioni Supabase -> sito live.
+#
+# Secrets richiesti (Settings > Secrets and variables > Actions):
+#   SUPABASE_ACCESS_TOKEN              token personale Supabase
+#   SUPABASE_DB_PASSWORD               password del database del progetto
+#   FIREBASE_SERVICE_ACCOUNT_LIPPOLISPT  chiave JSON dell'account di servizio Firebase
+
+name: Pubblicazione
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  SUPABASE_PROJECT_REF: aftvzsrbowpwvvbgvzta
+  FIREBASE_PROJECT_ID: lippolispt
+  NODE_VERSION: "22"
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  controllo-database:
+    name: Controllo migration (non applica nulla)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - name: Controllo
+        id: controllo
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          {
+            echo "### Secrets"
+            [ -n "$SUPABASE_ACCESS_TOKEN" ] && echo "SUPABASE_ACCESS_TOKEN presente" || echo "SUPABASE_ACCESS_TOKEN MANCANTE"
+            [ -n "$SUPABASE_DB_PASSWORD" ] && echo "SUPABASE_DB_PASSWORD presente" || echo "SUPABASE_DB_PASSWORD MANCANTE"
+            echo "### supabase link"
+            supabase link --project-ref "$SUPABASE_PROJECT_REF" 2>&1
+            echo "### supabase migration list"
+            supabase migration list --remote --password "$SUPABASE_DB_PASSWORD" 2>&1
+            echo "### supabase db push --dry-run"
+            supabase db push --dry-run --remote --password "$SUPABASE_DB_PASSWORD" 2>&1
+          } > esito.txt 2>&1
+      - name: Scrivi l'esito nella pull request
+        if: always()
+        run: |
+          python3 - <<'EOF'
+          import os
+          t = open("esito.txt", encoding="utf-8", errors="replace").read() if os.path.exists("esito.txt") else "nessun output"
+          for k in ("SUPABASE_DB_PASSWORD", "SUPABASE_ACCESS_TOKEN"):
+              v = os.environ.get(k)
+              if v: t = t.replace(v, "***")
+          esito = "OK" if "${{ steps.controllo.outcome }}" == "success" else "ERRORE"
+          open("commento.md", "w").write(f"**Controllo migration: {esito}**\n\n```\n{t[-60000:]}\n```\n")
+          EOF
+          gh pr comment "${{ github.event.pull_request.number }}" --repo "${{ github.repository }}" --body-file commento.md
+      - name: Esito
+        if: steps.controllo.outcome != 'success'
+        run: exit 1
+
+  anteprima:
+    name: Anteprima sito
+    if: github.event_name == 'pull_request'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build:bia-ocr
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LIPPOLISPT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          expires: 7d
+
+  pubblica:
+    name: Pubblica (database, funzioni, sito)
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    concurrency:
+      group: pubblicazione-produzione
+      cancel-in-progress: false
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 3.1.0
+      - run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+      - name: Applica le migration nuove
+        run: supabase db push --remote --password "$SUPABASE_DB_PASSWORD" --yes
+      - name: Pubblica le funzioni
+        run: supabase functions deploy --remote="$SUPABASE_PROJECT_REF" --use-api --yes
+      - run: npm run build:bia-ocr
+      - name: Pubblica il sito
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LIPPOLISPT }}
+          projectId: ${{ env.FIREBASE_PROJECT_ID }}
+          channelId: live
