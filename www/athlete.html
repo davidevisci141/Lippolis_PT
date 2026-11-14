@@ -2275,7 +2275,6 @@
   // ====== ALTRO (menu) ======
   const ALTRO = [
     {t:'Storico pesi', icon:I.chart},
-    {t:'Check giornaliero', icon:I.pulse},
     {t:'Abitudini', icon:I.pulse},
     {t:'Metriche', icon:I.body},
     {t:'Progressi fisici', icon:I.camera},
@@ -2813,9 +2812,6 @@
       <div class="pf-field"><label>Lingua</label><div class="pf-input sel">Italiano 🇮🇹 <span class="chev">▼</span></div></div>
       <button class="btn-accent" id="save">Salva</button>
       <div class="pf-save-status" id="profileSaveStatus" role="status" aria-live="polite"></div>
-
-      <div class="pf-sec">Scheda</div>
-      <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Programma in corso</div><div class="bk-v">${senzaScheda()?'Nessuna scheda':esc(PROGRAMMA.nome)}</div><div class="bk-n">${senzaScheda()?'Il PT non ha ancora assegnato una scheda':`${PROGRAMMA.settimane.length} settimane · ${PROGRAMMA.dal} → ${PROGRAMMA.al}`}</div></div>
 
       <h2 class="pf-sec" id="biaProfileHeading">Composizione corporea</h2>
       <section class="bk-card bia-profile" id="biaProfileCard" aria-labelledby="biaProfileHeading">${biaProfileHTML(reports)}</section>
