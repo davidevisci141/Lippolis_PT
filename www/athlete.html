@@ -1202,6 +1202,7 @@
   }
   function showTab(id){ giornoSel=null; valoriOpen=false; pesataOpen=false; pesataDraft=''; activeTab=id; altroDetail=null; altroStoricoEx=null; docAperto=null; coVista='home'; if(id==='workout'){ workoutView='list'; } view.scrollTop=0; renderView(); renderNav(); }
   function renderView(){
+    if(activeTab!=='altro'||altroDetail!=='Progressi fisici')updateSharedProgressPhotos=undefined;
     if(activeTab==='workout') renderWorkout();
     else if(activeTab==='consigli') renderConsigli();
     else if(activeTab==='coach') renderCoach();
@@ -2013,7 +2014,7 @@
   }
 
   // ====== STORICO PESI (pagina completa) ======
-  function fmtDataAnno(ts){ const d=new Date(ts); const m=MESI[d.getMonth()]; return d.getDate()+' '+m.charAt(0).toUpperCase()+m.slice(1)+' '+d.getFullYear(); }
+  function fmtDataAnno(ts){ const d=new Date(ts); const m=MESI[d.getMonth()]; return m ? d.getDate()+' '+m.charAt(0).toUpperCase()+m.slice(1)+' '+d.getFullYear() : 'Data non disponibile'; }
   function getStorico(name, exerciseId){
     const normalized=String(name||'').trim().toLocaleLowerCase('it');
     return sessioni.slice().sort((a,b)=>b.ts-a.ts)
@@ -2101,14 +2102,15 @@
     return number+' '+side;
   }
   function fmtSerie(e, st){
-    const kg = st.kg===0 ? 'C.L.' : fmtKgIt(st.kg)+(e.perLato?' kg/lato':' kg');
-    const r = st.reps==null ? '—' : st.reps+(e.unita==='sec'?'"':'');
+    const weight=valoreSerie(st.kg), reps=valoreSerie(st.reps);
+    const kg = weight===null ? '—' : weight===0 ? 'C.L.' : fmtKgIt(weight)+(e.perLato?' kg/lato':' kg');
+    const r = reps===null ? '—' : reps+(e.unita==='sec'?'"':'');
     return {kg, r};
   }
   function storicoSessionsHTML(name,exerciseId){
     const sessions=getStorico(name,exerciseId), e=infoEsercizio(name);
     if(!sessions.length) return `<div class="nodata">Nessuno storico per questo esercizio.</div>`;
-    return sessions.map(ses=>`<div class="stor-block"><div class="stor-date">${ses.data}${ses.sett?' · Sett. '+ses.sett:''}</div><table class="sc-table"><thead><tr><th>Serie</th><th>Peso</th><th>${e.unita==='sec'?'Tempo':'Reps'}</th><th>RIR</th></tr></thead><tbody>${ses.serie.map((st,si)=>{ const f=fmtSerie(e,st); return `<tr><td>${esc(savedSetLabel(ses.lati,st,si))}</td><td>${f.kg}</td><td>${f.r}</td><td>${st.rir==null?'—':st.rir}</td></tr>`; }).join('')}</tbody></table>${ses.nota?`<div class="stor-nota">${esc(ses.nota)}</div>`:''}</div>`).join('');
+    return sessions.map(ses=>`<div class="stor-block"><div class="stor-date">${ses.data}${ses.sett?' · Sett. '+esc(ses.sett):''}</div><table class="sc-table"><thead><tr><th>Serie</th><th>Peso</th><th>${e.unita==='sec'?'Tempo':'Reps'}</th><th>RIR</th></tr></thead><tbody>${ses.serie.map((st,si)=>{ const f=fmtSerie(e,st); return `<tr><td>${esc(savedSetLabel(ses.lati,st,si))}</td><td>${f.kg}</td><td>${f.r}</td><td>${valoreSerie(st.rir)??'—'}</td></tr>`; }).join('')}</tbody></table>${ses.nota?`<div class="stor-nota">${esc(ses.nota)}</div>`:''}</div>`).join('');
   }
   function renderStorico(){
     const name=storicoEx;
@@ -2119,7 +2121,7 @@
   let storicoVista='esercizi';
   function renderStoricoPesi(){
     if(altroStoricoEx){
-      view.innerHTML=`<div class="dhead"><div class="back" id="sbA">${I.chevL}</div><h2>${altroStoricoEx}</h2></div>`+storicoSessionsHTML(altroStoricoEx);
+      view.innerHTML=`<div class="dhead"><div class="back" id="sbA">${I.chevL}</div><h2>${esc(altroStoricoEx)}</h2></div>`+storicoSessionsHTML(altroStoricoEx);
       document.getElementById('sbA').onclick=()=>{ altroStoricoEx=null; view.scrollTop=0; renderStoricoPesi(); };
       return;
     }
@@ -2134,15 +2136,15 @@
     let names=[];
     if(storicoVista==='esercizi'){
       names=Object.keys(ultimiPesi).sort((a,b)=>a.localeCompare(b,'it'));
-      html+=`<div class="ex-hist-list">`+names.map(n=>`<div class="ex-hist-row"><div class="ehn">${n}</div><div class="ehc">${I.chevR}</div></div>`).join('')+`</div>`;
+      html+=`<div class="ex-hist-list">`+names.map(n=>`<div class="ex-hist-row"><div class="ehn">${esc(n)}</div><div class="ehc">${I.chevR}</div></div>`).join('')+`</div>`;
     } else {
       html+=sessioni.slice().sort((a,b)=>b.ts-a.ts).map(se=>{
         const righe=se.esercizi.map(ex=>{
           const e=infoEsercizio(ex.nome);
           const v=ex.sets.length ? ex.sets.map(st=>{ const f=fmtSerie(e,st); return (st.kg===0?'C.L.':f.kg.replace(' kg/lato','/lato').replace(' kg',''))+' × '+f.r; }).join(' · ') : 'completato';
-          return `<div class="ses-ex"><div class="n">${ex.nome}</div><div class="v">${v}</div>${ex.note?`<div class="x">${esc(ex.note)}</div>`:''}</div>`;
+          return `<div class="ses-ex"><div class="n">${esc(ex.nome)}</div><div class="v">${v}</div>${ex.note?`<div class="x">${esc(ex.note)}</div>`:''}</div>`;
         }).join('');
-        return `<details class="ses"><summary><div class="sd"><div class="st">${se.titolo}</div><div class="sm">${fmtDataAnno(se.ts)}${se.settimana?' · Settimana '+se.settimana:''}</div></div><span class="sc">${I.chevR}</span></summary>
+        return `<details class="ses"><summary><div class="sd"><div class="st">${esc(se.titolo)}</div><div class="sm">${fmtDataAnno(se.ts)}${se.settimana?' · Settimana '+esc(se.settimana):''}</div></div><span class="sc">${I.chevR}</span></summary>
           <div class="ses-body">${se.nota?`<div class="ses-nota">${esc(se.nota)}</div>`:''}${righe}</div></details>`;
       }).join('');
     }
@@ -2345,6 +2347,7 @@
 
   // ====== PROGRESSI ======
   let progressPhotoOwner='', progressDraft=null, progressSaving=false;
+  let updateSharedProgressPhotos;
   const progressPhotoDate=new Intl.DateTimeFormat('it-IT',{dateStyle:'medium'});
   function clearProgressDraft(){
     if(progressDraft?.url)URL.revokeObjectURL(progressDraft.url);
@@ -2493,11 +2496,13 @@
     file.onchange=()=>void selectPhoto(file);
     paintDraft();
     void loadOwnPhotos();
-    const coachPhotos=coachSections.progress?.items||[];
-    if(coachPhotos.length){
-      shared.hidden=false;
+    updateSharedProgressPhotos=()=>{
+      if(!shared.isConnected)return;
+      const coachPhotos=coachSections.progress?.items||[];
+      shared.hidden=!coachPhotos.length;
       paintGallery(shared.querySelector('.progress-grid'),coachPhotos.map(photo=>({...photo,date:new Date(photo.date+'T12:00:00')})),false);
-    }
+    };
+    updateSharedProgressPhotos();
   }
 
   // ====== METRICHE ======
@@ -2954,9 +2959,11 @@
       if(Array.isArray(d.diario)) diario=d.diario;
       if(Array.isArray(d.differite)) differite=d.differite;
       if(Array.isArray(d.progressi)) progressi=d.progressi;
-      if(d.plicheVals) plicheVals=d.plicheVals;
+      if(d.plicheVals&&typeof d.plicheVals==='object'){
+        plicheVals=Object.fromEntries(PL_SITES.map(([key])=>[key,Math.max(0,valoreSerie(d.plicheVals[key])??0)]));
+      }
       if(d.plicheSex) plicheSex=d.plicheSex;
-      if(d.plicheAge) plicheAge=d.plicheAge;
+      if(d.plicheAge!=null) plicheAge=Math.max(0,valoreSerie(d.plicheAge)??0);
       if(Array.isArray(d.metriche)) d.metriche.forEach(sm=>{ const m=metriche.find(x=>x.nome===sm.nome); if(m && Array.isArray(sm.dati)) m.dati=sm.dati; });
       if(typeof d.seqIdx==='number') seqIdx=d.seqIdx;
       if(typeof d.giornoCorr==='number') giornoCorr=d.giornoCorr;
@@ -3023,11 +3030,17 @@
       try{ localStorage.setItem(LS_KEY,JSON.stringify(data)); }catch(e){}
       loadState(data); applicaTema();
       if(changed || senzaScheda()){ workoutView='list'; storicoEx=null; }
-      impostaSettimana(!changed && PROGRAMMA.settimane[oldWeek]?oldWeek:settimanaPerData(Date.now())); ricalcolaUltimi(); aggiornaAvatar(); renderNav(); renderView(); view.scrollTop=changed&&activeTab==='workout'?0:oldScroll;
+      impostaSettimana(!changed && PROGRAMMA.settimane[oldWeek]?oldWeek:settimanaPerData(Date.now())); ricalcolaUltimi(); aggiornaAvatar(); renderNav();
+      if(!document.getElementById('progressCapture'))renderView();
+      view.scrollTop=changed&&activeTab==='workout'?0:oldScroll;
       return true;
     },
     applyNutrition: (value)=>{ nutrition=value; if(activeTab==='consigli')renderConsigli(); },
-    applyCoachSections: (value)=>{coachSections=value||{};if(activeTab==='consigli'||(activeTab==='altro'&&altroDetail)||activeTab==='workout'&&workoutView==='detail'&&!view.contains(document.activeElement))renderView();},
+    applyCoachSections: (value)=>{
+      coachSections=value||{};
+      if(activeTab==='altro'&&altroDetail==='Progressi fisici')updateSharedProgressPhotos?.();
+      else if(activeTab==='consigli'||(activeTab==='altro'&&altroDetail)||activeTab==='workout'&&workoutView==='detail'&&!view.contains(document.activeElement))renderView();
+    },
     addBiaRecord: (record)=>{ if(!record||typeof record!=='object') throw new Error('Rilevazione BIA non valida.'); biaRecords.push(record); saveStateNow(); return record; },
     openChat: ()=>showTab('coach'),
     openWorkout: ()=>showTab('workout'),

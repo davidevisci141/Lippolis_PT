@@ -120,6 +120,29 @@ test("una scheda pubblicata attende il salvataggio delle serie e appare senza ri
   assert.equal(athlete.nutrition().plan.uid, "athlete-1");
 });
 
+test("lo storico atleta mostra i nomi come testo e tratta le serie malformate come mancanti", () => {
+  const source = (start, end) => athletePage.slice(athletePage.indexOf(start), athletePage.indexOf(end));
+  const name = '<img src=x onerror="window.test=true">';
+  const view = { innerHTML: "", querySelectorAll: () => [] };
+  const context = vm.createContext({
+    view, I: { chevL: "", chevR: "" }, sessioni: [{ titolo: name, settimana: name, ts: 1, esercizi: [{ nome: name, sets: [{ kg: 15, reps: name }] }] }],
+    altroStoricoEx: null, ultimiPesi: { [name]: {} }, infoEsercizio: () => ({}), fmtDataAnno: () => "13 nov",
+    fmtKgIt: value => String(value), document: { getElementById: () => ({}) }
+  });
+  vm.runInContext([
+    source("  function valoreSerie(", "  function leggiSerie("),
+    source("  function fmtSerie(", "  function storicoSessionsHTML("),
+    source("  function esc(v)", "  const biaDateFormat"),
+    source("  let storicoVista=", "  // ====== TIMER (recupero")
+  ].join("\n"), context);
+  vm.runInContext("renderStoricoPesi()", context);
+  assert.match(view.innerHTML, /&lt;img/);
+  assert.doesNotMatch(view.innerHTML, /<img/);
+  vm.runInContext("storicoVista='sessioni'; renderStoricoPesi()", context);
+  assert.match(view.innerHTML, /15 × —/);
+  assert.doesNotMatch(view.innerHTML, /<img/);
+});
+
 test("un salvataggio fallito non sovrascrive le modifiche fatte mentre era in corso", async () => {
   let finishFirstSave;
   const athlete = await startAthlete({ onSave: (count, args) => count === 1

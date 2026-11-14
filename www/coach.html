@@ -651,7 +651,7 @@
   @media (max-width:340px){ .tiles{grid-template-columns:1fr;} .tile{aspect-ratio:auto; min-height:130px;} }
   .mock-tools{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.mock-multiline{white-space:pre-wrap;overflow-wrap:anywhere}.mock-photo{max-width:100%;height:auto;border-radius:12px}.sec>h2{margin:18px 0 8px}.sec>.row,.sec>details{margin-bottom:8px}.modal-b input[type=file]{width:100%}.modal-b #mockModalError{color:var(--danger,#b03026)}.modal-b .fld>span{font-weight:700}.mock-tools .btn{flex-shrink:0}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
 <link rel="stylesheet" href="chat.css?v=progress-photos">
 </head>
 <body>
@@ -1878,11 +1878,13 @@
       if(ext!=='xlsx' && ext!=='xls'){ toast('Formato non supportato'); return; }
       if(typeof XLSX==='undefined'){ toast('Libreria Excel non caricata — verifica la connessione'); return; }
       const reader=new FileReader();
-      reader.onload=ev=>{ try{
+      reader.onerror=()=>{if(fi.isConnected)toast('Impossibile leggere il file Excel.');};
+      reader.onload=ev=>{ if(!fi.isConnected)return; try{
           const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
           const ws=wb.Sheets[wb.SheetNames[0]];
           const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
           const res=parsePianoRows(rows);
+          if(!res.giorni.length)throw new Error('nessuna giornata da importare');
           applyPiano(res); closeModal(); renderPiano();
           toast('Piano importato · '+res.giorni.length+' giorni'+(res.unmatched? ' · '+res.unmatched+' fuori libreria':''));
         }catch(err){ toast('Errore lettura Excel: '+err.message); } };
@@ -2401,7 +2403,11 @@
       const row=rows[r]; if(!row) continue;
       const enome=_norm(row[ci.enome]); if(!enome) continue;
       if(ci.prog>=0 && _norm(row[ci.prog])) nomeProg=_norm(row[ci.prog]);
-      if(ci.nset>=0 && _norm(row[ci.nset])){ const n=parseInt(parseFloat(row[ci.nset]),10); if(n>0) nSet=n; }
+      if(ci.nset>=0 && _norm(row[ci.nset])){
+        const n=Number(_norm(row[ci.nset]));
+        if(!Number.isInteger(n)||n<1||n>52)throw new Error('il numero di settimane deve essere compreso tra 1 e 52');
+        nSet=n;
+      }
       const gnum=_intStr(row[ci.gnum])||'1';
       if(!giorniMap.has(gnum)) giorniMap.set(gnum,{giorno:gnum, nome:_norm(row[ci.wname])||('Giorno '+gnum), esercizi:[]});
       const tipo=_norm(row[ci.tipo]).toLowerCase().startsWith('tempo')?'tempo':'ripetizioni';
@@ -2409,6 +2415,7 @@
     }
     giorniMap.forEach(g=>{ for(let i=0;i<g.esercizi.length;i++){ const code=g.esercizi[i]._ss; if(code){ let j=i+1; while(j<g.esercizi.length && g.esercizi[j]._ss===code){ g.esercizi[j].link='superserie'; j++; } i=j-1; } } g.esercizi.forEach(e=>delete e._ss); });
     const giorniBase=[...giorniMap.values()]; const weeks=[];
+    if(!giorniBase.length)throw new Error('nessun esercizio da importare');
     for(let w=0;w<nSet;w++) weeks.push({nome:'Settimana '+(w+1), giorni:JSON.parse(JSON.stringify(giorniBase))});
     return {nome:nomeProg, settimane:nSet, weeks};
   }
@@ -2444,7 +2451,8 @@
       if(ext!=='xlsx' && ext!=='xls'){ toast('Formato non supportato'); return; }
       if(typeof XLSX==='undefined'){ toast('Libreria Excel non caricata — verifica la connessione'); return; }
       const reader=new FileReader();
-      reader.onload=ev=>{ try{
+      reader.onerror=()=>{if(fileInput.isConnected)toast('Impossibile leggere il file Excel.');};
+      reader.onload=ev=>{ if(!fileInput.isConnected)return; try{
           const wb=XLSX.read(new Uint8Array(ev.target.result),{type:'array'});
           const ws=wb.Sheets[wb.SheetNames[0]];
           const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});

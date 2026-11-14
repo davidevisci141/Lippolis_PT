@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const vm = require("node:vm");
 
 const editor = import("../www/src/coach-mockup-model.mjs");
 const runtime = import("../www/src/workout-metrics.mjs");
@@ -27,6 +28,16 @@ test("la home PT integra il calendario e mantiene la scheda cliente e i due edit
   }
   assert.match(html, /coach-mockup\.mjs/);
   assert.doesNotMatch(html, /Salvataggio automatico \(localStorage\)|142 clienti|800 programmi/);
+});
+
+test("l'importazione Excel rifiuta settimane fuori limite e fogli senza esercizi", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../www/coach.html"), "utf8");
+  const source = html.slice(html.indexOf("  function _norm(v)"), html.indexOf("  function applyScheda(res)"));
+  const { parseSchedaRows } = vm.runInNewContext(source + "\n({parseSchedaRows})");
+  const headings = ["Nome_Programma", "Numero_Settimane", "Giorno_Numero", "Nome_Esercizio", "Serie"];
+  assert.throws(() => parseSchedaRows([headings, ["Test", 1000000, 1, "Squat", 3]]), /tra 1 e 52|compreso tra 1 e 52/);
+  assert.throws(() => parseSchedaRows([headings, ["Test", 2, 1, "", 3]]), /nessun esercizio/);
+  assert.equal(parseSchedaRows([headings, ["Test", 2, 1, "Squat", 3]]).weeks.length, 2);
 });
 
 test("salva e rilegge prescrizioni, istruzioni, video privato e superserie", async () => {
