@@ -1,5 +1,5 @@
 import { createClient as createSupabaseClient } from "npm:@supabase/supabase-js@2";
-import { cleanText, validateId, validateProgram } from "../_shared/validation.mjs";
+import { cleanText, validateHistory, validateId, validateProgram } from "../_shared/validation.mjs";
 
 const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 class ApiError extends Error { code: string; status: number; constructor(code: string, message: string, status = 400) { super(message); this.code = code; this.status = status; } }
@@ -305,6 +305,15 @@ async function archiveProgramDraft(authorizationHeader: AuthorizationHeader, bod
   return data;
 }
 
+async function importAthleteHistory(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  let history;
+  try { history = validateHistory(body.sessioni, body.pesi); } catch (error) { throw new ApiError("invalid-argument", error instanceof Error ? error.message : "Storico non valido.", 400); }
+  const { data, error } = await admin.rpc("coach_import_history", { p_coach: coach.user.id, p_athlete: athlete.id, p_sessioni: history.sessions, p_pesi: history.weights });
+  if (error) throw error;
+  return data;
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return fail(new ApiError("method-not-allowed", "Metodo non consentito.", 405));
@@ -313,7 +322,7 @@ Deno.serve(async (request) => {
     const body = await request.json(); const action = String(body.action || "");
     const handlers: Record<string, (authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) => Promise<unknown>> = {
       completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, recordBia, updateBia, deleteBia, deleteClient,
-      saveProgramDraft, publishProgram, archiveProgramDraft, health: async () => ({ ok: true, time: new Date().toISOString() })
+      saveProgramDraft, publishProgram, archiveProgramDraft, importAthleteHistory, health: async () => ({ ok: true, time: new Date().toISOString() })
     };
     if (!handlers[action]) throw new ApiError("invalid-argument", "Azione non valida.");
     return ok(await handlers[action](authorizationHeader, body));

@@ -108,3 +108,64 @@ export function validateId(value, label = "ID") {
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) throw new Error(`${label} non valido.`);
   return id;
 }
+
+// ── Storico allenamenti importato dal PT (CoachPlus o vecchio APK) ──
+const HISTORY_LIMITS = { sessions: 3000, exercises: 60, sets: 60, weights: 3000 };
+const finiteOrNull = (value, min, max) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= min && number <= max ? number : null;
+};
+const historyId = (value, label) => {
+  const id = String(value ?? "").trim();
+  if (!id || id.length > 80 || !/^[A-Za-z0-9._:-]+$/.test(id)) throw new Error(`${label}: id non valido.`);
+  return id;
+};
+const historyTs = (value, label) => {
+  const ts = Number(value);
+  if (!Number.isFinite(ts) || ts < Date.UTC(2015, 0, 1) || ts > Date.now() + 2 * 86400000) throw new Error(`${label}: data non valida.`);
+  return Math.round(ts);
+};
+
+export function validateHistory(sessions, weights) {
+  if (!Array.isArray(sessions) || sessions.length > HISTORY_LIMITS.sessions) throw new Error(`Sessioni: servono da 0 a ${HISTORY_LIMITS.sessions} voci.`);
+  if (!Array.isArray(weights ?? []) || (weights ?? []).length > HISTORY_LIMITS.weights) throw new Error("Pesate non valide.");
+  const cleanSessions = sessions.map((session, index) => {
+    const label = `Sessione ${index + 1}`;
+    if (!session || typeof session !== "object" || Array.isArray(session)) throw new Error(`${label}: formato non valido.`);
+    if (!Array.isArray(session.esercizi) || session.esercizi.length > HISTORY_LIMITS.exercises) throw new Error(`${label}: esercizi non validi.`);
+    const exercises = session.esercizi.map((exercise, exIndex) => {
+      const exLabel = `${label}, esercizio ${exIndex + 1}`;
+      const name = cleanText(exercise?.nome, 160);
+      if (!name) throw new Error(`${exLabel}: nome mancante.`);
+      const sets = Array.isArray(exercise.sets) ? exercise.sets : [];
+      if (sets.length > HISTORY_LIMITS.sets) throw new Error(`${exLabel}: troppe serie.`);
+      const out = {
+        nome: name,
+        sets: sets.map((set) => ({ kg: finiteOrNull(set?.kg, -500, 1000), reps: finiteOrNull(set?.reps, 0, 1000), rir: finiteOrNull(set?.rir, 0, 10) })),
+        fatto: exercise.fatto !== false,
+        note: cleanText(exercise.note, 1000),
+        segnalato: null
+      };
+      if (exercise.uni === true) out.uni = true;
+      if (Array.isArray(exercise.lati)) out.lati = exercise.lati.slice(0, HISTORY_LIMITS.sets).map((side) => (side === "SX" ? "SX" : "DX"));
+      return out;
+    });
+    const out = {
+      id: historyId(session.id, label), ts: historyTs(session.ts, label),
+      settimana: finiteOrNull(session.settimana, 0, 200), giorno: finiteOrNull(session.giorno, 0, 20) ?? 0,
+      dt: cleanText(session.dt, 4), titolo: cleanText(session.titolo, 160), nota: cleanText(session.nota, 1000),
+      esercizi: exercises, importata: true
+    };
+    const program = cleanText(session.prog, 160);
+    if (program) out.prog = program;
+    return out;
+  });
+  const cleanWeights = (weights ?? []).map((weight, index) => {
+    const label = `Pesata ${index + 1}`;
+    const value = finiteOrNull(weight?.v, 20, 400);
+    if (value === null) throw new Error(`${label}: peso non valido.`);
+    return { id: historyId(weight.id, label), ts: historyTs(weight.ts, label), v: value };
+  });
+  return { sessions: cleanSessions, weights: cleanWeights };
+}
