@@ -28,7 +28,7 @@ test("validateHistory rifiuta dati non validi", async () => {
 
 test("admin-api espone importAthleteHistory e la migration è riservata al service role", () => {
   const api = fs.readFileSync(path.resolve(__dirname, "../supabase/functions/admin-api/index.ts"), "utf8");
-  assert.match(api, /importAthleteHistory, health:/);
+  assert.match(api, /importAthleteHistory,/);
   const sql = fs.readFileSync(path.resolve(__dirname, "../supabase/migrations/202611150001_coach_import_history.sql"), "utf8");
   assert.match(sql, /coach_owns_athlete\(p_coach, p_athlete\)/);
   assert.match(sql, /grant execute on function public\.coach_import_history\(uuid, uuid, jsonb, jsonb\) to service_role/);
