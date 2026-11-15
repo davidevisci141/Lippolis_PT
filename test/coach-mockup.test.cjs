@@ -121,3 +121,10 @@ test("le programmazioni importate dal PC (formato app) si aprono nell'editor", a
   assert.equal(m.weeks[0].giorni[0].esercizi[0].nome, "Squat");
   assert.equal(m.weeks[0].giorni[0].esercizi[0].serie, "3");
 });
+
+test("nella scheda cliente i consigli alimentari si aprono e si tolgono", () => {
+  const js = fs.readFileSync(path.join(__dirname, "../www/src/coach-mockup.mjs"), "utf8");
+  assert.match(js, /id="mockRemoveClientPlan"/);
+  assert.match(js, /\$\("mockOpenClientPlan"\)\.onclick/);
+  assert.match(js, /await saveSection\(c,"nutrition",\{\}\)/);
+});
