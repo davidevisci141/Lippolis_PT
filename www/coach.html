@@ -117,6 +117,10 @@
   .row-end{flex:0 0 auto; display:flex; align-items:center; gap:12px;}
   .row-go{color:var(--muted2); display:inline-flex;}
   .row-go svg{width:20px;height:20px;}
+  .row-del{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;color:var(--muted2);border:1px solid transparent;cursor:pointer;}
+  .row-del svg{width:18px;height:18px;}
+  .row-del:hover,.row-del:focus-visible{color:var(--danger);border-color:var(--danger);outline:none;}
+  .row-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;color:var(--accent);border:1px solid var(--accent);vertical-align:middle;}
   .statusdot{display:inline-flex; align-items:center; gap:5px;}
   .statusdot i{width:7px;height:7px;border-radius:50%; background:var(--accent); display:inline-block;}
   .statusdot.off i{background:var(--muted2);}
@@ -1727,8 +1731,8 @@
       window.CoachDB.recipes(body);
     }
   }
-  function pianoRow(p){ const ng=(p.giorni?p.giorni.length:0); return '<button class="row"><span class="row-badge">'+I.apple+'</span><span class="row-main"><span class="row-t">'+escapeHTML(p.nome)+'</span><span class="row-s">'+ng+(ng===1?' giorno':' giorni')+' · '+(p.clienti||0)+' clienti</span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>'; }
-  function fillPiani(q){ const f=pianiAlimentari.filter(p=>p.nome.toLowerCase().includes(q.toLowerCase())); const el=document.getElementById('pianiList'); el.innerHTML=f.length? f.map(pianoRow).join('') : '<div class="nores">Nessun piano trovato.</div>'; el.querySelectorAll('.row').forEach((r,i)=> r.onclick=()=>openPiano(f[i])); }
+  function pianoRow(p){ const ng=(p.giorni?p.giorni.length:0); return '<button class="row"><span class="row-badge">'+I.apple+'</span><span class="row-main"><span class="row-t">'+escapeHTML(p.nome)+'</span><span class="row-s">'+ng+(ng===1?' giorno':' giorni')+' · '+(p.clienti||0)+' clienti'+'</span></span><span class="row-end">'+delBtn(p.nome)+'<span class="row-go">'+I.chevR+'</span></span></button>'; }
+  function fillPiani(q){ const f=pianiAlimentari.filter(p=>p.nome.toLowerCase().includes(q.toLowerCase())); const el=document.getElementById('pianiList'); el.innerHTML=f.length? f.map(pianoRow).join('') : '<div class="nores">Nessun piano trovato.</div>'; bindRows(el,f,openPiano,deletePiano); }
   function alimentiRow(a){ return '<div class="food-row"><div class="fr-main"><span class="fr-n">'+escapeHTML(a.nome)+'</span><span class="fr-cat">'+(a.categoria||'')+'</span></div><div class="fr-macros"><span class="fr-kcal">'+Math.round(a.kcal)+' kcal</span><span class="fr-m">P '+a.p+' · C '+a.c+' · G '+a.f+'</span></div></div>'; }
   function fillAlimenti(q){ const s=q.toLowerCase(); const f=alimenti.filter(a=>a.nome.toLowerCase().includes(s)||(a.categoria||'').toLowerCase().includes(s)); const el=document.getElementById('alList'); const cnt=document.getElementById('alCount'); if(cnt) cnt.textContent=f.length+' alimenti · valori per 100 g'; el.innerHTML=f.length? f.map(alimentiRow).join('') : '<div class="nores">Nessun alimento trovato.</div>'; }
   function newPianoDay(n){ return {nome:'Giorno '+n, tipologia:'Grammi', energia:'', proteine:'', carboidrati:'', grassi:'', note:'', pasti:[]}; }
@@ -1868,7 +1872,7 @@
     const d=p.giorni[pianoDay];
     const tot=dayTotals(d);
     const deleteDayDisabled=p.giorni.length===1?' disabled title="Il piano deve contenere almeno una giornata"':'';
-    const actions='<button class="btn btn-primary" id="assignPiano">'+I.send+' Assegna</button><button class="btn btn-ghost" id="impPiano">'+I.upload+' Importa</button><button class="btn btn-ghost" id="savePianoDraft">Salva bozza</button><button class="btn btn-primary" id="savePiano">'+I.check+' Salva</button>';
+    const actions='<button class="btn btn-primary" id="assignPiano">'+I.send+' Assegna</button><button class="btn btn-ghost" id="impPiano">'+I.upload+' Importa</button><button class="btn btn-ghost" id="savePianoDraft">Salva bozza</button><button class="btn btn-primary" id="savePiano">'+I.check+' Salva</button><button class="btn btn-ghost btn-danger-ghost" id="deletePiano">'+I.trash+' Elimina</button>';
     const tabs=p.giorni.map((g,i)=>'<button class="wtab '+(i===pianoDay?'on':'')+'" data-pday="'+i+'">'+escapeHTML(g.nome)+'</button>').join('');
     main.innerHTML=pageHead(escapeHTML(p.nome), actions)+
       '<div class="sec sec-wide"><div class="piano-layout">'+
@@ -1892,6 +1896,7 @@
     document.getElementById('back').onclick=()=>{ nutriTab='piani'; go('nutrizione'); };
     document.getElementById('impPiano').onclick=()=>openImportaPiano();
     document.getElementById('assignPiano').onclick=()=>window.CoachDB.publishNutrition(p);
+    document.getElementById('deletePiano').onclick=()=>deletePiano(p);
     document.getElementById('savePiano').onclick=()=>window.CoachDB.saveWorkspace(true);
     document.getElementById('savePianoDraft').onclick=()=>window.CoachDB.saveWorkspace(true);
     main.querySelectorAll('[data-pday]').forEach(b=> b.onclick=()=>{ pianoDay=+b.dataset.pday; renderPiano(); });
@@ -2362,7 +2367,7 @@
   }
   function renderProgramma(){
     const p=currentProg; if(!p){ go('workout'); return; }
-    const actions='<button class="btn btn-ghost" id="saveMockProgram">'+I.check+' Salva</button><button class="btn btn-primary" id="assignMockProgram">'+I.send+' Assegna</button><div class="view-seg"><button class="'+(p.viewMode==='col'?'on':'')+'" data-vm="col">'+I.cols+' Colonne</button><button class="'+(p.viewMode==='row'?'on':'')+'" data-vm="row">'+I.rows+' Righe</button></div>'+
+    const actions='<button class="btn btn-ghost" id="saveMockProgram">'+I.check+' Salva</button><button class="btn btn-primary" id="assignMockProgram">'+I.send+' Assegna</button><button class="btn btn-ghost btn-danger-ghost" id="deleteMockProgram">'+I.trash+' Elimina</button><div class="view-seg"><button class="'+(p.viewMode==='col'?'on':'')+'" data-vm="col">'+I.cols+' Colonne</button><button class="'+(p.viewMode==='row'?'on':'')+'" data-vm="row">'+I.rows+' Righe</button></div>'+
       '<button class="btn btn-ghost" id="volBtn">'+I.chart+' Volume</button>'+
       '<button class="btn btn-primary" id="impBtn">'+I.upload+' Importa</button>';
     const wtabs=p.weeks.map((w,i)=>'<button class="wtab '+(i===progWeek?'on':'')+'" data-wk="'+i+'">'+escapeHTML(w.nome)+'</button>').join('');
@@ -2387,6 +2392,7 @@
     document.getElementById('volBtn').onclick=openVolume;
     document.getElementById('saveMockProgram').onclick=()=>window.CoachDB.saveProgram(p);
     document.getElementById('assignMockProgram').onclick=()=>window.CoachDB.assignProgram(p);
+    document.getElementById('deleteMockProgram').onclick=()=>deleteProgramma(p);
     document.getElementById('impBtn').onclick=openImporta;
     document.getElementById('deleteWk').onclick=()=>{
       if(p.weeks.length<=1)return;
@@ -2667,7 +2673,11 @@
     main.querySelectorAll('[data-wt]').forEach(b=> b.onclick=()=>{ workoutTab=b.dataset.wt; renderWorkout(); });
     renderWtBody();
   }
-  function progRow(p){ return '<button class="row"><span class="row-badge">'+I.clipboard+'</span><span class="row-main"><span class="row-t">'+escapeHTML(p.nome)+'</span><span class="row-s">'+p.settimane+' settimane · '+p.esercizi+' esercizi · '+p.clienti+' clienti</span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>'; }
+  function progRow(p){ return '<button class="row"><span class="row-badge">'+I.clipboard+'</span><span class="row-main"><span class="row-t">'+escapeHTML(p.nome)+'</span><span class="row-s">'+p.settimane+' settimane · '+p.esercizi+' esercizi · '+p.clienti+' clienti</span></span><span class="row-end">'+delBtn(p.nome)+'<span class="row-go">'+I.chevR+'</span></span></button>'; }
+  function delBtn(nome){ return '<span class="row-del" data-del role="button" tabindex="0" title="Elimina" aria-label="Elimina '+escapeHTML(nome)+'">'+I.trash+'</span>'; }
+  function bindRows(el,list,open,remove){ el.querySelectorAll('.row').forEach((r,i)=>{ r.onclick=e=>{ if(e.target.closest('[data-del]')){ e.preventDefault(); e.stopPropagation(); remove(list[i]); } else open(list[i]); }; const d=r.querySelector('[data-del]'); if(d) d.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); e.stopPropagation(); remove(list[i]); } }; }); }
+  function deleteProgramma(p){ window.CoachDB.deleteProgram(p).then(done=>{ if(!done) return; if(view==='programma') go('workout'); else if(document.getElementById('progList')) fillProg(document.getElementById('progSearch').value); }); }
+  function deletePiano(p){ window.CoachDB.deleteMealPlan(p).then(done=>{ if(!done) return; if(view==='piano') go('nutrizione'); else if(document.getElementById('pianiList')) fillPiani(document.getElementById('pianiSearch').value); }); }
   function libRow(e){ return '<button class="row"><span class="row-badge">'+I.muscle+'</span><span class="row-main"><span class="row-t">'+escapeHTML(e.nome)+'</span><span class="row-s">'+escapeHTML(e.muscolo)+'</span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>'; }
   function renderWtBody(){
     const body=document.getElementById('wtBody');
@@ -2683,7 +2693,7 @@
       document.getElementById('libSearch').addEventListener('input',e=>fillLib(e.target.value));
     }
   }
-  function fillProg(q){ const f=programmi.filter(p=>p.nome.toLowerCase().includes(q.toLowerCase())); const el=document.getElementById('progList'); el.innerHTML=f.length? f.map(progRow).join('') : '<div class="nores">Nessuna programmazione trovata.</div>'; el.querySelectorAll('.row').forEach((r,i)=> r.onclick=()=>openProgramma(f[i])); }
+  function fillProg(q){ const f=programmi.filter(p=>p.nome.toLowerCase().includes(q.toLowerCase())); const el=document.getElementById('progList'); el.innerHTML=f.length? f.map(progRow).join('') : '<div class="nores">Nessuna programmazione trovata.</div>'; bindRows(el,f,openProgramma,deleteProgramma); }
   function fillLib(q){ const f=libreria.filter(e=> e.nome.toLowerCase().includes(q.toLowerCase()) || e.muscolo.toLowerCase().includes(q.toLowerCase())); const el=document.getElementById('libList'); el.innerHTML=f.length? f.map(libRow).join('') : '<div class="nores">Nessun esercizio trovato.</div>'; el.querySelectorAll('.row').forEach((r,i)=> r.onclick=()=>openEsercizio(f[i])); }
 
   // ---- PLACEHOLDER ----
@@ -2703,6 +2713,6 @@
   window.CoachMock = { I, main, COACH, clienti, programmi, libreria, pianiAlimentari, metriche, scadenze, prioritaOggi, go, render, toast, openModal, closeModal, pageHead, cliStrip, initials, fmt, renderCliMetriche, buildChart, renderProgramma, renderPiano, renderEsercizio, fillPriorita, renderHomeCalendar, calendarEvents, calendarKinds, openNotificationSettings, scheduleSave, openEsercizio, get view(){return view}, get currentClient(){return currentClient}, get currentProg(){return currentProg}, get currentPiano(){return currentPiano}, setClient(c,s=null){currentClient=c;clientSection=s;go('cliente')}, backClient(){clientSection=null;render()}, openProgramma, openPiano, setPliche(v,sex,age){plicheVals=v;plicheSex=sex;plicheAge=age}, getPliche(){return {v:plicheVals,sex:plicheSex,age:plicheAge}} };
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/coach-mockup.mjs?v=20261113-progress-photos"></script>
+<script type="module" src="src/coach-mockup.mjs?v=20261115-elimina"></script>
 </body>
 </html>
