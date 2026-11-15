@@ -62,3 +62,14 @@
   .chat-title button[data-mobile-back]{display:inline-flex}.chat-sidebar{border:0}
   #coachChat{padding-inline:7px}
 }
+/* Chat col tema scuro (pannello coach e app cliente) */
+html[data-tema="scuro"] .chat-shell{background:var(--surface);color:var(--text);border-color:var(--line)}
+html[data-tema="scuro"] .chat-sidebar,html[data-tema="scuro"] .chat-title,html[data-tema="scuro"] .chat-compose{border-color:var(--line)}
+html[data-tema="scuro"] .chat-sidebar>input,html[data-tema="scuro"] .chat-compose textarea{background:var(--surface2);color:var(--text);border-color:var(--line)}
+html[data-tema="scuro"] .chat-contact{background:var(--surface);border-bottom-color:var(--line-soft)}
+html[data-tema="scuro"] .chat-contact:hover,html[data-tema="scuro"] .chat-contact[aria-current=true]{background:var(--accent-soft)}
+html[data-tema="scuro"] .chat-avatar{background:var(--accent-soft);color:var(--accent-ink)}
+html[data-tema="scuro"] .chat-contact-copy small,html[data-tema="scuro"] .chat-contact-meta,html[data-tema="scuro"] .chat-status,html[data-tema="scuro"] .chat-empty,html[data-tema="scuro"] .chat-bubble time{color:var(--muted)}
+html[data-tema="scuro"] .chat-log{background:var(--device)}
+html[data-tema="scuro"] .chat-bubble{background:var(--surface2);color:var(--text)}
+html[data-tema="scuro"] .chat-bubble.mine{background:var(--accent-soft)}

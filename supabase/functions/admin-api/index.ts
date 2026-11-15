@@ -314,6 +314,40 @@ async function importAthleteHistory(authorizationHeader: AuthorizationHeader, bo
   return data;
 }
 
+const isoDate = (value: unknown, label: string) => {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(text + "T00:00:00Z"))) throw new ApiError("invalid-argument", `${label} non valida.`, 400);
+  return text;
+};
+
+async function deleteProgramVersion(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  const versionId = validateId(body.versionId, "ID scheda");
+  const { data, error } = await admin.rpc("coach_delete_program_version", { p_coach: coach.user.id, p_athlete: athlete.id, p_version: versionId });
+  if (error) { if (error.code === "P0002") throw new ApiError("not-found", "Scheda non trovata.", 404); throw error; }
+  return data;
+}
+
+async function deleteHistoryProgram(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  const prog = cleanText(body.prog, 160);
+  if (!prog) throw new ApiError("invalid-argument", "Nome del programma mancante.", 400);
+  const from = isoDate(body.from, "Data d'inizio"), to = isoDate(body.to, "Data di fine");
+  if (from > to) throw new ApiError("invalid-argument", "Intervallo di date non valido.", 400);
+  const { data, error } = await admin.rpc("coach_delete_history_program", { p_coach: coach.user.id, p_athlete: athlete.id, p_prog: prog, p_from: from, p_to: to });
+  if (error) throw error;
+  return data;
+}
+
+async function addConcludedProgram(authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) {
+  const coach = await requireCoach(authorizationHeader); const athlete = await ownedAthlete(coach.user.id, body.clientUid);
+  let program;
+  try { program = validateProgram(body.program, { forPublish: true }); } catch (error) { throw new ApiError("invalid-argument", error instanceof Error ? error.message : "Scheda non valida.", 400); }
+  const { data, error } = await admin.rpc("coach_add_concluded_program", { p_coach: coach.user.id, p_athlete: athlete.id, p_program: program });
+  if (error) throw error;
+  return { ...data, nome: program?.nome };
+}
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (request.method !== "POST") return fail(new ApiError("method-not-allowed", "Metodo non consentito.", 405));
@@ -322,7 +356,7 @@ Deno.serve(async (request) => {
     const body = await request.json(); const action = String(body.action || "");
     const handlers: Record<string, (authorizationHeader: AuthorizationHeader, body: Record<string, unknown>) => Promise<unknown>> = {
       completeOnboarding: (authorization) => completeOnboarding(authorization), setClientAccess, exportClientData, recordBia, updateBia, deleteBia, deleteClient,
-      saveProgramDraft, publishProgram, archiveProgramDraft, importAthleteHistory, health: async () => ({ ok: true, time: new Date().toISOString() })
+      saveProgramDraft, publishProgram, archiveProgramDraft, importAthleteHistory, deleteProgramVersion, deleteHistoryProgram, addConcludedProgram, health: async () => ({ ok: true, time: new Date().toISOString() })
     };
     if (!handlers[action]) throw new ApiError("invalid-argument", "Azione non valida.");
     return ok(await handlers[action](authorizationHeader, body));
