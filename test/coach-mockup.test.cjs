@@ -107,5 +107,17 @@ test("Workout e Consigli nutrizionali hanno il tasto Elimina in elenco e nell'ed
   assert.match(html, /id="deletePiano"/);
   assert.match(js, /window\.CoachDB=\{[^}]*deleteProgram,deleteMealPlan/);
   assert.match(js, /archiveProgramDraft",\{draftId:p\._remote\.id\}/);
-  assert.match(js, /hiddenMealPlans/);
+  assert.match(js, /function fromStoredProgram/);
+  assert.match(js, /async function syncWorkspace/);
+  assert.match(js, /result\.error\?\.code==="PT409"/);
+});
+
+test("le programmazioni importate dal PC (formato app) si aprono nell'editor", async () => {
+  const { programToMockup } = await editor;
+  const program = { nome: "Scheda standard", dal: "2026-11-16", al: "2026-11-22", settimane: [{ n: 1, dal: "2026-11-16", al: "2026-11-22", fase: "",
+    giorni: [{ dn: "Lunedì", dt: "A", titolo: "Gambe", min: 50, esercizi: [{ badge: "A", nome: "Squat", serie: 3, reps: "8-10 per gamba", rir: 2, rec: "1:30", carico: "", step: 2.5, note: "" }] }] }] };
+  const m = programToMockup(program, "id1");
+  assert.equal(m.nome, "Scheda standard");
+  assert.equal(m.weeks[0].giorni[0].esercizi[0].nome, "Squat");
+  assert.equal(m.weeks[0].giorni[0].esercizi[0].serie, "3");
 });

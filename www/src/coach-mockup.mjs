@@ -26,7 +26,7 @@ const sectionRows = new Map(), snapshots = new Map(), stateRevisions = new Map()
 const sectionWrites = new Map();
 let profile, uid, workspaceRevision=0, workspaceSignature="", saveQueue=Promise.resolve(), selectEpoch=0, loadEpoch=0, workspaceLoaded=false;
 let alerts;
-let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}, hiddenMealPlans:[]};
+let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}};
 const key = (client,section) => `${client.id}:${section}`;
 const getSection = (client,section) => sectionRows.get(key(client,section))?.content || {};
 const items = (client,section) => getSection(client,section).items || [];
@@ -75,8 +75,13 @@ function saveWorkspace(explicit=false) {
     const payload=workspacePayload(), signature=JSON.stringify(payload);
     if(signature!==workspaceSignature){
       setSaveStatus("Salvataggio…");
-      workspaceRevision=checked(await supabase.rpc("save_coach_workspace",{p_expected:workspaceRevision,p_content:payload}));
-      workspaceSignature=signature;
+      let result=await supabase.rpc("save_coach_workspace",{p_expected:workspaceRevision,p_content:payload});
+      if(result.error?.code==="PT409"){
+        await syncWorkspace();
+        const merged=workspacePayload();
+        result=await supabase.rpc("save_coach_workspace",{p_expected:workspaceRevision,p_content:merged});
+        workspaceRevision=checked(result);workspaceSignature=JSON.stringify(merged);
+      } else { workspaceRevision=checked(result); workspaceSignature=signature; }
       setSaveStatus("Salvato su Supabase");
     }
     if(explicit)ui.toast("Salvato nel database");
@@ -158,7 +163,6 @@ async function loadDirectory() {
     const id=`${p.athlete_id}:${p.section}`;
     if(!sectionRows.has(id)||Number(p.revision)>=Number(sectionRows.get(id).revision))sectionRows.set(id,p);
   }
-  addAssignedMealPlans();
   const remoteDrafts=checked(clientDrafts);
   for(const item of remoteDrafts){
     const plan=programToMockup(item.program,item.id);
@@ -167,23 +171,39 @@ async function loadDirectory() {
   urgentMessages=checked(urgent);
   refreshSignals();
 }
-// I piani pubblicati a un cliente senza passare dalla libreria (es. importati con
-// l'app del PC) compaiono anche in Consigli nutrizionali → Piani alimentari.
-function assignedMealPlans(){
-  const out=[];
-  for(const c of ui.clienti){
-    const plan=getSection(c,"nutrition").plan;
-    if(plan?.nome)out.push({client:c,plan,key:`${c.id}:${plan.nome}`});
-  }
-  return out;
+// Programmazioni e piani importati dall'app del PC (lpt_schede.py / lpt_alimentazione.py)
+// arrivano nel workspace in formato app ("formato":"app") e con "aggiornato" (ms):
+// qui diventano voci normali della libreria.
+const deletedLibraryIds=new Set();
+function countExercises(p){return (p.weeks||[]).reduce((n,w)=>n+(w.giorni||[]).reduce((a,g)=>a+(g.esercizi||[]).length,0),0);}
+function fromStoredProgram(p){
+  if(p?.formato!=="app"||!p.program)return p;
+  const m=programToMockup(p.program,p.id);
+  return {...m,clienti:p.clienti||0,aggiornato:p.aggiornato||0,importato:true,settimane:m.weeks.length,esercizi:countExercises(m)};
 }
-function addAssignedMealPlans(){
-  const hidden=new Set(workspace.hiddenMealPlans||[]);
-  for(const {plan,key} of assignedMealPlans()){
-    if(hidden.has(key)||ui.pianiAlimentari.some(p=>p.nome===plan.nome))continue;
-    const copy=structuredClone(plan); delete copy.importato_da;
-    ui.pianiAlimentari.push({...copy,id:crypto.randomUUID(),clienti:1});
+function mergeLibrary(list,remote,convert){
+  let changed=false;
+  for(const item of remote||[]){
+    if(!item?.id||deletedLibraryIds.has(item.id))continue;
+    const index=list.findIndex(x=>x.id===item.id);
+    if(index<0){list.push(convert(item));changed=true;}
+    else if(Number(item.aggiornato||0)>Number(list[index].aggiornato||0)){list[index]=convert(item);changed=true;}
   }
+  return changed;
+}
+// Rilegge il workspace dal database e aggiunge quello che è arrivato da fuori (es. import dal PC).
+async function syncWorkspace(){
+  if(!workspaceLoaded)return false;
+  const saved=checked(await supabase.from("coach_workspaces").select("content,revision").eq("coach_id",uid).maybeSingle());
+  if(!saved||saved.revision===workspaceRevision)return false;
+  const before=workspaceSignature===JSON.stringify(workspacePayload());
+  const a=mergeLibrary(ui.programmi,saved.content?.programs,fromStoredProgram);
+  const b=mergeLibrary(ui.pianiAlimentari,saved.content?.mealPlans,x=>structuredClone(x));
+  workspaceRevision=saved.revision;
+  // se in locale non c'era niente da salvare, ora il pannello coincide con il database
+  if(before)workspaceSignature=JSON.stringify(workspacePayload());
+  if((a||b)&&["workout","nutrizione"].includes(ui.view))ui.render();
+  return a||b;
 }
 
 function deleteProgram(p){
@@ -193,6 +213,7 @@ function deleteProgram(p){
         try{ await adminCall("archiveProgramDraft",{draftId:p._remote.id}); }
         catch(error){ if(!/non trovata|non archiviabile/i.test(String(error?.message||"")))throw error; }
       }
+      deletedLibraryIds.add(p.id);
       const index=ui.programmi.indexOf(p); if(index>=0)ui.programmi.splice(index,1);
       if(!await saveWorkspace())throw new Error("Eliminazione non salvata: riprova.");
       ui.toast("Programmazione eliminata");resolve(true);
@@ -202,6 +223,11 @@ function deleteProgram(p){
   });
 }
 
+function assignedMealPlans(){
+  const out=[];
+  for(const c of ui.clienti){const plan=getSection(c,"nutrition").plan; if(plan?.nome)out.push({client:c,plan});}
+  return out;
+}
 function deleteMealPlan(p){
   const assigned=assignedMealPlans().filter(a=>a.plan.nome===p.nome);
   const names=assigned.map(a=>a.client.nome).join(", ");
@@ -209,10 +235,8 @@ function deleteMealPlan(p){
   return new Promise(resolve=>{
     showModal("Elimina piano alimentare",`<p>Eliminare «${escape(p.nome)}» dai piani alimentari?</p>${extra}`,"Elimina",async ()=>{
       const unassign=!!$("mockUnassign")?.checked;
-      for(const a of assigned){
-        if(unassign)await saveSection(a.client,"nutrition",{});
-        else workspace.hiddenMealPlans=[...new Set([...(workspace.hiddenMealPlans||[]),a.key])];
-      }
+      if(unassign)for(const a of assigned)await saveSection(a.client,"nutrition",{});
+      deletedLibraryIds.add(p.id);
       const index=ui.pianiAlimentari.indexOf(p); if(index>=0)ui.pianiAlimentari.splice(index,1);
       if(!await saveWorkspace())throw new Error("Eliminazione non salvata: riprova.");
       ui.toast(unassign?"Piano eliminato e tolto al cliente":"Piano eliminato");resolve(true);
@@ -1056,7 +1080,7 @@ async function start(){
     if(saved){
       workspaceRevision=saved.revision;const {programs,mealPlans,...rest}=saved.content;
       workspace={...workspace,...rest};
-      replace(ui.programmi,programs||[]);replace(ui.pianiAlimentari,mealPlans||[]);
+      replace(ui.programmi,(programs||[]).map(fromStoredProgram));replace(ui.pianiAlimentari,mealPlans||[]);
       for(const [id,value] of Object.entries(workspace.exerciseEdits)){
         const found=ui.libreria.find(ex=>ex.id===id);
         if(found)Object.assign(found,value);else ui.libreria.unshift(value);
@@ -1105,6 +1129,8 @@ async function start(){
       if((event.new?.user_id||event.old?.user_id)===ui.currentClient?.id)refreshSelectedClient();
     });
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSelectedClient();});
+    document.addEventListener("visibilitychange",()=>{if(!document.hidden)void syncWorkspace().catch(()=>{});});
+    window.addEventListener("focus",()=>void syncWorkspace().catch(()=>{}));
     document.addEventListener("visibilitychange",()=>{
       if(!document.hidden&&$("mockAthletePhotos")&&ui.currentClient)void loadAthleteProgressPhotos(ui.currentClient);
     });
@@ -1131,6 +1157,6 @@ function openNotification(destination,clientId){
     $("homeCalendar")?.scrollIntoView({block:"nearest"});
   }
 }
-window.CoachDB={bodyWeightPanel,saveWorkspace,deleteProgram,deleteMealPlan,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,weightHistoryOverview,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
+window.CoachDB={bodyWeightPanel,saveWorkspace,syncWorkspace,deleteProgram,deleteMealPlan,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,weightHistoryOverview,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
 $("coachLogout").onclick=signOutCoach;
 void start();
