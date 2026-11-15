@@ -1713,6 +1713,7 @@
   let currentPiano=null, pianoDay=0;
   const pianiAlimentari = [];
   function renderNutrizione(){
+    window.CoachDB?.syncWorkspace?.()?.catch?.(()=>{});
     if(!['piani','alimenti','ricette'].includes(nutriTab)) nutriTab='piani';
     main.innerHTML=pageHead('Consigli nutrizionali')+'<div class="sec"><div class="subtabs"><button class="'+(nutriTab==='piani'?'on':'')+'" data-nt="piani">Piani alimentari</button><button class="'+(nutriTab==='alimenti'?'on':'')+'" data-nt="alimenti">Alimenti</button><button class="'+(nutriTab==='ricette'?'on':'')+'" data-nt="ricette">Ricette</button></div><div id="ntBody"></div></div>';
     document.getElementById('back').onclick=()=>go('home');
@@ -2680,6 +2681,7 @@
   function deletePiano(p){ window.CoachDB.deleteMealPlan(p).then(done=>{ if(!done) return; if(view==='piano') go('nutrizione'); else if(document.getElementById('pianiList')) fillPiani(document.getElementById('pianiSearch').value); }); }
   function libRow(e){ return '<button class="row"><span class="row-badge">'+I.muscle+'</span><span class="row-main"><span class="row-t">'+escapeHTML(e.nome)+'</span><span class="row-s">'+escapeHTML(e.muscolo)+'</span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>'; }
   function renderWtBody(){
+    window.CoachDB?.syncWorkspace?.()?.catch?.(()=>{});
     const body=document.getElementById('wtBody');
     if(workoutTab==='prog'){
       body.innerHTML='<div class="bar-row"><div class="search grow"><span>'+I.search+'</span><input id="progSearch" placeholder="Cerca una programmazione…"></div><button class="btn btn-primary" id="crea">'+I.plus+' Crea</button></div><div class="list" id="progList"></div>';
@@ -2713,6 +2715,6 @@
   window.CoachMock = { I, main, COACH, clienti, programmi, libreria, pianiAlimentari, metriche, scadenze, prioritaOggi, go, render, toast, openModal, closeModal, pageHead, cliStrip, initials, fmt, renderCliMetriche, buildChart, renderProgramma, renderPiano, renderEsercizio, fillPriorita, renderHomeCalendar, calendarEvents, calendarKinds, openNotificationSettings, scheduleSave, openEsercizio, get view(){return view}, get currentClient(){return currentClient}, get currentProg(){return currentProg}, get currentPiano(){return currentPiano}, setClient(c,s=null){currentClient=c;clientSection=s;go('cliente')}, backClient(){clientSection=null;render()}, openProgramma, openPiano, setPliche(v,sex,age){plicheVals=v;plicheSex=sex;plicheAge=age}, getPliche(){return {v:plicheVals,sex:plicheSex,age:plicheAge}} };
 </script>
 <script src="supabase-config.js"></script>
-<script type="module" src="src/coach-mockup.mjs?v=20261115-elimina"></script>
+<script type="module" src="src/coach-mockup.mjs?v=20261115-libreria"></script>
 </body>
 </html>
