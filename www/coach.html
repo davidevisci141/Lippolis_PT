@@ -177,6 +177,28 @@
   .pstat.corso{background:var(--accent-soft); color:var(--accent-ink); border:1px solid rgba(18,199,162,.3);}
   .pstat.scadenza{background:rgba(214,138,20,.15); color:#A06200; border:1px solid rgba(214,138,20,.35);}
   .pstat.scaduta{background:var(--surface2); color:var(--muted2); border:1px solid var(--line);}
+  .ptgroup{margin:22px 0 10px;}
+  .ptgroup:first-child{margin-top:4px;}
+  .pthead-wide,.ptrow-wide{grid-template-columns:minmax(140px,1fr) 96px 96px 112px 84px 58px 188px; gap:10px;}
+  .ptrow-wide .ptact .btn{padding:8px 12px;}
+  .ptrow-wide .ptact{justify-content:flex-end;}
+  .ptrow-live{background:var(--accent-soft); border:1.5px solid var(--accent); box-shadow:0 0 0 3px rgba(18,199,162,.10),var(--shadow-card);}
+  .ptrow-live .ptname{color:var(--accent-ink);}
+  .ptsub{display:block; margin-top:4px; font-size:11.5px; color:var(--muted2);}
+  .ptsrc{display:block; margin-top:3px; font-family:inherit; font-weight:600; font-size:11.5px; color:var(--muted2);}
+  .weight-search{margin-bottom:12px;}
+  .weight-picklist{display:flex; flex-direction:column; gap:8px;}
+  .weight-pick{display:grid; grid-template-columns:1fr auto; grid-template-rows:auto auto; column-gap:12px; align-items:center; text-align:left; font:inherit; background:var(--surface); border:1px solid var(--line-soft); border-radius:12px; padding:12px 14px; cursor:pointer; color:var(--text);}
+  .weight-pick:hover{border-color:var(--accent);}
+  .weight-pick svg{grid-row:1/3; grid-column:2; width:18px; height:18px; color:var(--muted2);}
+  .weight-pick-name{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14.5px;}
+  .weight-pick-meta{font-size:12.5px; color:var(--muted); font-weight:600;}
+  .weight-backlist{display:inline-flex; align-items:center; gap:6px; margin-bottom:10px;}
+  .weight-backlist svg{width:16px; height:16px;}
+  .weight-session summary{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
+  .weight-session-count{margin-left:auto; font-size:12px; color:var(--muted2); font-weight:700;}
+  .weight-session-ex{margin:10px 0 14px;}
+  .weight-session-ex h3{font-size:14px; margin:0 0 6px;}
 
   /* metriche (circonferenze) */
   .metric{margin-bottom:24px; max-width:560px;}
@@ -239,6 +261,7 @@
     .ptc[data-l]{display:flex; justify-content:space-between; gap:10px; font-size:13px;}
     .ptc[data-l]::before{content:attr(data-l) ": "; color:var(--muted2); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:.3px;}
     .ptc.ptname{font-size:16px;}
+    .pthead-wide,.ptrow-wide{grid-template-columns:1fr;}
   }
 
   /* ---- metriche due colonne ---- */
@@ -1547,6 +1570,7 @@
   // ---- SCHEDA CLIENTE ----
   const cliSezioni=[
     {id:'programmazione', label:'Programmazione',      icon:I.clipboard},
+    {id:'storico-pesi',   label:'Storico pesi',        icon:I.chart},
     {id:'alimentari',     label:'Consigli alimentari', icon:I.apple},
     {id:'metriche',       label:'Metriche',            icon:I.chart},
     {id:'progressi',      label:'Progressi fisici',    icon:I.camera},
@@ -1571,7 +1595,6 @@
     main.innerHTML=pageHead('Scheda cliente')+
       '<div class="sec">'+
         '<div class="cli-head"><div class="cli-av '+(c.attivo?'':'off')+'">'+escapeHTML(ini)+'</div><div class="cli-id"><div class="cli-name">'+escapeHTML(c.nome)+'</div><div class="cli-sub"><span class="statusdot '+(c.attivo?'':'off')+'"><i></i>'+(c.attivo?'Attivo':'Disattivato')+'</span> · Registrato il '+fmt(c.reg)+'</div></div></div>'+
-        '<div id="clientWeightOverview">'+window.CoachDB.weightHistoryOverview(c)+'</div>'+
         '<div class="menu">'+cliSezioni.map(s=>'<button class="mcard" data-sec="'+s.id+'"><span class="lbl">'+s.label+'</span><span class="big">'+s.icon+'</span></button>').join('')+'</div>'+
       '</div>';
     document.getElementById('back').onclick=()=>go('clienti');

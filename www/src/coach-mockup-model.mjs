@@ -146,3 +146,68 @@ export function athleteWeightHistory(snapshot = {}) {
   }
   return { weighIns, exercises: [...exercises.values()].sort((a, b) => a.name.localeCompare(b.name, "it")) };
 }
+
+// Elenco delle programmazioni del cliente, come in CoachPlus: in corso e concluse.
+// Unisce le schede pubblicate nell'app con i programmi che compaiono solo nello storico
+// allenamenti (livelli fatti su CoachPlus o col vecchio APK).
+export function clientProgramList({ snapshot = {}, active = null, versions = [], today = new Date().toISOString().slice(0, 10) } = {}) {
+  const list = value => Array.isArray(value) ? value : [];
+  const day = ts => new Date(ts).toISOString().slice(0, 10);
+  const key = name => clean(name).toLocaleLowerCase("it");
+  const sessions = list(snapshot.sessioni).filter(s => s && Number.isFinite(Number(s.ts)) && list(s.esercizi).length);
+  const byProgram = new Map();
+  for (const s of sessions) {
+    const k = key(s.prog);
+    if (!k) continue;
+    if (!byProgram.has(k)) byProgram.set(k, { name: clean(s.prog), sessions: [] });
+    byProgram.get(k).sessions.push(s);
+  }
+  const rows = [], seen = new Set();
+  const published = [...(active ? [{ ...active, id: active.version_id, isActive: true }] : []),
+    ...list(versions).filter(v => v && v.id !== active?.version_id)];
+  for (const item of published) {
+    const p = item.program || {}, name = clean(p.nome || p.name), k = key(name);
+    if (!name || seen.has(item.id)) continue;
+    seen.add(item.id);
+    const start = clean(p.dal || p.startDate), end = clean(p.al || p.endDate);
+    const inRange = s => (!start || day(s.ts) >= start) && (!end || day(s.ts) <= end);
+    const group = byProgram.get(k);
+    const done = (group?.sessions || []).filter(inRange).length;
+    if (group) group.sessions = group.sessions.filter(s => !inRange(s));
+    const weeks = list(p.settimane);
+    const expected = weeks.reduce((sum, w) => sum + list(w.giorni).length, 0) || null;
+    const elapsed = weeks.filter(w => clean(w.al) && clean(w.al) < today).reduce((sum, w) => sum + list(w.giorni).length, 0);
+    const ongoing = !!item.isActive && (!end || end >= today);
+    const due = ongoing ? elapsed : expected;
+    rows.push({ id: item.id, name, start, end, ongoing, published: true, item,
+      done, expected, skipped: due === null ? null : Math.max(0, due - done) });
+    if (group && !group.sessions.length) byProgram.delete(k);
+  }
+  for (const { name, sessions: own } of byProgram.values()) {
+    const times = own.map(s => Number(s.ts));
+    rows.push({ id: null, name, start: day(Math.min(...times)), end: day(Math.max(...times)), ongoing: false, published: false,
+      item: null, done: own.length, expected: null, skipped: null });
+  }
+  const newestFirst = (a, b) => (b.start || "").localeCompare(a.start || "") || b.name.localeCompare(a.name, "it", { numeric: true });
+  return { inCorso: rows.filter(r => r.ongoing).sort(newestFirst), concluse: rows.filter(r => !r.ongoing).sort(newestFirst) };
+}
+
+// Sedute registrate, dalla più recente, con le serie di ogni esercizio (per «Storico pesi → Sessioni»).
+export function athleteSessions(snapshot = {}) {
+  const list = value => Array.isArray(value) ? value : [];
+  const num = value => {
+    if (value === null || value === undefined || value === "") return null;
+    const n = Number(String(value).replace(",", "."));
+    return Number.isFinite(n) ? n : null;
+  };
+  return list(snapshot.sessioni).filter(s => s && Number.isFinite(Number(s.ts))).map(s => ({
+    id: clean(s.id), ts: Number(s.ts), title: clean(s.titolo) || "Seduta", program: clean(s.prog), week: num(s.settimana), note: clean(s.nota),
+    exercises: list(s.esercizi).map(e => ({
+      name: clean(e?.nome), unit: e?.unita === "sec" ? "sec" : "reps", note: clean(e?.note),
+      sets: (() => { const sides = new Map();
+        return list(e?.sets).map((set, i) => { const side = clean(e.lati?.[i]); const n = (sides.get(side) || 0) + 1; sides.set(side, n);
+          return { series: side ? `${n} ${side}` : String(i + 1), kg: num(set?.kg), reps: num(set?.reps), rir: num(set?.rir) }; })
+          .filter(x => x.kg !== null || x.reps !== null); })()
+    })).filter(e => e.name && e.sets.length)
+  })).filter(s => s.exercises.length).sort((a, b) => b.ts - a.ts);
+}
