@@ -317,6 +317,9 @@
   .pf-avatar .av{width:104px;height:104px;border-radius:50%; background:linear-gradient(150deg,var(--accent),var(--accent-dark)); display:grid;place-items:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:36px; color:var(--on-accent); position:relative; box-shadow:var(--shadow-card);}
   .pf-avatar .cam{position:absolute; right:-2px; bottom:-2px; width:34px;height:34px;border-radius:50%; background:var(--accent-ink); display:grid;place-items:center; border:3px solid var(--device);}
   .pf-avatar .cam svg{width:16px;height:16px;color:#fff;}
+  .pf-avatar .av{cursor:pointer;}
+  .pf-avatar .av.has-photo,.topbar .avatar.has-photo{background-size:cover;background-position:center;color:transparent;}
+  .pf-foto-via{display:block;margin:-12px auto 18px;background:none;border:0;color:var(--muted,#888);font-size:13px;text-decoration:underline;cursor:pointer;}
   .pf-field{margin-bottom:14px;}
   .pf-field label{display:block; font-size:13px; color:var(--muted); font-weight:600; margin:0 2px 6px;}
   .pf-input{width:100%; background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:13px 14px; font-size:15px; color:var(--text); font-weight:600; outline:none; box-shadow:var(--shadow-card);}
@@ -1136,10 +1139,13 @@
       <div class="sg-opts">${opts}</div>
       <textarea class="sg-ta" id="uTa" placeholder="Racconta cosa succede: da quando, dove lo senti, cosa lo peggiora…">${urgTesto}</textarea>
       <div class="co-rule alt" id="uAlt" style="display:none"></div>
-      <button class="btn-accent" id="uSend" style="width:100%;padding:14px;border-radius:13px" disabled>Invia a Vittorio</button>`;
+      <button class="btn-accent" id="uSend" style="width:100%;padding:14px;border-radius:13px">Invia a Vittorio</button>
+      <p class="pf-save-status" id="uStato" role="status" aria-live="polite"></p>`;
     document.getElementById('uBack').onclick=()=>{ coVista='home'; renderCoach(); };
     const ta=document.getElementById('uTa'), send=document.getElementById('uSend');
-    const agg=()=>{ send.disabled=!(urgSel && urgTesto.trim().length>=10); };
+    const stato=document.getElementById('uStato');
+    const avviso=(t,err)=>{ stato.textContent=t; stato.classList.toggle('error',!!err); };
+    const agg=()=>{ if(stato.classList.contains('error')) avviso(''); };
     view.querySelectorAll('[data-urg]').forEach(b=> b.onclick=()=>{
       urgSel=b.dataset.urg;
       view.querySelectorAll('[data-urg]').forEach(x=>x.classList.toggle('on', x.dataset.urg===urgSel));
@@ -1149,9 +1155,15 @@
       agg();
     });
     ta.addEventListener('input',e=>{ urgTesto=e.target.value; agg(); });
-    send.onclick=()=>{
+    send.onclick=async()=>{
+      if(!urgSel){ avviso('Scegli prima il tipo di urgenza.',true); return; }
+      if(urgTesto.trim().length<10){ avviso('Scrivi in poche parole cosa succede, così Vittorio può risponderti.',true); ta.focus(); return; }
       const o=URG.find(x=>x.k===urgSel);
-      pushToCoach('urgenza', `<b>${o.l}</b><br>${urgTesto.trim().replace(/</g,'&lt;')}`, {categoria:urgSel});
+      const m={id:uid(), ts:Date.now(), from:'atleta', tipo:'urgenza', testo:`${o.l}\n${urgTesto.trim()}`, meta:{categoria:urgSel, plainText:true}, urgente:true};
+      send.disabled=true; send.textContent='Invio…'; avviso('');
+      const ok=window.lippolisCloudSync ? await window.lippolisCloudSync.sendMessage(m,'thread') : false;
+      if(ok===false){ send.disabled=false; send.textContent='Invia a Vittorio'; avviso('Invio non riuscito: controlla la connessione e riprova.',true); return; }
+      thread.push(m); saveState();
       urgSel=null; urgTesto=''; coVista='home'; renderCoach(); renderNav();
       toastMsg('Urgenza inviata · Vittorio è stato avvisato');
     };
@@ -1652,7 +1664,7 @@
     view.querySelectorAll('[data-open-day]').forEach(b=>b.onclick=()=>openDay(Number(b.dataset.openDay)));
   }
   function renderWorkoutList(){
-    const heading=`<h1 class="pagetitle">Allenamento</h1>${physicalMetricsHTML()}`;
+    const heading=`<h1 class="pagetitle">Allenamento</h1>`;
     if(senzaScheda()){
       view.innerHTML=`${heading}<section class="program-panel"><h2 class="program-title">La tua scheda</h2><div class="program-empty">Il PT non ha ancora assegnato una scheda. Quando verrà pubblicata comparirà qui.</div></section>`;
       return;
@@ -2275,8 +2287,6 @@
   // ====== ALTRO (menu) ======
   const ALTRO = [
     {t:'Storico pesi', icon:I.chart},
-    {t:'Check giornaliero', icon:I.pulse},
-    {t:'Abitudini', icon:I.pulse},
     {t:'Metriche', icon:I.body},
     {t:'Progressi fisici', icon:I.camera},
     {t:'Documenti', icon:I.doc},
@@ -2717,7 +2727,28 @@
     if(m) m.setAttribute('content', tema==='scuro' ? '#1B1D20' : '#E1E2E3');
   }
   function iniziali(){ const n=(profilo.nome||'').trim(), c=(profilo.cognome||'').trim(); return ((n[0]||'')+(c[0]||'')).toUpperCase() || 'LP'; }
-  function aggiornaAvatar(){ const a=document.querySelector('.topbar .avatar'); if(a) a.textContent=iniziali(); }
+  function aggiornaAvatar(){
+    const a=document.querySelector('.topbar .avatar'); if(!a) return;
+    a.textContent=iniziali();
+    const foto=fotoValida();
+    a.classList.toggle('has-photo',!!foto); a.style.backgroundImage=foto?`url('${foto}')`:'';
+  }
+  function fotoValida(){ return typeof profilo.foto==='string'&&/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(profilo.foto)?profilo.foto:''; }
+  // Foto profilo: ritagliata al centro, 256×256, JPEG leggero (resta nei dati del cliente e segue l'account).
+  function fotoProfiloDa(file){
+    return new Promise((ok,ko)=>{
+      if(!/^image\//.test(file.type||'')) return ko(new Error('formato'));
+      const url=URL.createObjectURL(file), img=new Image();
+      img.onload=()=>{
+        const lato=Math.min(img.naturalWidth,img.naturalHeight); if(!lato){ URL.revokeObjectURL(url); return ko(new Error('vuota')); }
+        const c=document.createElement('canvas'); c.width=c.height=256;
+        c.getContext('2d').drawImage(img,(img.naturalWidth-lato)/2,(img.naturalHeight-lato)/2,lato,lato,0,0,256,256);
+        URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg',0.82));
+      };
+      img.onerror=()=>{ URL.revokeObjectURL(url); ko(new Error('lettura')); };
+      img.src=url;
+    });
+  }
   function esc(v){ return String(v??'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
   const biaDateFormat=new Intl.DateTimeFormat('it-IT',{dateStyle:'medium',timeStyle:'short'});
   const biaChangeFormat=new Intl.NumberFormat('it-IT',{signDisplay:'exceptZero',minimumFractionDigits:1,maximumFractionDigits:1});
@@ -2804,21 +2835,17 @@
   }
 
   function renderProfilo(){
-    const reports=orderedBiaRecords();
+    const foto=fotoValida();
     view.innerHTML=`
       <div class="pagetitle">Profilo</div>
-      <div class="pf-avatar"><div class="av">${iniziali()}<div class="cam">${I.camsmall}</div></div></div>
+      <div class="pf-avatar"><div class="av${foto?' has-photo':''}" id="pfAv" role="button" tabindex="0" aria-label="Cambia foto profilo"${foto?` style="background-image:url('${foto}')"`:''}>${iniziali()}<div class="cam">${I.camsmall}</div></div></div>
+      <input type="file" id="pfFoto" accept="image/*" hidden>
+      ${foto?'<button type="button" class="pf-foto-via" id="pfFotoVia">Rimuovi foto</button>':''}
       <div class="pf-field"><label>Nome</label><input class="pf-input" id="pfNome" value="${esc(profilo.nome)}" autocomplete="given-name"></div>
       <div class="pf-field"><label>Cognome</label><input class="pf-input" id="pfCogn" value="${esc(profilo.cognome)}" autocomplete="family-name"></div>
       <div class="pf-field"><label>Lingua</label><div class="pf-input sel">Italiano 🇮🇹 <span class="chev">▼</span></div></div>
       <button class="btn-accent" id="save">Salva</button>
       <div class="pf-save-status" id="profileSaveStatus" role="status" aria-live="polite"></div>
-
-      <div class="pf-sec">Scheda</div>
-      <div class="bk-card" style="margin-bottom:14px"><div class="bk-l">Programma in corso</div><div class="bk-v">${senzaScheda()?'Nessuna scheda':esc(PROGRAMMA.nome)}</div><div class="bk-n">${senzaScheda()?'Il PT non ha ancora assegnato una scheda':`${PROGRAMMA.settimane.length} settimane · ${PROGRAMMA.dal} → ${PROGRAMMA.al}`}</div></div>
-
-      <h2 class="pf-sec" id="biaProfileHeading">Composizione corporea</h2>
-      <section class="bk-card bia-profile" id="biaProfileCard" aria-labelledby="biaProfileHeading">${biaProfileHTML(reports)}</section>
 
       <div class="pf-sec">Colore</div>
       <div class="col-grid">${ACCENTI.map(a=>`<button class="col${accento===a.id?' on':''}" data-col="${a.id}" title="${a.nome}"><span style="background:${a.hex}"></span></button>`).join('')}</div>
@@ -2840,7 +2867,16 @@
         <button type="button" class="bk-b" id="accountPassword">Cambia password</button>
       </section>`;
 
-    bindBiaReportButtons(reports);
+    const fotoIn=document.getElementById('pfFoto'), avBtn=document.getElementById('pfAv');
+    avBtn.onclick=()=>fotoIn.click();
+    avBtn.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fotoIn.click(); } };
+    fotoIn.onchange=async()=>{
+      const file=fotoIn.files&&fotoIn.files[0]; if(!file) return;
+      try{ profilo.foto=await fotoProfiloDa(file); saveStateNow(); aggiornaAvatar(); renderProfilo(); toastMsg('Foto profilo aggiornata'); }
+      catch(error){ toastMsg('Non riesco a leggere questa immagine. Prova con un\'altra foto.'); }
+    };
+    const fotoVia=document.getElementById('pfFotoVia');
+    if(fotoVia) fotoVia.onclick=()=>{ delete profilo.foto; saveStateNow(); aggiornaAvatar(); renderProfilo(); };
     window.lippolisAlerts?.mount(document.getElementById('athleteAlertSettings'));
     const sv=document.getElementById('save');
     sv.onclick=async()=>{
