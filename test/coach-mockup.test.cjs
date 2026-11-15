@@ -97,3 +97,15 @@ test("l'importazione a tempo registra secondi e l'editor blocca le prescrizioni 
   assert.throws(() => mockupToProgram(template({ ...exercise, serie: "" }), dates), /numero di serie/);
   assert.throws(() => mockupToProgram(template({ ...exercise, video: "http://example.test/video.mp4" }), dates), /Video non valido/);
 });
+
+test("Workout e Consigli nutrizionali hanno il tasto Elimina in elenco e nell'editor", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../www/coach.html"), "utf8");
+  const js = fs.readFileSync(path.join(__dirname, "../www/src/coach-mockup.mjs"), "utf8");
+  assert.match(html, /bindRows\(el,f,openProgramma,deleteProgramma\)/);
+  assert.match(html, /bindRows\(el,f,openPiano,deletePiano\)/);
+  assert.match(html, /id="deleteMockProgram"/);
+  assert.match(html, /id="deletePiano"/);
+  assert.match(js, /window\.CoachDB=\{[^}]*deleteProgram,deleteMealPlan/);
+  assert.match(js, /archiveProgramDraft",\{draftId:p\._remote\.id\}/);
+  assert.match(js, /hiddenMealPlans/);
+});

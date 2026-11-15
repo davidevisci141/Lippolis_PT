@@ -26,7 +26,7 @@ const sectionRows = new Map(), snapshots = new Map(), stateRevisions = new Map()
 const sectionWrites = new Map();
 let profile, uid, workspaceRevision=0, workspaceSignature="", saveQueue=Promise.resolve(), selectEpoch=0, loadEpoch=0, workspaceLoaded=false;
 let alerts;
-let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}};
+let workspace = {exerciseEdits:{}, templates:[], collaborators:[], priority:{}, recipes:[], preferences:{}, hiddenMealPlans:[]};
 const key = (client,section) => `${client.id}:${section}`;
 const getSection = (client,section) => sectionRows.get(key(client,section))?.content || {};
 const items = (client,section) => getSection(client,section).items || [];
@@ -158,6 +158,7 @@ async function loadDirectory() {
     const id=`${p.athlete_id}:${p.section}`;
     if(!sectionRows.has(id)||Number(p.revision)>=Number(sectionRows.get(id).revision))sectionRows.set(id,p);
   }
+  addAssignedMealPlans();
   const remoteDrafts=checked(clientDrafts);
   for(const item of remoteDrafts){
     const plan=programToMockup(item.program,item.id);
@@ -166,6 +167,61 @@ async function loadDirectory() {
   urgentMessages=checked(urgent);
   refreshSignals();
 }
+// I piani pubblicati a un cliente senza passare dalla libreria (es. importati con
+// l'app del PC) compaiono anche in Consigli nutrizionali → Piani alimentari.
+function assignedMealPlans(){
+  const out=[];
+  for(const c of ui.clienti){
+    const plan=getSection(c,"nutrition").plan;
+    if(plan?.nome)out.push({client:c,plan,key:`${c.id}:${plan.nome}`});
+  }
+  return out;
+}
+function addAssignedMealPlans(){
+  const hidden=new Set(workspace.hiddenMealPlans||[]);
+  for(const {plan,key} of assignedMealPlans()){
+    if(hidden.has(key)||ui.pianiAlimentari.some(p=>p.nome===plan.nome))continue;
+    const copy=structuredClone(plan); delete copy.importato_da;
+    ui.pianiAlimentari.push({...copy,id:crypto.randomUUID(),clienti:1});
+  }
+}
+
+function deleteProgram(p){
+  return new Promise(resolve=>{
+    showModal("Elimina programmazione",`<p>Eliminare «${escape(p.nome)}» dalla libreria Workout?</p><p>Le schede già pubblicate ai clienti non cambiano.</p>`,"Elimina",async ()=>{
+      if(p._remote){
+        try{ await adminCall("archiveProgramDraft",{draftId:p._remote.id}); }
+        catch(error){ if(!/non trovata|non archiviabile/i.test(String(error?.message||"")))throw error; }
+      }
+      const index=ui.programmi.indexOf(p); if(index>=0)ui.programmi.splice(index,1);
+      if(!await saveWorkspace())throw new Error("Eliminazione non salvata: riprova.");
+      ui.toast("Programmazione eliminata");resolve(true);
+    });
+    $("mockModalCancel").addEventListener("click",()=>resolve(false));$("mX").addEventListener("click",()=>resolve(false));
+    $("mockModalCancel").focus();
+  });
+}
+
+function deleteMealPlan(p){
+  const assigned=assignedMealPlans().filter(a=>a.plan.nome===p.nome);
+  const names=assigned.map(a=>a.client.nome).join(", ");
+  const extra=assigned.length?`<label class="chk" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="mockUnassign"> Togli il piano anche a ${escape(names)} (non lo vedrà più nell’app)</label>`:"";
+  return new Promise(resolve=>{
+    showModal("Elimina piano alimentare",`<p>Eliminare «${escape(p.nome)}» dai piani alimentari?</p>${extra}`,"Elimina",async ()=>{
+      const unassign=!!$("mockUnassign")?.checked;
+      for(const a of assigned){
+        if(unassign)await saveSection(a.client,"nutrition",{});
+        else workspace.hiddenMealPlans=[...new Set([...(workspace.hiddenMealPlans||[]),a.key])];
+      }
+      const index=ui.pianiAlimentari.indexOf(p); if(index>=0)ui.pianiAlimentari.splice(index,1);
+      if(!await saveWorkspace())throw new Error("Eliminazione non salvata: riprova.");
+      ui.toast(unassign?"Piano eliminato e tolto al cliente":"Piano eliminato");resolve(true);
+    });
+    $("mockModalCancel").addEventListener("click",()=>resolve(false));$("mX").addEventListener("click",()=>resolve(false));
+    $("mockModalCancel").focus();
+  });
+}
+
 let urgentMessages=[];
 function refreshSignals() {
   const priorities=[], dates=[];
@@ -1075,6 +1131,6 @@ function openNotification(destination,clientId){
     $("homeCalendar")?.scrollIntoView({block:"nearest"});
   }
 }
-window.CoachDB={bodyWeightPanel,saveWorkspace,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,weightHistoryOverview,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
+window.CoachDB={bodyWeightPanel,saveWorkspace,deleteProgram,deleteMealPlan,saveProgram,assignProgram,publishNutrition,confirmNutritionDayDeletion,createClient,openClient,programHistory,clientSection,weightHistoryOverview,addMeasure,metricActions,createExercise,saveExercise,exerciseAttachments,settings,sendPriority,storeSignal,recipes,renderInbox,editCalendarReminder,deleteCalendarReminder};
 $("coachLogout").onclick=signOutCoach;
 void start();
