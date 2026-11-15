@@ -1,6 +1,6 @@
 import { adminCall, supabase, profileFromRow } from "./supabase.mjs";
 import { getAuthorizedSession, friendlyAuthError, logout } from "./auth.mjs";
-import { athleteWeightHistory, mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
+import { athleteSessions, athleteWeightHistory, clientProgramList, mockupToProgram, programToMockup, nutritionSummary } from "./coach-mockup-model.mjs";
 import { parseExerciseVideo } from "./exercise-video.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
 import { markChatRead } from "./chat.mjs";
@@ -590,40 +590,65 @@ function weightHistoryOverview(client){
   </button>`;
 }
 
+let weightTab="esercizi", weightPick=null, weightQuery="";
 function clientWeightHistory(client){
+  weightPick=null; weightQuery="";
   drawClient(client,"Storico pesi",'<div id="clientWeightHistory"></div>');
-  paintWeightHistory(weightHistory(client));
+  paintWeightHistory(weightHistory(client),athleteSessions(snapshots.get(client.id)));
 }
 
-function paintWeightHistory({weighIns,exercises}){
-  const host=$("clientWeightHistory"), selected=$("weightExercise")?.value;
-  const [latest,first]=[weighIns[0],weighIns.at(-1)];
-  const chartPoints=weighIns.slice(0,30).reverse().map(item=>({...item,l:weightShortDate.format(item.ts)}));
-  const body=latest?`<dl class="weight-stats"><div><dt>Ultima pesata</dt><dd>${weightNumber.format(latest.v)} kg</dd><small>${displayDate(latest.ts)}</small></div>
-    ${weighIns.length>1?`<div><dt>Dalla prima pesata</dt><dd>${weightSigned.format(latest.v-first.v)} kg</dd><small>${displayDate(first.ts)}</small></div>`:""}</dl>
-    ${chartPoints.length>1?`<figure class="weight-chart"><figcaption>Andamento delle pesate${weighIns.length>30?" · ultime 30":""}</figcaption>${ui.buildChart(chartPoints,{timeAxis:true})}</figure>`:""}
-    <details class="weight-list" ${weighIns.length<=5?"open":""}><summary>${countLabel(weighIns.length,"pesata registrata","pesate registrate")}</summary>
+const kgText=(kg,perSide)=>kg===null?"—":kg===0?"C.L.":`${weightNumber.format(kg)} ${perSide?"kg/lato":"kg"}`;
+function setsTable(sets,unit,perSide){
+  return `<table class="weight-table"><thead><tr><th scope="col">Serie</th><th scope="col">Carico</th><th scope="col">${unit==="sec"?"Tempo":"Rip."}</th><th scope="col">RIR</th></tr></thead><tbody>
+    ${sets.map(set=>`<tr><td>${escape(set.series)}</td><td>${kgText(set.kg,perSide)}</td><td>${set.reps===null?"—":weightNumber.format(set.reps)+(unit==="sec"?" s":"")}</td><td>${set.rir===null?"—":weightNumber.format(set.rir)}</td></tr>`).join("")}</tbody></table>`;
+}
+const bestSet=sets=>sets.filter(x=>x.kg!==null).sort((a,b)=>b.kg-a.kg||(b.reps??0)-(a.reps??0))[0];
+
+function paintWeightHistory({weighIns,exercises},sessions=[]){
+  const host=$("clientWeightHistory"); if(!host)return;
+  const tabs=[["esercizi",`Esercizi · ${exercises.length}`],["sessioni",`Sessioni · ${sessions.length}`],["peso",`Peso corporeo · ${weighIns.length}`]];
+  let body="";
+  if(weightTab==="esercizi"){
+    const exercise=weightPick&&exercises.find(item=>item.key===weightPick);
+    if(exercise){
+      body=`<button type="button" class="btn btn-ghost weight-backlist" id="weightBackList">${ui.I.chevL} Tutti gli esercizi</button>
+        <h2>${escape(exercise.name)}${exercise.unit==="sec"?" · a tempo":""}${exercise.perSide?" · per lato":""}</h2>
+        ${exercise.entries.map((entry,index)=>`<details class="weight-list" ${index===0?"open":""}>
+          <summary>${displayDate(entry.ts)}${entry.title?` · ${escape(entry.title)}`:""}</summary>
+          ${entry.program?`<p class="weight-session-program">${escape(entry.program)}</p>`:""}${setsTable(entry.sets,exercise.unit,exercise.perSide)}</details>`).join("")}`;
+    }else{
+      const q=weightQuery.toLocaleLowerCase("it");
+      const shown=exercises.filter(item=>!q||item.name.toLocaleLowerCase("it").includes(q));
+      body=exercises.length?`<label class="fld weight-search">Cerca esercizio<input class="inp" id="weightSearch" type="search" value="${escape(weightQuery)}" placeholder="Nome esercizio"></label>
+        <div class="weight-picklist">${shown.map(item=>{const last=item.entries[0], top=bestSet(last.sets);
+          return `<button type="button" class="weight-pick" data-ex="${escape(item.key)}"><span class="weight-pick-name">${escape(item.name)}</span>
+            <span class="weight-pick-meta">${displayDate(last.ts)} · ${item.entries.length} ${item.entries.length===1?"seduta":"sedute"}${top?` · ${kgText(top.kg,item.perSide)} × ${top.reps===null?"—":weightNumber.format(top.reps)}`:""}</span>${ui.I.chevR}</button>`;}).join("")||'<p class="weight-empty">Nessun esercizio con questo nome.</p>'}</div>`
+        :'<p class="weight-empty">Le serie compariranno qui dopo che il cliente avrà concluso un allenamento.</p>';
+    }
+  }else if(weightTab==="sessioni"){
+    body=sessions.length?sessions.map((session,index)=>`<details class="weight-list weight-session" ${index===0?"open":""}>
+      <summary><strong>${displayDate(session.ts)}</strong> · ${escape(session.title)}<span class="weight-session-count">${session.exercises.length} esercizi</span></summary>
+      ${session.program?`<p class="weight-session-program">${escape(session.program)}${session.week?` · settimana ${session.week}`:""}${session.note?` · ${escape(session.note)}`:""}</p>`:""}
+      ${session.exercises.map(ex=>`<div class="weight-session-ex"><h3>${escape(ex.name)}</h3>${setsTable(ex.sets,ex.unit,false)}${ex.note?`<p class="weight-session-program">${escape(ex.note)}</p>`:""}</div>`).join("")}
+    </details>`).join(""):'<p class="weight-empty">Nessuna seduta registrata.</p>';
+  }else{
+    const [latest,first]=[weighIns[0],weighIns.at(-1)];
+    const chartPoints=weighIns.slice(0,30).reverse().map(item=>({...item,l:weightShortDate.format(item.ts)}));
+    body=latest?`<dl class="weight-stats"><div><dt>Ultima pesata</dt><dd>${weightNumber.format(latest.v)} kg</dd><small>${displayDate(latest.ts)}</small></div>
+      ${weighIns.length>1?`<div><dt>Dalla prima pesata</dt><dd>${weightSigned.format(latest.v-first.v)} kg</dd><small>${displayDate(first.ts)}</small></div>`:""}</dl>
+      ${chartPoints.length>1?`<figure class="weight-chart"><figcaption>Andamento delle pesate${weighIns.length>30?" · ultime 30":""}</figcaption>${ui.buildChart(chartPoints,{timeAxis:true})}</figure>`:""}
       <table class="weight-table"><thead><tr><th scope="col">Data</th><th scope="col">Peso</th></tr></thead><tbody>${weighIns.map(item=>
-        `<tr><td>${displayDate(item.ts)}</td><td>${weightNumber.format(item.v)} kg</td></tr>`).join("")}</tbody></table></details>`
-    :'<p class="weight-empty">Il cliente non ha ancora registrato pesate.</p>';
-  host.innerHTML=`<section class="weight-panel"><h2>Carichi in allenamento</h2>
-    ${exercises.length?`<label class="fld">Esercizio<select class="sel" id="weightExercise">${exercises.map(exercise=>
-      `<option value="${escape(exercise.key)}">${escape(exercise.name)}${exercise.unit==="sec"?" · a tempo":""}${exercise.perSide?" · per lato":""}</option>`).join("")}</select></label>
-      <div id="weightSessions"></div>`:'<p class="weight-empty">Le serie compariranno qui dopo che il cliente avrà concluso un allenamento.</p>'}
-    </section><section class="weight-panel"><h2>Peso corporeo</h2>${body}</section>`;
-  const select=$("weightExercise");
-  if(!select)return;
-  if(exercises.some(exercise=>exercise.key===selected))select.value=selected;
-  select.onchange=()=>{
-    const exercise=exercises.find(item=>item.key===select.value);
-    $("weightSessions").innerHTML=exercise.entries.map((entry,index)=>`<details class="weight-list" ${index===0?"open":""}>
-      <summary>${displayDate(entry.ts)}${entry.title?` · ${escape(entry.title)}`:""}</summary>
-      ${entry.program?`<p class="weight-session-program">${escape(entry.program)}</p>`:""}
-      <table class="weight-table"><thead><tr><th scope="col">Serie</th><th scope="col">Carico</th><th scope="col">${exercise.unit==="sec"?"Tempo":"Rip."}</th><th scope="col">RIR</th></tr></thead><tbody>
-      ${entry.sets.map(set=>`<tr><td>${escape(set.series)}</td><td>${set.kg===null?"—":set.kg===0?"C.L.":`${weightNumber.format(set.kg)} ${exercise.perSide?"kg/lato":"kg"}`}</td>
-        <td>${set.reps===null?"—":weightNumber.format(set.reps)+(exercise.unit==="sec"?" s":"")}</td><td>${set.rir===null?"—":weightNumber.format(set.rir)}</td></tr>`).join("")}</tbody></table></details>`).join("");
-  };
-  select.onchange();
+        `<tr><td>${displayDate(item.ts)}</td><td>${weightNumber.format(item.v)} kg</td></tr>`).join("")}</tbody></table>`
+      :'<p class="weight-empty">Il cliente non ha ancora registrato pesate.</p>';
+  }
+  host.innerHTML=`<div class="subtabs" role="tablist">${tabs.map(([id,label])=>`<button type="button" role="tab" aria-selected="${weightTab===id}" class="${weightTab===id?"on":""}" data-wtab="${id}">${label}</button>`).join("")}</div>
+    <section class="weight-panel">${body}</section>`;
+  const again=()=>paintWeightHistory({weighIns,exercises},sessions);
+  host.querySelectorAll("[data-wtab]").forEach(b=>b.onclick=()=>{weightTab=b.dataset.wtab;weightPick=null;again();});
+  host.querySelectorAll("[data-ex]").forEach(b=>b.onclick=()=>{weightPick=b.dataset.ex;again();host.scrollIntoView({block:"start"});});
+  const back=$("weightBackList"); if(back)back.onclick=()=>{weightPick=null;again();};
+  const search=$("weightSearch");
+  if(search)search.oninput=()=>{weightQuery=search.value;const pos=search.selectionStart;again();const next=$("weightSearch");next.focus();next.setSelectionRange(pos,pos);};
 }
 
 async function refreshSelectedSnapshot(client){
@@ -634,24 +659,29 @@ async function refreshSelectedSnapshot(client){
   if(!cacheClientSnapshot(client.id,state)||(!$("clientWeightHistory")&&!$("clientWeightOverview")))return;
   const after=weightHistory(client);
   if(JSON.stringify(before)===JSON.stringify(after))return;
-  if($("clientWeightHistory"))paintWeightHistory(after);
+  if($("clientWeightHistory"))paintWeightHistory(after,athleteSessions(snapshots.get(client.id)));
   else if($("clientWeightOverview"))ui.render();
 }
 
 function programHistory(c){
   const active=published.get(c.id);
-  const entries=[...(active?[active]:[]),...(versions.get(c.id)||[]).filter(v=>v.id!==active?.version_id)];
   const ownDrafts=drafts.get(c.id)||[];
   const workouts=(snapshots.get(c.id)?.sessioni||[]).slice().sort((a,b)=>b.ts-a.ts);
-  const table=entries.map((item,i)=>{
-    const p=item.program, expired=(p.al||p.endDate)<today(), status=i===0&&active?"Attiva":"Archiviata";
-    return `<div class="ptrow"><div class="ptc ptname">${escape(p.nome||p.name)}</div><div class="ptc" data-l="Inizio">${displayDate(p.dal||p.startDate)}</div><div class="ptc" data-l="Fine">${displayDate(p.al||p.endDate)}</div><div class="ptc" data-l="Stato"><span class="pstat ${expired?"scaduta":"corso"}">${expired?"Scaduta":status}</span></div><div class="ptc ptact">${button("mockVersion"+i,"Apri copia")}${button("mockExportVersion"+i,"Esporta")}</div></div>`;
-  }).join("");
-  drawClient(c,"Programmazione",`<div class="ptable"><div class="pthead"><div>Programma</div><div>Inizio programma</div><div>Fine programma</div><div>Stato</div><div></div></div>${table||row("Nessuna scheda pubblicata")}</div>
-    ${ownDrafts.length?`<h2>Bozze del cliente</h2>${ownDrafts.map((d,i)=>row(d.program.nome||d.program.name||"Bozza",displayDate(d.updated_at),button("mockDraft"+i,"Apri bozza")+button("mockArchiveDraft"+i,"Archivia"))).join("")}`:""}
-    <h2>Allenamenti registrati</h2>${workouts.length?workouts.slice(0,40).map(s=>`<details class="metric"><summary>${escape(s.titolo||"Seduta")} · ${displayDate(s.ts)}</summary>${(s.esercizi||[]).map(ex=>row(ex.nome,(ex.sets||[]).map(set=>`${set.kg??0} kg × ${set.reps??"—"}${ex.unita==="sec"?" s":""}${set.rir==null?"":" · RIR "+set.rir}`).join("\n"))).join("")}</details>`).join(""):row("Nessuna seduta registrata")}`,button("mockProgramList","Apri Workout",true));
+  const {inCorso,concluse}=clientProgramList({snapshot:snapshots.get(c.id)||{},active,versions:versions.get(c.id)||[],today:today()});
+  const entries=[...inCorso,...concluse].filter(r=>r.published);
+  const head=`<div class="pthead pthead-wide"><div>Programma</div><div>Inizio</div><div>Fine</div><div>Stato</div><div>Completati</div><div>Saltati</div><div></div></div>`;
+  const line=r=>{const i=entries.indexOf(r);
+    return `<div class="ptrow ptrow-wide${r.ongoing?" ptrow-live":""}"><div class="ptc ptname">${escape(r.name)}${r.published?"":'<small class="ptsrc">da storico allenamenti</small>'}</div>
+      <div class="ptc" data-l="Inizio">${displayDate(r.start)}</div><div class="ptc" data-l="Fine">${displayDate(r.end)}</div>
+      <div class="ptc" data-l="Stato"><span class="pstat ${r.ongoing?"corso":"scaduta"}">${r.ongoing?"In corso":"Terminato"}</span>${r.expected?`<small class="ptsub">${r.done}/${r.expected}</small>`:""}</div>
+      <div class="ptc" data-l="Completati">${r.done}</div><div class="ptc" data-l="Saltati">${r.skipped===null?"—":r.skipped}</div>
+      <div class="ptc ptact">${r.published?button("mockVersion"+i,"Apri copia")+button("mockExportVersion"+i,"Esporta"):""}</div></div>`;};
+  drawClient(c,"Programmazione",`<h2 class="ptgroup">In corso</h2><div class="ptable">${inCorso.length?head+inCorso.map(line).join(""):row("Nessuna programmazione in corso")}</div>
+    <h2 class="ptgroup">Concluse</h2><div class="ptable">${concluse.length?head+concluse.map(line).join(""):row("Nessuna programmazione conclusa")}</div>
+    ${ownDrafts.length?`<h2>Bozze del cliente</h2>${ownDrafts.map((d,i)=>row(d.program.nome||d.program.name||"Bozza",displayDate(d.updated_at),button("mockDraft"+i,"Apri bozza")+button("mockArchiveDraft"+i,"Archivia"))).join("")}`:""}`,button("mockProgramList","Apri Workout",true));
   $("mockProgramList").onclick=()=>ui.go("workout");
-  entries.forEach((item,i)=>{
+  entries.forEach((r,i)=>{
+    const item=r.item;
     $("mockVersion"+i).onclick=()=>{const copy=programToMockup(item.program);ui.programmi.unshift(copy);ui.openProgramma(copy);ui.scheduleSave();};
     $("mockExportVersion"+i).onclick=()=>exportProgram(c,item,workouts);
   });
