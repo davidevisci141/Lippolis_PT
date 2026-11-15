@@ -633,8 +633,26 @@ function clientInfo(c){
 }
 function clientNutrition(c){
   const plan=getSection(c,"nutrition").plan;
-  drawClient(c,"Consigli alimentari",plan?row(plan.nome,`${plan.giorni?.length||0} giorni · pubblicato il ${displayDate(getSection(c,"nutrition").publishedAt)}`):empty("Nessun piano assegnato"),button("mockGoNutrition","Apri piani",true));
+  const card=plan?`<div class="row" style="flex-wrap:wrap;gap:12px"><span class="row-main" style="flex:1 1 220px;min-width:0"><span class="row-t" style="overflow-wrap:anywhere">${escape(plan.nome)}</span><span class="row-s">${escape(`${plan.giorni?.length||0} giorni · pubblicato il ${displayDate(getSection(c,"nutrition").publishedAt)}`)}</span></span><span style="display:flex;gap:8px;flex-wrap:wrap">${button("mockOpenClientPlan","Apri")}<button type="button" class="btn btn-ghost btn-danger-ghost" id="mockRemoveClientPlan">Elimina</button></span></div>`:"";
+  drawClient(c,"Consigli alimentari",plan?card:empty("Nessun piano assegnato"),button("mockGoNutrition","Apri piani",true));
   $("mockGoNutrition").onclick=()=>ui.go("nutrizione");
+  if(plan){
+    // Apri: il piano si modifica dalla libreria (stesso nome); se non c'è ancora, ne creo la copia.
+    $("mockOpenClientPlan").onclick=()=>{
+      let item=ui.pianiAlimentari.find(p=>p.nome===plan.nome);
+      if(!item){
+        const copy=structuredClone(plan); delete copy.importato_da;
+        item={...copy,id:crypto.randomUUID(),clienti:1,aggiornato:Date.now()};
+        ui.pianiAlimentari.unshift(item); void saveWorkspace();
+      }
+      ui.openPiano(item);
+    };
+    $("mockRemoveClientPlan").onclick=()=>showModal("Togli piano alimentare",`<p>Togliere «${escape(plan.nome)}» a ${escape(c.nome)}?</p><p>Non lo vedrà più nell’app. Il piano resta in Consigli nutrizionali, se c’è.</p>`,"Elimina",async ()=>{
+      await saveSection(c,"nutrition",{});
+      ui.toast("Piano tolto a "+c.nome);
+      if(ui.view==="cliente"&&ui.currentClient?.id===c.id)clientNutrition(c);
+    });
+  }
   if(!plan){
     const view=ui.main.querySelector(".sec");
     void supabase.from("nutrition_plans").select("plan").eq("athlete_id",c.id).eq("status","published").maybeSingle().then(({data,error})=>{
