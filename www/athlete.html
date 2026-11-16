@@ -836,11 +836,20 @@
   }
   // Le sessioni importate da CoachPlus hanno settimana e giorno del vecchio programma:
   // restano nello storico ma non fanno risultare già svolte le giornate del blocco in corso.
+  // Eccezione: una sessione importata dello STESSO programma (stesso nome) e fatta dentro le date
+  // di quella settimana conta come seduta svolta. Serve quando una scheda già iniziata altrove
+  // (vecchio APK) viene pubblicata nell'app e il suo storico viene importato a parte.
+  function dentroSettimana(ts, week){
+    if(!Number.isFinite(Number(ts))||!week?.dal||!week?.al) return false;
+    const da=new Date(week.dal+'T00:00:00').getTime(), a=new Date(week.al+'T23:59:59').getTime();
+    return Number.isFinite(da)&&Number.isFinite(a)&&ts>=da&&ts<=a;
+  }
   function sessioneDelGiorno(i, w){
     if(senzaScheda()) return null;
-    const n=PROGRAMMA.settimane[w==null?settCorr:w].n;
-    return sessioni.find(x=>!x.importata && x.settimana===n && x.giorno===i &&
-      (versioneSchedaLocale ? x.programVersionId===versioneSchedaLocale : !x.programVersionId && (x.prog==null || x.prog===PROGRAMMA.nome))) || null;
+    const week=PROGRAMMA.settimane[w==null?settCorr:w], n=week.n;
+    return sessioni.find(x=>x.settimana===n && x.giorno===i && (x.importata
+      ? (x.prog===PROGRAMMA.nome && dentroSettimana(x.ts, week))
+      : (versioneSchedaLocale ? x.programVersionId===versioneSchedaLocale : !x.programVersionId && (x.prog==null || x.prog===PROGRAMMA.nome)))) || null;
   }
   function giornoFatto(i,w){ return !!sessioneDelGiorno(i,w); }
   function infoEsercizio(nome){
