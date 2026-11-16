@@ -27,6 +27,7 @@
     --warn:#B9761A; --warn-soft:rgba(185,118,26,.14);
     --danger:#D85046; --danger-ink:#B03A31;
     --up:#1FA971; --up-rgb:31,169,113; --up-ink:#0E7A50;
+    --sg-down:#E02424; --sg-down-rgb:224,36,36; --sg-down-ink:#B91C1C;
     --shadow-card:0 1px 2px rgba(20,24,28,.07), 0 8px 22px rgba(20,24,28,.09);
     --r:16px;
   }
@@ -40,6 +41,7 @@
     --warn:#E0A44A; --warn-soft:rgba(224,164,74,.16);
     --danger:#E8695F; --danger-ink:#FF9C93;
     --up:#2ECC8F; --up-rgb:46,204,143; --up-ink:#5FE3AE;
+    --sg-down:#FF3B3B; --sg-down-rgb:255,59,59; --sg-down-ink:#FF6B6B;
     --shadow-card:0 1px 2px rgba(0,0,0,.35), 0 8px 22px rgba(0,0,0,.30);
   }
   html[data-tema="scuro"] .ab .bx{border-color:var(--line);}
@@ -276,8 +278,13 @@
   .okd svg{width:11px; height:11px;}
   tr.sgrow.done td:first-child{background:var(--accent); color:#fff;}
   .sg{font-family:'Archivo',system-ui,sans-serif; font-size:11.5px; font-weight:800; padding:5px 9px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:#5a5f66; white-space:nowrap;}
+  .pf-fold > summary{list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between;}
+  .pf-fold > summary::-webkit-details-marker{display:none;}
+  .pf-fold-i{display:inline-flex; color:var(--muted, #8a8f96); transition:transform .2s;}
+  .pf-fold-i svg{width:18px; height:18px;}
+  .pf-fold[open] .pf-fold-i{transform:rotate(90deg);}
   .sg.up,.sg.zav{background:rgba(var(--up-rgb),.12); border-color:var(--up); color:var(--up-ink);}
-  .sg.down{background:rgba(216,80,70,.12); border-color:var(--danger); color:var(--danger-ink);}
+  .sg.down{background:rgba(var(--sg-down-rgb),.14); border-color:var(--sg-down); color:var(--sg-down-ink);}
   .sg.keep,.sg.push{background:var(--accent-soft); border-color:var(--accent); color:var(--accent-ink);}
   .sugg-hint{margin-top:8px; font-size:12px; color:#5a5f66; line-height:1.5; background:var(--surface2); border-radius:10px; padding:8px 10px;}
   .tg-rir{-webkit-appearance:none; appearance:none; font:inherit; cursor:pointer; display:inline-flex; align-items:center; gap:5px;}
@@ -571,6 +578,7 @@
   .co-hn{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14.5px; color:var(--text);}
   .co-hs{font-size:11px; color:var(--muted); margin-top:2px;}
   .co-thread{display:flex;flex-direction:column;gap:10px;padding:14px;background:var(--surface2);border:1px solid var(--line-soft);border-radius:16px;min-height:180px;}
+  .co-thread-full{min-height:calc(100vh - 330px);}
   .co-thread .co-msg{white-space:pre-wrap;overflow-wrap:anywhere;}
   .co-notify{margin-left:auto;flex:none;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--surface2);color:var(--text);cursor:pointer;font:700 11px 'Manrope',system-ui,sans-serif;}
   .co-send-status{font-size:12px;color:var(--danger-ink);margin:4px 0;}
@@ -1067,31 +1075,11 @@
   }
 
   function renderCoachHome(){
-    const iniz=chatCoachName.split(/\s+/).slice(0,2).map(w=>w[0]).join('');
     const caso=casoAperto();
-    const inAttesa=differite.filter(d=>d.stato==='in attesa').length;
+    // Solo la conversazione con il PT: è lui a valutare cosa è urgente.
     let html=`<div class="pagetitle">Coach</div>
-      <div class="co-head">
-        <div class="co-av">${esc(iniz)}</div>
-        <div class="co-hi"><div class="co-hn" id="chatCoachName">${esc(chatCoachName)}</div></div>
-        <button type="button" class="co-notify" id="athleteChatNotify" ${window.lippolisAlerts?"":"hidden"}>Notifiche</button>
-      </div>`;
-
-    if(caso){
-      html+=`<div class="co-thread" id="coThread"></div>
-        <div class="co-comp">
-          <textarea id="coTa" placeholder="Aggiungi un dettaglio…" rows="1"></textarea>
-          <button class="co-send" id="coSend" aria-label="Invia">${I.send}</button>
-        </div>
-        `;
-    } else {
-      html+=`<div class="co-rule">
-          <b>Scrivi al tuo PT o segnala un’urgenza.</b>
-          </div>
-        <button class="co-urg" id="coUrg">${I.alertTri}<span><b>Segnala un'urgenza</b><i>Dolore, problema di salute, stop prolungato</i></span></button>
-        <button class="co-alt" id="coDif">${I.coach}<span><b>Lascia una domanda per il tuo PT</b><i>${inAttesa?inAttesa+' in attesa':'Risponde al prossimo controllo scheda'}</i></span></button>`;
-      html+=`<div class="co-sep">Conversazioni</div><div class="co-thread" id="coThread"></div><div class="co-comp"><textarea id="coTa" placeholder="Scrivi al tuo PT…" rows="1"></textarea><button class="co-send" id="coSend" aria-label="Invia">${I.send}</button></div>`;
-    }
+      <div class="co-thread co-thread-full" id="coThread"></div>
+      <div class="co-comp"><textarea id="coTa" placeholder="${caso?'Aggiungi un dettaglio…':'Scrivi al tuo PT…'}" rows="1"></textarea><button class="co-send" id="coSend" aria-label="Invia">${I.send}</button></div>`;
     view.innerHTML=html+'<p class="co-send-status" id="coSendStatus" role="status"></p>';
 
     const th=document.getElementById('coThread');
@@ -1836,7 +1824,7 @@
 
   function card(ex, idx){
     const st=exState(giornoCorr, idx, nSlot(ex)); const uni=isUnilat(ex);
-    const c=document.createElement('div'); c.className='card open'+(isDone(ex,st)?' done':''); c.style.animationDelay=(idx*0.04)+'s';
+    const c=document.createElement('div'); c.className='card'+(st.chiuso?'':' open')+(isDone(ex,st)?' done':''); c.style.animationDelay=(idx*0.04)+'s';
     let targets;
     if(ex.cardio||ex.timed){
       targets=`<button class="tg tg-timer" data-sec="${toSec(ex.tempo)}" data-label="${esc(ex.nome)}">Tempo <b>${esc(ex.tempo)}</b> ${I.play}</button>`;
@@ -1917,7 +1905,7 @@
     }
     c.querySelector('.chk').onclick=(e)=>{ e.stopPropagation(); st.manual=!st.manual; afterChange(ex,st,c); };
     c.querySelector('.flagbtn').onclick=(e)=>{ e.stopPropagation(); openSegnala(ex.nome, st); };
-    c.querySelector('.card-top').onclick=()=>c.classList.toggle('open');
+    c.querySelector('.card-top').onclick=()=>{ const aperta=c.classList.toggle('open'); if(aperta) delete st.chiuso; else st.chiuso=true; saveState(); };
     c.querySelectorAll('.tg-timer').forEach(btn=> btn.onclick=()=> startTimer(+btn.dataset.sec, btn.dataset.label));
     const scEl=c.querySelector('.duo-stor');
     if(scEl)scEl.onclick=(event)=>{
@@ -2839,6 +2827,7 @@
 
   function openNotificationSettings(){
     showTab('profilo');
+    const fold=document.getElementById('athleteAlertFold'); if(fold) fold.open=true;
     document.getElementById('athleteAlertHeading')?.scrollIntoView({block:'start'});
     document.querySelector('#athleteAlertSettings button')?.focus({preventScroll:true});
   }
@@ -2867,8 +2856,10 @@
 
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>
-      <div class="pf-sec" id="athleteAlertHeading">Notifiche</div>
-      <div class="bk-card" id="athleteAlertSettings" aria-labelledby="athleteAlertHeading"></div>
+      <details class="pf-fold" id="athleteAlertFold">
+        <summary class="pf-sec" id="athleteAlertHeading">Notifiche <span class="pf-fold-i">${I.chevR}</span></summary>
+        <div class="bk-card" id="athleteAlertSettings" aria-labelledby="athleteAlertHeading"></div>
+      </details>
       <div class="pf-link danger" id="pfReset">${I.trash} Cancella tutti i dati</div>
       <h2 class="pf-sec" id="profileAccountHeading">Account</h2>
       <section class="bk-card profile-account" aria-labelledby="profileAccountHeading">

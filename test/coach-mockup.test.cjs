@@ -128,3 +128,12 @@ test("nella scheda cliente i consigli alimentari si aprono e si tolgono", () => 
   assert.match(js, /\$\("mockOpenClientPlan"\)\.onclick/);
   assert.match(js, /await saveSection\(c,"nutrition",\{\}\)/);
 });
+
+test("app cliente: notifiche richiudibili, carichi giù in rosso, esercizi chiusi ricordati, Coach solo chat", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../www/athlete.html"), "utf8");
+  assert.match(html, /<details class="pf-fold" id="athleteAlertFold">/);
+  assert.match(html, /\.sg\.down\{background:rgba\(var\(--sg-down-rgb\)/);
+  assert.match(html, /st\.chiuso\?'':' open'/);
+  assert.doesNotMatch(html, /id="coUrg"/);
+  assert.doesNotMatch(html, /id="coDif"/);
+});
