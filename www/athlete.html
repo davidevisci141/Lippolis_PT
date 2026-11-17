@@ -462,7 +462,13 @@
   .session-action span{font-size:11px;font-weight:800;color:var(--muted);padding:0 4px}
   .set .sl{flex:0 0 38px}.set .field,.set .field input{min-width:0}
   .set .set-rest{padding:6px;flex:0 0 auto;min-height:30px}
+  .set .set-work{-webkit-appearance:none;appearance:none;font:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:6px 8px;flex:0 0 auto;min-height:30px;border:0;background:var(--accent);color:var(--on-accent);font-weight:800}
+  .set .set-work svg{width:15px;height:15px}
+  .set .set-work:active{transform:scale(.96)}
+  .timerbar.work{background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 70%,#000))}
+  .timerbar.prep .tb-time{opacity:.85}
   @media(max-width:440px){.set .set-rest{font-size:0;gap:0}.set .set-rest svg{width:15px;height:15px}}
+  @media(max-width:440px){.set .set-work{font-size:0;gap:0;padding:6px 9px}.set .set-work svg{width:18px;height:18px}}
   #execModal .em-card{max-width:560px;max-height:90%;overflow:auto}
   .em-frame iframe,.em-frame video{border:0;width:100%;height:100%;position:absolute;inset:0;object-fit:contain}
   .em-cap a{color:var(--accent-ink);font-weight:800}.em-notes{white-space:pre-wrap;text-align:left;margin:0 0 8px;line-height:1.55}
@@ -923,6 +929,7 @@
     plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
     spark:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/></svg>',
     play:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>',
+    stopwatch:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="13.5" r="7.5"/><path d="M12 13.5V9.5M10 2.5h4M18.5 6.5l1.5-1.5"/></svg>',
     pause:'<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
     close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
     doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h6"/></svg>',
@@ -1860,7 +1867,8 @@
         const targetSummary=[targetType,targetReps?`${targetReps}${ex.unita==='sec'?' sec':''}`:'',targetLoad?`Carico ${targetLoad}`:''].filter(Boolean).join(' · ');
         const label=esc(slotLabel(ex,i));
         const rest=Number(prescribed?.rest_seconds);
-        sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}${targetSummary?`<small class="set-prescription">${esc(targetSummary)}</small>`:''}</div><div class="field"><input type="text" inputmode="decimal" aria-label="Peso serie ${label}" placeholder="${esc(targetLoad)}"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric" min="1" aria-label="${ex.unita==='sec'?'Secondi':'Ripetizioni'} serie ${label}" placeholder="${esc(String(targetReps).replace(/s$/i,''))}"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric" min="0" max="10" aria-label="RIR serie ${label}" placeholder="${esc(prescribed?.target_rir??ex.rir??'')}"><span>RIR</span></div>${Number.isFinite(rest)&&rest>0?`<button type="button" class="tg tg-timer set-rest" data-sec="${rest}" data-label="Recupero serie ${label}" aria-label="Avvia recupero serie ${label}">${I.play} ${fmtT(rest)}</button>`:''}</div>`;
+        const workSec=ex.unita==='sec'?secondiTarget(targetReps):0;
+        sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}${targetSummary?`<small class="set-prescription">${esc(targetSummary)}</small>`:''}</div><div class="field"><input type="text" inputmode="decimal" aria-label="Peso serie ${label}" placeholder="${esc(targetLoad)}"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric" min="1" aria-label="${ex.unita==='sec'?'Secondi':'Ripetizioni'} serie ${label}" placeholder="${esc(String(targetReps).replace(/s$/i,''))}"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric" min="0" max="10" aria-label="RIR serie ${label}" placeholder="${esc(prescribed?.target_rir??ex.rir??'')}"><span>RIR</span></div>${workSec>0?`<button type="button" class="tg set-work" data-work="${workSec}" data-si="${i}" data-label="${esc(ex.nome)} · Serie ${label}" data-rest="${Number.isFinite(rest)&&rest>0?rest:(recEff(ex)||0)}" aria-label="Avvia timer esercizio serie ${label}">${I.stopwatch} ${fmtT(workSec)}</button>`:''}${Number.isFinite(rest)&&rest>0?`<button type="button" class="tg tg-timer set-rest" data-sec="${rest}" data-label="Recupero serie ${label}" aria-label="Avvia recupero serie ${label}">${I.play} ${fmtT(rest)}</button>`:''}</div>`;
       }
       sets+=`</div><div class="set-btns"><button type="button" class="add-set-btn">+ Aggiungi serie</button>${setCount>(uni?2:1)?'<button type="button" class="del-set-btn">− Togli serie</button>':''}</div>`;
     }
@@ -1914,6 +1922,7 @@
     c.querySelector('.flagbtn').onclick=(e)=>{ e.stopPropagation(); openSegnala(ex.nome, st); };
     c.querySelector('.card-top').onclick=()=>{ const aperta=c.classList.toggle('open'); if(aperta) delete st.chiuso; else st.chiuso=true; saveState(); };
     c.querySelectorAll('.tg-timer').forEach(btn=> btn.onclick=()=> startTimer(+btn.dataset.sec, btn.dataset.label));
+    c.querySelectorAll('.set-work').forEach(btn=> btn.onclick=(e)=>{ e.stopPropagation(); const row=c.querySelectorAll('.set')[+btn.dataset.si]; avviaEsercizio(+btn.dataset.work, btn.dataset.label, row?.querySelectorAll('input')[1], +btn.dataset.rest); });
     const scEl=c.querySelector('.duo-stor');
     if(scEl)scEl.onclick=(event)=>{
       event.stopPropagation();
@@ -2246,33 +2255,48 @@
   function riapplicaVolume(){ if(!tmr.running) return; if(tmr.nativo) nativoAvvia(); else scheduleBeep((tmr.endAt-Date.now())/1000); }
   function notifyDone(){ if(tmr.nativo) return; void window.lippolisAlerts?.timerDone(); try{ if(navigator.vibrate) navigator.vibrate(VIBRA); }catch(e){} }
   function avviaCorsa(){ tmr.running=true; tmr.endAt=Date.now()+tmr.sec*1000; tmr.nativo=nativoAvvia(); scheduleBeep(tmr.sec); if(!tmr.nativo && !tmr.keepAlive) keepAliveStart(); requestWake(); clearInterval(tmr.iv); tmr.iv=setInterval(tickTimer,250); }
-  function startTimer(sec,label){ if(!sec||sec<=0) return; ensureAudio(); clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); tmr={sec:sec, total:sec, label:label||'Timer', running:false, finished:false, iv:null, endAt:0, nodes:[], keepAlive:null, nativo:false}; avviaCorsa(); updateTimerBar(); }
+  // Timer dell'esercizio a tempo: 5" per mettersi in posizione, poi il tempo della serie;
+  // alla fine scrive i secondi nella serie e fa partire il recupero. Fermato prima, scrive i secondi fatti.
+  const PREPARA=5;
+  function secondiTarget(v){ const t=String(v||'').trim(); if(/^\d+:\d{1,2}$/.test(t)) return toSec(t); const n=(t.match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>parseFloat(x.replace(',','.'))); if(!n.length) return 0; const m=Math.max(...n); return Math.round(/min/i.test(t)?m*60:m); }
+  function scriviSecondi(input,sec){ if(!input||!(sec>0)) return; input.value=String(sec); input.dispatchEvent(new Event('input',{bubbles:true})); }
+  function avviaEsercizio(sec,label,input,rest){ if(!(sec>0)) return;
+    startTimer(PREPARA,'Preparati · '+label); tmr.fase='prepara';
+    tmr.poi=()=>{ startTimer(sec,label); tmr.fase='lavoro'; tmr.input=input;
+      const lav=tmr; tmr.poi=()=>{ scriviSecondi(input,Math.round(lav.target||sec)); if(rest>0){ startTimer(rest,'Recupero · '+label); return true; } return false; }; return true; };
+    updateTimerBar(); }
+  function startTimer(sec,label){ if(!sec||sec<=0) return; ensureAudio(); clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); tmr={sec:sec, total:sec, target:sec, label:label||'Timer', running:false, finished:false, iv:null, endAt:0, nodes:[], keepAlive:null, nativo:false}; avviaCorsa(); updateTimerBar(); }
   function tickTimer(){ if(!tmr.running) return; const rem=Math.max(0, Math.ceil((tmr.endAt-Date.now())/1000)); tmr.sec=rem; if(rem<=0){ finishTimer(); } updateTimerBar(); }
-  function finishTimer(){ clearInterval(tmr.iv); tmr.running=false; tmr.finished=true; tmr.sec=0; if(!tmr.nativo && audioCtx && audioCtx.state==='suspended'){ beepNow(); } notifyDone(); keepAliveStop(); releaseWake(); updateTimerBar(); setTimeout(()=>{ if(tmr.finished) stopTimer(); }, 4500); }
-  function stopTimer(){ clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); releaseWake(); if(tmr.nativo){ nativoFerma(); tmr.nativo=false; } tmr.running=false; tmr.finished=false; const bar=document.getElementById('timerBar'); if(bar){ bar.classList.remove('done'); bar.style.display='none'; } }
+  function finishTimer(){ if(tmr.poi){ const poi=tmr.poi; tmr.poi=null; const suono=tmr.nodes; tmr.nodes=[]; const avviato=poi(); if(!avviato){ tmr.nodes=suono; } else { setTimeout(()=>suono.forEach(o=>{ try{o.disconnect();}catch(e){} }),7000); return; } } clearInterval(tmr.iv); tmr.running=false; tmr.finished=true; tmr.sec=0; if(!tmr.nativo && audioCtx && audioCtx.state==='suspended'){ beepNow(); } notifyDone(); keepAliveStop(); releaseWake(); updateTimerBar(); setTimeout(()=>{ if(tmr.finished) stopTimer(); }, 4500); }
+  function stopTimer(){ if(tmr.fase==='lavoro'&&tmr.running!==undefined&&!tmr.finished&&tmr.input){ const fatti=Math.round((tmr.target||tmr.total)-tmr.sec); if(fatti>0) scriviSecondi(tmr.input,fatti); } tmr.poi=null; tmr.fase=null; tmr.input=null; clearInterval(tmr.iv); cancelScheduledBeep(); keepAliveStop(); releaseWake(); if(tmr.nativo){ nativoFerma(); tmr.nativo=false; } tmr.running=false; tmr.finished=false; const bar=document.getElementById('timerBar'); if(bar){ bar.classList.remove('done'); bar.style.display='none'; } }
   function toggleTimer(){ if(tmr.finished) return; if(tmr.running){ tmr.running=false; clearInterval(tmr.iv); cancelScheduledBeep(); releaseWake(); if(tmr.nativo){ nativoFerma(); tmr.nativo=false; } } else if(tmr.sec>0){ avviaCorsa(); } updateTimerBar(); }
   function addTime(n){ if(tmr.finished){ tmr.finished=false; const b=document.getElementById('timerBar'); if(b)b.classList.remove('done'); tmr.sec=0; tmr.running=true; }
-    tmr.sec+=n; if(tmr.sec>tmr.total) tmr.total=tmr.sec;
+    tmr.sec+=n; tmr.target=(tmr.target||0)+n; if(tmr.sec>tmr.total) tmr.total=tmr.sec;
     if(tmr.running) avviaCorsa(); updateTimerBar(); }
+  function subTime(n){ if(tmr.finished||!(tmr.sec>0)) return; const tolti=Math.min(n,tmr.sec); tmr.sec-=tolti; tmr.target=Math.max(0,(tmr.target||0)-tolti);
+    if(tmr.sec<=0){ finishTimer(); return; } if(tmr.running) avviaCorsa(); updateTimerBar(); }
   // riallinea e riprende l'audio quando si torna nell'app dopo essere stati in background
   document.addEventListener('visibilitychange', ()=>{ if(document.hidden) return; if(tmr.running){ ensureAudio(); const rem=Math.max(0, Math.ceil((tmr.endAt-Date.now())/1000)); tmr.sec=rem; if(rem<=0){ finishTimer(); } else { requestWake(); updateTimerBar(); } } });
   function updateTimerBar(){
     const bar=document.getElementById('timerBar'); if(!bar) return;
     bar.style.display='block';
     bar.classList.toggle('done', !!tmr.finished);
+    bar.classList.toggle('work', tmr.fase==='lavoro');
+    bar.classList.toggle('prep', tmr.fase==='prepara');
     bar.classList.toggle('last3', !!tmr.running && tmr.sec>0 && tmr.sec<=PREAVVISO);
     const pct = tmr.total ? Math.max(0, Math.min(100, tmr.sec/tmr.total*100)) : 0;
     bar.innerHTML=`
       <div class="tb-main">
         <div class="tb-info"><div class="tb-label">${tmr.finished?'Tempo scaduto':tmr.label}</div><div class="tb-time">${fmtT(tmr.sec)}${tmr.finished?' · fine!':''}</div></div>
         <div class="tb-ctrls">
-          ${tmr.finished?'':`<button class="tb-b" id="tbPlus">+15s</button>`}
+          ${tmr.finished?'':`<button class="tb-b" id="tbMinus" aria-label="Togli 15 secondi">−15s</button><button class="tb-b" id="tbPlus" aria-label="Aggiungi 15 secondi">+15s</button>`}
           ${tmr.finished?'':`<button class="tb-b" id="tbToggle">${tmr.running?I.pause:I.play}</button>`}
           <button class="tb-b stop" id="tbStop">${I.close}</button>
         </div>
       </div>
       <div class="tb-track"><div class="tb-fill" style="width:${pct}%"></div></div>`;
     const p=bar.querySelector('#tbPlus'); if(p) p.onclick=()=>addTime(15);
+    const m=bar.querySelector('#tbMinus'); if(m) m.onclick=()=>subTime(15);
     const tg=bar.querySelector('#tbToggle'); if(tg) tg.onclick=toggleTimer;
     bar.querySelector('#tbStop').onclick=stopTimer;
   }

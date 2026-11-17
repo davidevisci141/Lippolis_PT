@@ -174,3 +174,18 @@ test("niente spiegazioni, storico sessioni a tabelle, foto clienti e sfondo colo
   assert.match(athlete, /\.phone\{[^}]*url\("sfondo\.jpg"\)/);
   assert.ok(fs.existsSync(path.join(__dirname, "..", "www", "sfondo.jpg")));
 });
+
+test("esercizi a tempo: timer della serie con preparazione, recupero automatico e ±15s", () => {
+  const athlete = fs.readFileSync(path.join(__dirname, "..", "www", "athlete.html"), "utf8");
+  assert.match(athlete, /class="tg set-work" data-work="\$\{workSec\}"/);
+  assert.match(athlete, /const PREPARA=5;/);
+  assert.match(athlete, /startTimer\(rest,'Recupero · '\+label\)/);
+  assert.match(athlete, /id="tbMinus"[^>]*>−15s<\/button><button class="tb-b" id="tbPlus"/);
+  assert.match(athlete, /function subTime\(n\)/);
+  const secondiTarget = new Function("toSec", athlete.slice(athlete.indexOf("  function secondiTarget("), athlete.indexOf("  function scriviSecondi(")) + "return secondiTarget;")(t => { const p = String(t).split(":").map(Number); return p[0] * 60 + p[1]; });
+  assert.equal(secondiTarget("40"), 40);
+  assert.equal(secondiTarget("30-45"), 45);
+  assert.equal(secondiTarget("1:30"), 90);
+  assert.equal(secondiTarget("2 min"), 120);
+  assert.equal(secondiTarget(""), 0);
+});
