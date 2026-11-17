@@ -131,7 +131,7 @@ test("lo storico atleta mostra i nomi come testo e tratta le serie malformate co
   });
   vm.runInContext([
     source("  function valoreSerie(", "  function leggiSerie("),
-    source("  function fmtSerie(", "  function storicoSessionsHTML("),
+    source("  function savedSetLabel(", "  function storicoSessionsHTML("),
     source("  function esc(v)", "  const biaDateFormat"),
     source("  let storicoVista=", "  // ====== TIMER (recupero")
   ].join("\n"), context);
@@ -139,7 +139,7 @@ test("lo storico atleta mostra i nomi come testo e tratta le serie malformate co
   assert.match(view.innerHTML, /&lt;img/);
   assert.doesNotMatch(view.innerHTML, /<img/);
   vm.runInContext("storicoVista='sessioni'; renderStoricoPesi()", context);
-  assert.match(view.innerHTML, /15 × —/);
+  assert.match(view.innerHTML, /<td>15 kg<\/td><td>—<\/td>/);
   assert.doesNotMatch(view.innerHTML, /<img/);
 });
 

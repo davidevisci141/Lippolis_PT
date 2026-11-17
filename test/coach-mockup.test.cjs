@@ -156,3 +156,20 @@ test("bayesian curl unilaterale di predefinito, a due braccia se scritto nella n
   assert.ok(!bil.test("tieni le braccia vicine"));
   assert.match(html, /if\(RX_BILAT\.test\(String\(ex\.reps\|\|''\)\)\|\|RX_BILAT\.test\(ex\.note\|\|''\)\) return false;/);
 });
+
+test("niente spiegazioni, storico sessioni a tabelle, foto clienti e sfondo colorato", () => {
+  const read = f => fs.readFileSync(path.join(__dirname, "..", "www", f), "utf8");
+  const athlete = read("athlete.html"), coach = read("coach.html"), mock = read("src/coach-mockup.mjs");
+  assert.doesNotMatch(athlete, /saranno aggiunti allo storico al salvataggio/);
+  assert.doesNotMatch(athlete, /volume Sveglia/);
+  assert.doesNotMatch(athlete, /sono visibili al tuo PT/);
+  assert.doesNotMatch(mock, /Rubrica dei collaboratori/);
+  assert.match(athlete, /<div class="ses-ex"><div class="n">\$\{esc\(ex\.nome\)\}<\/div>\$\{tab\}/);
+  assert.match(athlete, /<table class="sc-table">/);
+  assert.match(coach, /\.weight-table th\{background:var\(--accent\)/);
+  assert.match(coach, /data-avatar="'\+escapeHTML\(c\.id\|\|''\)\+'"/);
+  assert.match(mock, /snapshot->profilo->>foto/);
+  assert.match(mock, /PHOTO_RX=\/\^data:image/);
+  assert.match(coach, /radial-gradient\(900px 620px at 100% -8%, rgba\(var\(--accent-rgb\),\.30\)/);
+  assert.match(athlete, /rgba\(var\(--accent-rgb\),\s*\.30\)/);
+});

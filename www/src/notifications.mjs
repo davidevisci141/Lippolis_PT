@@ -209,7 +209,7 @@ export function createNotifications({ role, uid, types, onOpen, onChange }) {
           <button type="button" data-alert-test>Prova notifica</button>
         </div>
         <label><input type="checkbox" data-alert-pref="sound"><span><strong>Suono</strong></span></label>
-        ${types.map(type => `<label><input type="checkbox" data-alert-pref="${type.id}"><span><strong>${type.label}</strong>${type.detail ? `<small>${type.detail}</small>` : ""}</span></label>`).join("")}
+        ${types.map(type => `<label><input type="checkbox" data-alert-pref="${type.id}"><span><strong>${type.label}</strong></span></label>`).join("")}
       </div>`;
     container.querySelector("[data-alert-enable]").onclick = () => {
       if (!refresh().enabled) return authorize();
