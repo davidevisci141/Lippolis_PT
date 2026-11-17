@@ -158,6 +158,7 @@ async function loadDirectory() {
   ]);
   if(epoch!==loadEpoch)return;
   replace(ui.clienti,checked(people).map(p=>({...p,nome:p.display_name||`${p.first_name} ${p.last_name}`,reg:p.created_at?.slice(0,10)||today(),attivo:p.status==="active"})));
+  void loadClientPhotos().catch(()=>{});
   published.clear(); for(const p of checked(plans))published.set(p.athlete_id,p);
   for(const p of checked(sections)){
     const id=`${p.athlete_id}:${p.section}`;
@@ -245,6 +246,31 @@ function deleteMealPlan(p){
     $("mockModalCancel").focus();
   });
 }
+
+// Foto profilo dei clienti (le impostano nell'app: profilo.foto nello stato del cliente).
+// Il markup passa da safeHTML, che toglie gli url() dagli style: la foto si applica via JS
+// sugli elementi con data-avatar="<id cliente>".
+const clientPhotos=new Map();
+const PHOTO_RX=/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+function setClientPhoto(id,photo){
+  if(PHOTO_RX.test(String(photo||"")))clientPhotos.set(id,photo); else clientPhotos.delete(id);
+}
+function paintAvatars(){
+  for(const el of document.querySelectorAll("[data-avatar]")){
+    const photo=clientPhotos.get(el.dataset.avatar);
+    if(photo){ if(el.dataset.photo!==String(photo.length)){ el.style.backgroundImage=`url("${photo}")`; el.dataset.photo=String(photo.length); } el.classList.add("has-photo"); }
+    else if(el.classList.contains("has-photo")){ el.style.backgroundImage=""; delete el.dataset.photo; el.classList.remove("has-photo"); }
+  }
+}
+async function loadClientPhotos(){
+  const ids=ui.clienti.map(c=>c.id).filter(Boolean);
+  if(!ids.length)return;
+  const rows=checked(await supabase.from("athlete_states").select("user_id,foto:snapshot->profilo->>foto").in("user_id",ids));
+  for(const id of ids)clientPhotos.delete(id);
+  for(const row of rows||[])setClientPhoto(row.user_id,row.foto);
+  paintAvatars();
+}
+new MutationObserver(()=>paintAvatars()).observe(document.documentElement,{childList:true,subtree:true});
 
 let urgentMessages=[];
 function refreshSignals() {
@@ -512,7 +538,7 @@ function paintChatContacts(){
   if(!list)return;
   const search=val("chatSearch").toLocaleLowerCase("it");
   const contacts=inbox.filter(c=>c.nome.toLocaleLowerCase("it").includes(search)||c.email?.toLocaleLowerCase("it").includes(search));
-  list.innerHTML=contacts.map(c=>`<button type="button" class="chat-contact" data-chat-id="${escape(c.id)}" aria-current="${chatClient===c.id}"><span class="chat-avatar">${escape(ui.initials(c.nome))}</span><span class="chat-contact-copy"><strong>${escape(c.nome)}</strong><small>${escape(c.latest_text||"Nessun messaggio")}</small></span><span class="chat-contact-meta">${chatTime(c.latest_at)}${c.unread?`<span class="chat-count" aria-label="${c.unread} non letti">${c.unread}</span>`:""}</span></button>`).join("")||'<p class="chat-empty">Nessuna conversazione trovata</p>';
+  list.innerHTML=contacts.map(c=>`<button type="button" class="chat-contact" data-chat-id="${escape(c.id)}" aria-current="${chatClient===c.id}"><span class="chat-avatar" data-avatar="${escape(c.id)}">${escape(ui.initials(c.nome))}</span><span class="chat-contact-copy"><strong>${escape(c.nome)}</strong><small>${escape(c.latest_text||"Nessun messaggio")}</small></span><span class="chat-contact-meta">${chatTime(c.latest_at)}${c.unread?`<span class="chat-count" aria-label="${c.unread} non letti">${c.unread}</span>`:""}</span></button>`).join("")||'<p class="chat-empty">Nessuna conversazione trovata</p>';
   list.querySelectorAll("[data-chat-id]").forEach(button=>button.onclick=()=>openCoachChat(button.dataset.chatId));
 }
 async function refreshInbox(){
@@ -564,7 +590,7 @@ function paintChatPanel(){
   if(!panel)return;
   $("chatShell").classList.toggle("has-chat",!!client);
   if(!client){panel.innerHTML='<p class="chat-empty">Seleziona un cliente</p>';return;}
-  panel.innerHTML=`<div class="chat-title"><button type="button" class="back" data-mobile-back aria-label="Torna alle conversazioni">${ui.I.chevL}</button><span class="chat-avatar">${escape(ui.initials(client.nome))}</span><strong>${escape(client.nome)}</strong></div>
+  panel.innerHTML=`<div class="chat-title"><button type="button" class="back" data-mobile-back aria-label="Torna alle conversazioni">${ui.I.chevL}</button><span class="chat-avatar" data-avatar="${escape(client.id)}">${escape(ui.initials(client.nome))}</span><strong>${escape(client.nome)}</strong></div>
     <div class="chat-log" id="chatLog" role="log" aria-label="Messaggi"></div>
     <div class="chat-compose"><textarea id="chatText" rows="1" maxlength="4000" aria-label="Scrivi un messaggio" placeholder="Scrivi un messaggio…"></textarea><button type="button" id="chatSend" class="btn btn-primary">Invia</button></div><p id="chatStatus" class="chat-status" role="status"></p>`;
   panel.querySelector("[data-mobile-back]").onclick=()=>openCoachChat(null);
@@ -964,7 +990,7 @@ function settings(panel,tab){
   }
   const question=tab==="questionari", entries=question?workspace.templates:workspace.collaborators;
   panel.innerHTML=`<div class="set-title">${question?"Questionari":"Collaboratori"}</div>
-    ${question?"":'<p class="set-note">Rubrica dei collaboratori del PT.</p>'}
+    ${question?"":''}
     ${button("mockSettingAdd",question?"Crea questionario":"Aggiungi contatto",true)}
     <div class="list">${entries.map((item,i)=>row(item.title,question?`${item.questions.length} domande`:item.email,button("mockSettingEdit"+i,"Modifica")+button("mockSettingRemove"+i,"Elimina"))).join("")||empty(question?"Nessun modello":"Nessun collaboratore")}</div>`;
   const edit=(item)=>showModal(question?"Modello questionario":"Collaboratore",field("mockSettingTitle",question?"Titolo":"Nome","text",item?.title,true)+(question?textarea("mockSettingBody","Una domanda per riga",item?.questions.join("\n")):field("mockSettingBody","Email","email",item?.email,true)),"Salva",async()=>{
@@ -1144,6 +1170,7 @@ async function start(){
       if(ui.currentClient)void refreshSelectedSnapshot(ui.currentClient).catch(fail);
     };
     feed.on("postgres_changes",{event:"*",schema:"public",table:"athlete_states"},event=>{
+      if(event.new?.user_id&&event.new?.snapshot){ setClientPhoto(event.new.user_id,event.new.snapshot?.profilo?.foto); paintAvatars(); }
       if((event.new?.user_id||event.old?.user_id)===ui.currentClient?.id)refreshSelectedClient();
     });
     document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSelectedClient();});

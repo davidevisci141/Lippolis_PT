@@ -49,7 +49,7 @@
   html,body{height:100%;}
   body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); background:var(--device); overflow:hidden; overscroll-behavior:none; -webkit-tap-highlight-color:transparent;}
   /* App a tutto schermo: occupa il display reale, rispettando notch e barra di navigazione */
-  .phone{width:100%; max-width:560px; height:100%; margin:0 auto; background:var(--device); overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top:env(safe-area-inset-top, 0px);}
+  .phone{width:100%; max-width:560px; height:100%; margin:0 auto; background:radial-gradient(620px 520px at 100% -8%, rgba(var(--accent-rgb),.30), transparent 62%), radial-gradient(560px 460px at -12% 108%, rgba(var(--accent-rgb),.20), transparent 60%), radial-gradient(380px 320px at 18% 38%, rgba(var(--accent-rgb),.07), transparent 70%), linear-gradient(180deg, rgba(var(--accent-rgb),.05), transparent 45%), var(--device); overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top:env(safe-area-inset-top, 0px);}
   @media (min-width:600px){ body{background:var(--bg);} .phone{box-shadow:0 0 60px rgba(0,0,0,.35);} }
   @media (min-width:900px){
     html:not([data-tema="scuro"]) .phone{--device:#F2F6F4;--surface:#fff;--surface2:#EAF2EF;--line:#DCE5E2;--line-soft:#E7EEEB;--text:#13211F;--muted:#687572;--muted2:#87928F;}
@@ -739,9 +739,9 @@
   .ses[open] .sc{transform:rotate(90deg);}
   .ses-body{padding:0 14px 14px; border-top:1px solid var(--line-soft);}
   .ses-nota{background:var(--accent-soft); border-radius:11px; padding:10px 12px; font-size:12.5px; line-height:1.5; color:var(--text); margin-top:12px; white-space:pre-line;}
-  .ses-ex{padding:10px 0; border-bottom:1px solid var(--line-soft);}
-  .ses-ex:last-child{border-bottom:0;}
-  .ses-ex .n{font-weight:800; font-size:13px; color:var(--text);}
+  .ses-ex{padding:14px 0 4px;}
+  .ses-ex .n{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:15px; color:var(--text); margin-bottom:8px;}
+  .ses-ex .sc-table{margin-bottom:6px;}
   .ses-ex .v{font-size:12.5px; color:var(--muted); margin-top:3px;}
   .ses-ex .x{font-size:11.5px; color:var(--muted2); font-style:italic; margin-top:3px;}
   .stor-nota{font-size:12px; color:var(--muted); font-style:italic; margin:6px 2px 0; line-height:1.45;}
@@ -1862,7 +1862,7 @@
         const rest=Number(prescribed?.rest_seconds);
         sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}${targetSummary?`<small class="set-prescription">${esc(targetSummary)}</small>`:''}</div><div class="field"><input type="text" inputmode="decimal" aria-label="Peso serie ${label}" placeholder="${esc(targetLoad)}"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric" min="1" aria-label="${ex.unita==='sec'?'Secondi':'Ripetizioni'} serie ${label}" placeholder="${esc(String(targetReps).replace(/s$/i,''))}"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric" min="0" max="10" aria-label="RIR serie ${label}" placeholder="${esc(prescribed?.target_rir??ex.rir??'')}"><span>RIR</span></div>${Number.isFinite(rest)&&rest>0?`<button type="button" class="tg tg-timer set-rest" data-sec="${rest}" data-label="Recupero serie ${label}" aria-label="Avvia recupero serie ${label}">${I.play} ${fmtT(rest)}</button>`:''}</div>`;
       }
-      sets+=`</div><div class="set-btns"><button type="button" class="add-set-btn">+ Aggiungi serie</button>${setCount>(uni?2:1)?'<button type="button" class="del-set-btn">− Togli serie</button>':''}</div><div class="workout-save-hint">I carichi inseriti qui saranno aggiunti allo storico al salvataggio dell’allenamento.</div>`;
+      sets+=`</div><div class="set-btns"><button type="button" class="add-set-btn">+ Aggiungi serie</button>${setCount>(uni?2:1)?'<button type="button" class="del-set-btn">− Togli serie</button>':''}</div>`;
     }
     const cnote = `<label class="cnote"><span class="cnote-l">Le tue note</span><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></label>`;
     const headSum = (ex.cardio||ex.timed) ? ex.tempo : (ex.repsSerie ? (ex.serie+' serie · var.') : (ex.serie+'×'+ex.reps+(uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':'')));
@@ -1879,7 +1879,7 @@
       const why=sg.sets.map((s,i)=>`<b>S${slotLabel(ex,i)}:</b> ${s.why}`).join(' · ');
       suggHTML=`<div class="sugg"><div class="sugg-top"><span class="sugg-l">${I.spark} Progressione</span><button class="sugg-q" data-sugg-info aria-label="Come vengono calcolati">?</button>${sg.sets.some(s=>s.kg>0)?'<button class="sugg-apply">Usa tutti</button>':''}</div>${sg.head?`<div class="sugg-head">${sg.head}</div>`:''}${rows?`<table class="sc-table sugg-table"><thead><tr><th>Serie</th><th>Peso</th><th>Reps</th><th>Oggi</th><th></th></tr></thead><tbody>${rows}</tbody></table>`:''}<div class="sugg-hint" hidden>${sg.note?sg.note+' ':''}A sinistra la tua ultima sessione, a destra il carico suggerito per oggi: tocca una riga per inserirlo.${why?' '+why:''}</div></div>`;
     }else if(supportsProgression){
-      suggHTML=`<div class="sugg"><div class="sugg-l">${I.spark} Progressione</div><p class="sugg-head">Registra il peso e le ripetizioni, poi concludi l’allenamento per vedere i suggerimenti nella prossima seduta.</p></div>`;
+      suggHTML=`<div class="sugg"><div class="sugg-l">${I.spark} Progressione</div></div>`;
     }
     c.innerHTML=`
       <div class="card-top">
@@ -2159,8 +2159,9 @@
       html+=sessioni.slice().sort((a,b)=>b.ts-a.ts).map(se=>{
         const righe=se.esercizi.map(ex=>{
           const e=infoEsercizio(ex.nome);
-          const v=ex.sets.length ? ex.sets.map(st=>{ const f=fmtSerie(e,st); return (st.kg===0?'C.L.':f.kg.replace(' kg/lato','/lato').replace(' kg',''))+' × '+f.r; }).join(' · ') : 'completato';
-          return `<div class="ses-ex"><div class="n">${esc(ex.nome)}</div><div class="v">${v}</div>${ex.note?`<div class="x">${esc(ex.note)}</div>`:''}</div>`;
+          // stessa tabella dello storico per esercizio
+          const tab=ex.sets.length ? `<table class="sc-table"><thead><tr><th>Serie</th><th>Peso</th><th>${e.unita==='sec'?'Tempo':'Reps'}</th><th>RIR</th></tr></thead><tbody>${ex.sets.map((st,si)=>{ const f=fmtSerie(e,st); return `<tr><td>${esc(savedSetLabel(ex.lati,st,si))}</td><td>${f.kg}</td><td>${f.r}</td><td>${valoreSerie(st.rir)??'—'}</td></tr>`; }).join('')}</tbody></table>` : `<div class="v">Completato</div>`;
+          return `<div class="ses-ex"><div class="n">${esc(ex.nome)}</div>${tab}${ex.note?`<div class="x">${esc(ex.note)}</div>`:''}</div>`;
         }).join('');
         return `<details class="ses"><summary><div class="sd"><div class="st">${esc(se.titolo)}</div><div class="sm">${fmtDataAnno(se.ts)}${se.settimana?' · Settimana '+esc(se.settimana):''}</div></div><span class="sc">${I.chevR}</span></summary>
           <div class="ses-body">${se.nota?`<div class="ses-nota">${esc(se.nota)}</div>`:''}${righe}</div></details>`;
@@ -2373,7 +2374,7 @@
     coachSectionPage('Progressi fisici',`
       <section class="physical-panel">
         <h3 class="physical-title">Aggiungi una foto</h3>
-        <p class="progress-copy">Le foto che condividi sono visibili al tuo PT.</p>
+        
         <div class="progress-actions">
           <button type="button" class="btn-accent" id="progressCamera">Scatta foto</button>
           <button type="button" class="bk-b" id="progressGallery">Scegli dalla galleria</button>
@@ -2861,7 +2862,6 @@
       <div class="pf-sec">Timer di recupero</div>
       <div class="pf-row" style="border-bottom:0; padding-bottom:0"><div class="t">Volume</div></div>
       <div class="vol-row"><input type="range" id="pfVol" min="10" max="100" step="5" value="${volTimer}" aria-label="Volume del timer"><span class="vol-v" id="pfVolV">${volTimer}%</span><button class="vol-prova" id="pfVolProva">Prova</button></div>
-      <div class="vol-hint">Nell'app installata il timer suona sul volume <b>Sveglia</b> del telefono: questo cursore ne regola una parte.</div>
 
       <div class="pf-sec">Impostazioni</div>
       <div class="pf-row"><div class="t">Tema scuro</div><button class="tgl${tema==='scuro'?' on':''}" id="pfTema"></button></div>

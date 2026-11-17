@@ -29,9 +29,10 @@
     color-scheme:dark;
   }
   html[data-tema="scuro"] .detf-in:focus,html[data-tema="scuro"] .detf-sel:focus,html[data-tema="scuro"] .detf-ta:focus{background:var(--surface2);}
+  html[data-tema="scuro"] .weight-table td:first-child{color:var(--accent);}
   html[data-tema="scuro"] .att-thumb .play,html[data-tema="scuro"] .avatar-edit .edit{background:rgba(38,41,46,.92);}
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
-  body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); min-height:100vh; background:radial-gradient(1000px 600px at 85% -5%, rgba(var(--accent-rgb),.10), transparent 60%), var(--device);}
+  body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); min-height:100vh; background:radial-gradient(900px 620px at 100% -8%, rgba(var(--accent-rgb),.30), transparent 62%), radial-gradient(780px 560px at -12% 108%, rgba(var(--accent-rgb),.20), transparent 60%), radial-gradient(520px 420px at 18% 38%, rgba(var(--accent-rgb),.07), transparent 70%), linear-gradient(180deg, rgba(var(--accent-rgb),.05), transparent 45%), var(--device); background-attachment:fixed;}
 
   /* ---- TOPBAR ---- */
   .topbar{position:sticky; top:0; z-index:30; background:var(--glass); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line-soft);}
@@ -110,6 +111,8 @@
   .row-badge{flex:0 0 auto; width:42px;height:42px;border-radius:12px; display:grid;place-items:center; background:var(--accent-soft); color:var(--accent-ink); border:1px solid rgba(var(--accent-rgb),.22);}
   .row-badge svg{width:21px;height:21px;}
   .row-av{flex:0 0 auto; width:42px;height:42px;border-radius:50%; background:linear-gradient(150deg,var(--accent),var(--accent-dark)); color:var(--on-accent); display:grid;place-items:center; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:14px;}
+  /* foto profilo del cliente al posto delle iniziali */
+  [data-avatar].has-photo{background-size:cover !important; background-position:center !important; color:transparent !important;}
   .row-av.off{background:var(--surface2); color:var(--muted2); border:1px solid var(--line);}
   .row-main{flex:1; min-width:0;}
   .row-t{display:block; font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:15.5px; color:var(--text); line-height:1.25; white-space:normal; overflow-wrap:anywhere;}
@@ -160,9 +163,12 @@
   .weight-list{padding:9px 0;border-bottom:1px solid var(--line-soft);}
   .weight-list:last-child{border-bottom:0;}
   .weight-list summary{font-weight:800;cursor:pointer;overflow-wrap:anywhere;}
-  .weight-table{width:100%;border-collapse:collapse;margin:8px 0;font-size:13px;font-variant-numeric:tabular-nums;}
-  .weight-table th,.weight-table td{text-align:left;padding:7px 4px;border-top:1px solid var(--line-soft);overflow-wrap:anywhere;}
-  .weight-table th{color:var(--muted);font-size:11px;}
+  /* Tabelle dello storico: stessa grafica dell'app cliente */
+  .weight-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:10px;overflow:hidden;margin:8px 0;font-size:13px;font-variant-numeric:tabular-nums;}
+  .weight-table th{background:var(--accent);color:var(--on-accent);font-family:'Archivo',system-ui,sans-serif;font-weight:800;font-size:11px;padding:8px 6px;text-align:center;}
+  .weight-table td{background:var(--surface);padding:9px 6px;text-align:center;font-weight:700;color:var(--text);border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere;}
+  .weight-table td:first-child{background:var(--accent-soft);color:var(--accent-ink);font-family:'Archivo',system-ui,sans-serif;font-weight:800;}
+  .weight-table tr:last-child td{border-bottom:0;}
   .weight-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
   .weight-stats div{min-width:120px;flex:1;padding:12px;border-radius:10px;background:var(--surface2);}
   .weight-stats dt,.weight-stats small{color:var(--muted);font-size:12px;}
@@ -233,7 +239,7 @@
   .weight-session summary{display:flex; flex-wrap:wrap; align-items:center; gap:6px;}
   .weight-session-count{margin-left:auto; font-size:12px; color:var(--muted2); font-weight:700;}
   .weight-session-ex{margin:10px 0 14px;}
-  .weight-session-ex h3{font-size:14px; margin:0 0 6px;}
+  .weight-session-ex h3{font-family:'Archivo',system-ui,sans-serif; font-size:15px; font-weight:800; margin:0 0 8px;}
 
   /* metriche (circonferenze) */
   .metric{margin-bottom:24px; max-width:560px;}
@@ -1629,7 +1635,7 @@
   // ---- CLIENTI ----
   function clientRow(c){
     const ini=c.nome.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    return '<button class="row"><span class="row-av '+(c.attivo?'':'off')+'">'+escapeHTML(ini)+'</span><span class="row-main"><span class="row-t">'+escapeHTML(c.nome)+'</span><span class="row-s">Registrato il '+fmt(c.reg)+' <span class="statusdot '+(c.attivo?'':'off')+'"><i></i>'+(c.attivo?'Attivo':'Disattivato')+'</span></span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>';
+    return '<button class="row"><span class="row-av '+(c.attivo?'':'off')+'" data-avatar="'+escapeHTML(c.id||'')+'">'+escapeHTML(ini)+'</span><span class="row-main"><span class="row-t">'+escapeHTML(c.nome)+'</span><span class="row-s">Registrato il '+fmt(c.reg)+' <span class="statusdot '+(c.attivo?'':'off')+'"><i></i>'+(c.attivo?'Attivo':'Disattivato')+'</span></span></span><span class="row-end"><span class="row-go">'+I.chevR+'</span></span></button>';
   }
   function renderClienti(){
     main.innerHTML=pageHead('Clienti','<button class="btn btn-primary" id="addCli">'+I.plus+' Aggiungi cliente</button>')+
@@ -1674,7 +1680,7 @@
     const ini=c.nome.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     main.innerHTML=pageHead('Scheda cliente')+
       '<div class="sec">'+
-        '<div class="cli-head"><div class="cli-av '+(c.attivo?'':'off')+'">'+escapeHTML(ini)+'</div><div class="cli-id"><div class="cli-name">'+escapeHTML(c.nome)+'</div><div class="cli-sub"><span class="statusdot '+(c.attivo?'':'off')+'"><i></i>'+(c.attivo?'Attivo':'Disattivato')+'</span> · Registrato il '+fmt(c.reg)+'</div></div></div>'+
+        '<div class="cli-head"><div class="cli-av '+(c.attivo?'':'off')+'" data-avatar="'+escapeHTML(c.id||'')+'">'+escapeHTML(ini)+'</div><div class="cli-id"><div class="cli-name">'+escapeHTML(c.nome)+'</div><div class="cli-sub"><span class="statusdot '+(c.attivo?'':'off')+'"><i></i>'+(c.attivo?'Attivo':'Disattivato')+'</span> · Registrato il '+fmt(c.reg)+'</div></div></div>'+
         '<div class="menu">'+cliSezioni.map(s=>'<button class="mcard" data-sec="'+s.id+'"><span class="lbl">'+s.label+'</span><span class="big">'+s.icon+'</span></button>').join('')+'</div>'+
       '</div>';
     document.getElementById('back').onclick=()=>go('clienti');
@@ -1683,7 +1689,7 @@
 
   // ---- helper ----
   function initials(n){ return n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
-  function cliStrip(c){ return '<div class="cli-strip"><span class="av">'+initials(c.nome)+'</span>'+escapeHTML(c.nome)+'</div>'; }
+  function cliStrip(c){ return '<div class="cli-strip"><span class="av" data-avatar="'+escapeHTML(c.id||'')+'">'+initials(c.nome)+'</span>'+escapeHTML(c.nome)+'</div>'; }
 
   // ---- PROGRAMMAZIONE (storico programmi del cliente) ----
   // ====== ESPORTA SCHEDA (coach · per AI) ======
@@ -1705,7 +1711,7 @@
   function smoothPath(pts){ if(pts.length<2) return `M${pts[0].x},${pts[0].y}`; let d=`M${pts[0].x},${pts[0].y}`; for(let i=0;i<pts.length-1;i++){ const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||p2; const c1x=p1.x+(p2.x-p0.x)/6, c1y=p1.y+(p2.y-p0.y)/6; const c2x=p2.x-(p3.x-p1.x)/6, c2y=p2.y-(p3.y-p1.y)/6; d+=` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`; } return d; }
   function buildChart(data,{timeAxis=false}={}){ const W=320,H=150,L=40,R=12,T=12,B=26, pw=W-L-R, ph=H-T-B; const vals=data.map(d=>d.v); let mn=Math.min(...vals), mx=Math.max(...vals); if(mn===mx){ mn-=1; mx+=1; } const pad=(mx-mn)*0.15; mn-=pad; mx+=pad; const start=data[0].ts, duration=data.at(-1).ts-start; const X=i=> L + (data.length===1?pw/2:((timeAxis&&duration>0?(data[i].ts-start)/duration:i/(data.length-1))*pw)); const Y=v=> T + (1-(v-mn)/(mx-mn))*ph; const pts=data.map((d,i)=>({x:X(i),y:Y(d.v)})); const line=timeAxis?'M'+pts.map(p=>p.x.toFixed(1)+','+p.y.toFixed(1)).join(' L'):smoothPath(pts); const area=line+` L${pts[pts.length-1].x.toFixed(1)},${(T+ph).toFixed(1)} L${pts[0].x.toFixed(1)},${(T+ph).toFixed(1)} Z`; let grid=''; const NT=4; for(let k=0;k<=NT;k++){ const val=mn+(mx-mn)*k/NT, y=Y(val); grid+=`<line x1="${L}" y1="${y.toFixed(1)}" x2="${W-R}" y2="${y.toFixed(1)}" stroke="#e3e5e7" stroke-width="1"/><text x="${L-6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#888d94" font-weight="700">${val.toFixed(1)}</text>`; } let xl=''; const step=data.length>6?2:1; data.forEach((d,i)=>{ if(timeAxis?i!==0&&i!==data.length-1:i%step!==0&&i!==data.length-1) return; xl+=`<text x="${X(i).toFixed(1)}" y="${H-8}" text-anchor="middle" font-size="9" fill="#888d94" font-weight="700">${d.l}</text>`; }); const dots=pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#12C7A2" stroke="#fff" stroke-width="1.5"/>`).join(''); return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">${grid}<path d="${area}" fill="rgba(var(--accent-rgb),.13)"/><path d="${line}" fill="none" stroke="#12C7A2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}${xl}</svg>`; }
   const PL_SITES=[['petto','Petto'],['ascellare','Ascellare'],['tricipite','Tricipite'],['sottoscapolare','Sottoscapolare'],['addome','Addome'],['soprailiaca','Soprailiaca'],['coscia','Coscia']];
-  function renderPliche(){ const c=document.getElementById('plicheCard'); if(!c) return; const used3 = plicheSex==='M' ? ['petto','addome','coscia'] : ['tricipite','soprailiaca','coscia']; const nomi3 = used3.map(k=>PL_SITES.find(s=>s[0]===k)[1]).join(', '); c.innerHTML=`<div class="pl-title">Massa grassa</div><div class="pl-sub">Confronto tra metodo a 3 e 7 pliche (Jackson-Pollock)</div><div class="pl-row2"><div class="pl-f"><label>Sesso</label><div class="pl-seg"><button class="${plicheSex==='M'?'on':''}" data-sex="M">Uomo</button><button class="${plicheSex==='F'?'on':''}" data-sex="F">Donna</button></div></div><div class="pl-f"><label>Età</label><input id="plAge" class="pl-in" type="number" inputmode="numeric" value="${plicheAge}"></div></div><div class="pl-grid">${PL_SITES.map(([k,lbl])=>`<div class="pl-site"><label>${lbl}${used3.includes(k)?' <span class="b3">3</span>':''}</label><div class="pl-mm"><input data-k="${k}" type="number" inputmode="decimal" value="${plicheVals[k]}"><span>mm</span></div></div>`).join('')}</div><div class="pl-hint">I siti con <span class="b3">3</span> sono quelli del metodo a 3 pliche (${nomi3}). Gli altri completano il metodo a 7 pliche.</div><div class="pl-out" id="plOut"></div>`; c.querySelectorAll('[data-sex]').forEach(b=> b.onclick=()=>{ plicheSex=b.dataset.sex; renderPliche(); }); document.getElementById('plAge').addEventListener('input', e=>{ plicheAge=+e.target.value||0; computeAndShow(); }); c.querySelectorAll('[data-k]').forEach(inp=> inp.addEventListener('input', e=>{ plicheVals[e.target.dataset.k]=+e.target.value||0; computeAndShow(); })); computeAndShow(); }
+  function renderPliche(){ const c=document.getElementById('plicheCard'); if(!c) return; const used3 = plicheSex==='M' ? ['petto','addome','coscia'] : ['tricipite','soprailiaca','coscia']; const nomi3 = used3.map(k=>PL_SITES.find(s=>s[0]===k)[1]).join(', '); c.innerHTML=`<div class="pl-title">Massa grassa</div><div class="pl-sub">Confronto tra metodo a 3 e 7 pliche (Jackson-Pollock)</div><div class="pl-row2"><div class="pl-f"><label>Sesso</label><div class="pl-seg"><button class="${plicheSex==='M'?'on':''}" data-sex="M">Uomo</button><button class="${plicheSex==='F'?'on':''}" data-sex="F">Donna</button></div></div><div class="pl-f"><label>Età</label><input id="plAge" class="pl-in" type="number" inputmode="numeric" value="${plicheAge}"></div></div><div class="pl-grid">${PL_SITES.map(([k,lbl])=>`<div class="pl-site"><label>${lbl}${used3.includes(k)?' <span class="b3">3</span>':''}</label><div class="pl-mm"><input data-k="${k}" type="number" inputmode="decimal" value="${plicheVals[k]}"><span>mm</span></div></div>`).join('')}</div><div class="pl-out" id="plOut"></div>`; c.querySelectorAll('[data-sex]').forEach(b=> b.onclick=()=>{ plicheSex=b.dataset.sex; renderPliche(); }); document.getElementById('plAge').addEventListener('input', e=>{ plicheAge=+e.target.value||0; computeAndShow(); }); c.querySelectorAll('[data-k]').forEach(inp=> inp.addEventListener('input', e=>{ plicheVals[e.target.dataset.k]=+e.target.value||0; computeAndShow(); })); computeAndShow(); }
   function computeAndShow(){ const a=plicheAge, s=plicheSex, v=plicheVals; const sum7=v.petto+v.ascellare+v.tricipite+v.sottoscapolare+v.addome+v.soprailiaca+v.coscia; let sum3,bd3,bd7; if(s==='M'){ sum3=v.petto+v.addome+v.coscia; bd3=1.10938-0.0008267*sum3+0.0000016*sum3*sum3-0.0002574*a; bd7=1.112-0.00043499*sum7+0.00000055*sum7*sum7-0.00028826*a; } else { sum3=v.tricipite+v.soprailiaca+v.coscia; bd3=1.0994921-0.0009929*sum3+0.0000023*sum3*sum3-0.0001392*a; bd7=1.097-0.00046971*sum7+0.00000056*sum7*sum7-0.00012828*a; } const bf3=495/bd3-450, bf7=495/bd7-450, diff=Math.abs(bf3-bf7), avg=(bf3+bf7)/2; const out=document.getElementById('plOut'); if(!out) return; const ok = isFinite(bf3)&&isFinite(bf7)&&bf3>0&&bf7>0&&sum7>0&&a>0; out.innerHTML = ok ? `<div class="pl-cards"><div class="pl-card"><div class="pl-k">3 pliche</div><div class="pl-v">${bf3.toFixed(1)}%</div></div><div class="pl-card"><div class="pl-k">7 pliche</div><div class="pl-v">${bf7.toFixed(1)}%</div></div><div class="pl-card avg"><div class="pl-k">Media</div><div class="pl-v">${avg.toFixed(1)}%</div></div></div><div class="pl-cmp">Differenza tra i due metodi: <b>${diff.toFixed(1)}%</b>. Più i due valori sono vicini, più la stima è affidabile.</div>` : `<div class="pl-cmp">Inserisci le pliche (e l'età) per calcolare la massa grassa.</div>`; }
 
   // ---- CONSIGLI NUTRIZIONALI (sotto-tab) ----
@@ -1833,7 +1839,7 @@
   function openAddPasto(){
     const d=currentPiano.giorni[pianoDay]; const present=(d.pasti||[]).map(x=>x.tipo);
     const btns=PASTI_TIPI.map(t=>{ const used=present.includes(t); return '<button class="pasto-pick'+(used?' used':'')+'" data-tipo="'+t+'"'+(used?' disabled':'')+'>'+t+(used?' · aggiunto':'')+'</button>'; }).join('');
-    openModal('<div class="modal-h"><h3>Aggiungi pasto</h3><button class="modal-x" id="mX">'+I.x+'</button></div><div class="modal-b"><div class="set-note">Scegli il pasto da aggiungere alla giornata.</div><div class="pasto-picks">'+btns+'</div></div><div class="modal-f"><button class="btn btn-ghost btn-block" id="mAnnulla">'+I.x+' Chiudi</button></div>');
+    openModal('<div class="modal-h"><h3>Aggiungi pasto</h3><button class="modal-x" id="mX">'+I.x+'</button></div><div class="modal-b"><div class="pasto-picks">'+btns+'</div></div><div class="modal-f"><button class="btn btn-ghost btn-block" id="mAnnulla">'+I.x+' Chiudi</button></div>');
     document.getElementById('mX').onclick=closeModal; document.getElementById('mAnnulla').onclick=closeModal;
     document.querySelectorAll('.pasto-pick:not(.used)').forEach(b=> b.onclick=()=>addPasto(b.dataset.tipo));
   }
@@ -1992,7 +1998,7 @@
   function openImportaPiano(){
     openModal('<div class="modal-h"><h3>Importa piano alimentare</h3><button class="modal-x" id="mX">'+I.x+'</button></div>'+
       '<div class="modal-b">'+
-        '<div class="set-note">Carica un piano in <b>Excel</b> compilato col template (Nome_Piano, Giorno_Numero, Pasto, Alimento, Grammi, Alternativa, Energia/Proteine/Carboidrati/Grassi_Giorno, Note_Giorno). Gli alimenti vengono abbinati alla tua libreria per calcolare kcal e macro. Il PDF arriverà col backend.</div>'+
+        ''+
         '<div class="dropzone" id="impPDrop"><div class="dz-ic">'+I.upload+'</div><div class="dz-t">Trascina il file o clicca per caricarlo</div><div class="dz-s">Excel .xlsx o .xls</div></div>'+
         '<input type="file" id="impPFile" accept=".xlsx,.xls" hidden>'+
       '</div>'+
@@ -2578,7 +2584,7 @@
   function openImporta(){
     openModal('<div class="modal-h"><h3>Importa programma</h3><button class="modal-x" id="mX">'+I.x+'</button></div>'+
       '<div class="modal-b">'+
-        '<div class="set-note">Carica un file <b>Excel</b> compilato con il template (Nome_Programma, Numero_Settimane, Giorno_Numero, Nome_Workout, Nome_Esercizio, Tipo_Parametro, Serie, Ripetizioni_Tempo, Recupero, RIR, TUT, Note, Superserie). Verrà convertito in automatico in settimane, giorni ed esercizi.</div>'+
+        ''+
         '<div class="dropzone" id="impDrop"><div class="dz-ic">'+I.upload+'</div><div class="dz-t">Trascina il file o clicca per caricarlo</div><div class="dz-s">Excel .xlsx o .xls</div></div>'+
         '<input type="file" id="impFile" accept=".xlsx,.xls" hidden>'+
       '</div>'+
@@ -2658,7 +2664,7 @@
     }
     openModal('<div class="modal-h"><h3>Volume di allenamento</h3><button class="modal-x" id="mX">'+I.x+'</button></div>'+
       '<div class="modal-b">'+
-        '<div class="set-note">Serie settimanali per distretto muscolare ('+(currentProg&&currentProg.weeks?currentProg.weeks[progWeek].nome:'settimana corrente')+'), calcolate dagli esercizi della scheda e ordinate dal volume più alto.</div>'+
+        ''+
         body+
       '</div>'+
       '<div class="modal-f"><button class="btn btn-primary btn-block" id="mOk">Chiudi</button></div>');
