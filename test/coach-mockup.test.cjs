@@ -137,3 +137,12 @@ test("app cliente: notifiche richiudibili, carichi giù in rosso, esercizi chius
   assert.doesNotMatch(html, /id="coUrg"/);
   assert.doesNotMatch(html, /id="coDif"/);
 });
+
+test("nomi lunghi a capo, Togli serie, Concludi allenamento in fondo", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../www/athlete.html"), "utf8");
+  const coach = fs.readFileSync(path.join(__dirname, "../www/coach.html"), "utf8");
+  assert.match(coach, /\.row-t\{display:block;[^}]*white-space:normal; overflow-wrap:anywhere;\}/);
+  assert.match(html, /class="del-set-btn"/);
+  assert.match(html, /function slotCount\(ex, st\)/);
+  assert.match(html, /\.session-action\{position:static;/);
+});
