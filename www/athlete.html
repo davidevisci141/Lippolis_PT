@@ -19,7 +19,7 @@
 <style>
   :root{
     --bg:#34373C;
-    --device:#E1E2E3; --surface:#F5F6F7; --surface2:#E9EAEC;
+    --device:#E1E2E3; --veil:rgba(236,240,238,.58); --surface:#F5F6F7; --surface2:#E9EAEC;
     --line:#BFC2C6; --line-soft:#D4D7DA;
     --text:#1B1F24; --muted:#5C616A; --muted2:#888D94;
     --accent:#12C7A2; --accent-rgb:18,199,162; --accent-2:#17E0BD; --accent-dark:#0AA888; --accent-btn:#04231B; --accent-ink:#0A8C72; --accent-soft:rgba(var(--accent-rgb),.13);
@@ -33,7 +33,7 @@
   }
   /* Tema scuro: antracite, con lo stesso verde del brand */
   html[data-tema="scuro"]{
-    --device:#1B1D20; --surface:#26292E; --surface2:#2F3339;
+    --device:#1B1D20; --veil:rgba(22,24,27,.55); --surface:#26292E; --surface2:#2F3339;
     --line:#41464D; --line-soft:#363B41;
     --text:#ECEEF0; --muted:#A6ACB4; --muted2:#7C838B;
     --accent:#12C7A2; --accent-2:#17E0BD; --accent-dark:#0AA888; --accent-btn:#04231B; --accent-ink:#4FE0C2; --accent-soft:rgba(var(--accent-rgb),.15);
@@ -49,10 +49,10 @@
   html,body{height:100%;}
   body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); background:var(--device); overflow:hidden; overscroll-behavior:none; -webkit-tap-highlight-color:transparent;}
   /* App a tutto schermo: occupa il display reale, rispettando notch e barra di navigazione */
-  .phone{width:100%; max-width:560px; height:100%; margin:0 auto; background:radial-gradient(620px 520px at 100% -8%, rgba(var(--accent-rgb),.30), transparent 62%), radial-gradient(560px 460px at -12% 108%, rgba(var(--accent-rgb),.20), transparent 60%), radial-gradient(380px 320px at 18% 38%, rgba(var(--accent-rgb),.07), transparent 70%), linear-gradient(180deg, rgba(var(--accent-rgb),.05), transparent 45%), var(--device); overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top:env(safe-area-inset-top, 0px);}
+  .phone{width:100%; max-width:560px; height:100%; margin:0 auto; background:radial-gradient(620px 520px at 100% -8%, rgba(var(--accent-rgb),.22), transparent 62%), radial-gradient(560px 460px at -12% 108%, rgba(var(--accent-rgb),.14), transparent 60%), linear-gradient(var(--veil),var(--veil)), url("sfondo.jpg") center/cover no-repeat, var(--device); overflow:hidden; display:flex; flex-direction:column; position:relative; padding-top:env(safe-area-inset-top, 0px);}
   @media (min-width:600px){ body{background:var(--bg);} .phone{box-shadow:0 0 60px rgba(0,0,0,.35);} }
   @media (min-width:900px){
-    html:not([data-tema="scuro"]) .phone{--device:#F2F6F4;--surface:#fff;--surface2:#EAF2EF;--line:#DCE5E2;--line-soft:#E7EEEB;--text:#13211F;--muted:#687572;--muted2:#87928F;}
+    html:not([data-tema="scuro"]) .phone{--device:#F2F6F4;--veil:rgba(242,246,244,.60);--surface:#fff;--surface2:#EAF2EF;--line:#DCE5E2;--line-soft:#E7EEEB;--text:#13211F;--muted:#687572;--muted2:#87928F;}
     body{background:var(--device);overflow:hidden;}
     .phone{max-width:none;width:100%;height:100%;min-height:0;margin:0;border-radius:0;box-shadow:none;}
     .topbar{min-height:72px;padding:12px 28px;background:#101817;}

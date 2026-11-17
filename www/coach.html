@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --device:#E1E2E3; --surface:#F5F6F7; --surface2:#E9EAEC;
+    --device:#E1E2E3; --veil:rgba(236,240,238,.58); --surface:#F5F6F7; --surface2:#E9EAEC;
     --line:#BFC2C6; --line-soft:#D4D7DA;
     --text:#1B1F24; --muted:#5C616A; --muted2:#888D94;
     --accent:#12C7A2; --accent-rgb:18,199,162; --accent-dark:#0A9E82; --accent-ink:#0A8C72; --accent-soft:rgba(var(--accent-rgb),.13);
@@ -20,7 +20,7 @@
   }
   /* Tema scuro: antracite, come l'app dei clienti */
   html[data-tema="scuro"]{
-    --device:#1B1D20; --surface:#26292E; --surface2:#2F3339;
+    --device:#1B1D20; --veil:rgba(22,24,27,.55); --surface:#26292E; --surface2:#2F3339;
     --line:#41464D; --line-soft:#363B41;
     --text:#ECEEF0; --muted:#A6ACB4; --muted2:#7C838B;
     --danger:#E8695F;
@@ -32,7 +32,8 @@
   html[data-tema="scuro"] .weight-table td:first-child{color:var(--accent);}
   html[data-tema="scuro"] .att-thumb .play,html[data-tema="scuro"] .avatar-edit .edit{background:rgba(38,41,46,.92);}
   *{box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent;}
-  body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); min-height:100vh; background:radial-gradient(900px 620px at 100% -8%, rgba(var(--accent-rgb),.30), transparent 62%), radial-gradient(780px 560px at -12% 108%, rgba(var(--accent-rgb),.20), transparent 60%), radial-gradient(520px 420px at 18% 38%, rgba(var(--accent-rgb),.07), transparent 70%), linear-gradient(180deg, rgba(var(--accent-rgb),.05), transparent 45%), var(--device); background-attachment:fixed;}
+  body{font-family:'Manrope',system-ui,sans-serif; color:var(--text); min-height:100vh; background:var(--device);}
+  body::before{content:''; position:fixed; inset:0; z-index:-1; pointer-events:none; background:radial-gradient(900px 620px at 100% -8%, rgba(var(--accent-rgb),.22), transparent 62%), radial-gradient(780px 560px at -12% 108%, rgba(var(--accent-rgb),.14), transparent 60%), linear-gradient(var(--veil),var(--veil)), url("sfondo.jpg") center/cover no-repeat, var(--device);}
 
   /* ---- TOPBAR ---- */
   .topbar{position:sticky; top:0; z-index:30; background:var(--glass); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line-soft);}

@@ -170,6 +170,7 @@ test("niente spiegazioni, storico sessioni a tabelle, foto clienti e sfondo colo
   assert.match(coach, /data-avatar="'\+escapeHTML\(c\.id\|\|''\)\+'"/);
   assert.match(mock, /snapshot->profilo->>foto/);
   assert.match(mock, /PHOTO_RX=\/\^data:image/);
-  assert.match(coach, /radial-gradient\(900px 620px at 100% -8%, rgba\(var\(--accent-rgb\),\.30\)/);
-  assert.match(athlete, /rgba\(var\(--accent-rgb\),\s*\.30\)/);
+  assert.match(coach, /body::before\{[^}]*url\("sfondo\.jpg"\)/);
+  assert.match(athlete, /\.phone\{[^}]*url\("sfondo\.jpg"\)/);
+  assert.ok(fs.existsSync(path.join(__dirname, "..", "www", "sfondo.jpg")));
 });
