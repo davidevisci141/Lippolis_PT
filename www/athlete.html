@@ -451,10 +451,13 @@
   .coach-note{color:var(--text);}
   .coach-note p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere;}
   .set-labels{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(0,1fr) minmax(56px,.55fr);gap:7px;margin:12px 0 5px;color:var(--muted);font-size:10px;font-weight:700;text-align:center;}
+  .set-btns{display:flex;gap:8px;margin-top:9px}
+  .set-btns .add-set-btn{flex:1;margin-top:0}
+  .del-set-btn{flex:0 0 auto;padding:10px 14px;border:1px solid var(--line-soft);border-radius:12px;background:var(--surface);color:var(--muted);font:800 13px 'Archivo',system-ui,sans-serif;cursor:pointer;}
   .add-set-btn{width:100%;margin-top:9px;padding:10px;border:1px solid var(--accent);border-radius:12px;background:var(--surface);color:var(--accent-ink);font:800 13px 'Archivo',system-ui,sans-serif;cursor:pointer;}
   .workout-save-hint{font-size:10.5px;line-height:1.4;color:var(--muted2);margin:8px 2px 0;}
   .pd-index svg{width:19px;height:19px}
-  .session-action{position:sticky;bottom:0;z-index:4;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:9px;border-radius:16px;background:var(--surface);border:1px solid var(--line-soft);box-shadow:var(--shadow-card)}
+  .session-action{position:static;display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:9px;border-radius:16px;background:var(--surface);border:1px solid var(--line-soft);box-shadow:var(--shadow-card)}
   .session-action .concl-btn{width:auto;flex:1;padding:12px}
   .session-action span{font-size:11px;font-weight:800;color:var(--muted);padding:0 4px}
   .set .sl{flex:0 0 38px}.set .field,.set .field input{min-width:0}
@@ -875,6 +878,8 @@
   function isUnilat(ex){ if(!ex) return false; if(ex.unilaterale!=null) return !!ex.unilaterale; if(ex.cardio || ex.perLato) return false; return RX_UNILAT.test(ex.nome||'') || /per (lato|gamba|braccio)/i.test(String(ex.reps||'')) || RX_NOTA_UNILAT.test(ex.note||''); }
   function registraSerie(ex){ return !ex.cardio && !ex.timed && Number(ex.serie)>0; }
   function nSlot(ex){ return registraSerie(ex) ? Number(ex.serie)*(isUnilat(ex)?2:1) : 0; }
+  // Serie mostrate: quelle della scheda, più quelle aggiunte o meno quelle tolte dal cliente (st.nSet).
+  function slotCount(ex, st){ return st && st.nSet!=null ? st.nSet : Math.max(nSlot(ex), st?.sets?.length||0); }
   function slotLabel(ex,i){ return isUnilat(ex) ? (Math.floor(i/2)+1)+' '+LATI[i%2] : String(i+1); }
   function recEff(ex){ const s=toSec(ex.rec||0); return (isUnilat(ex) && s>REC_MAX_UNILAT) ? REC_MAX_UNILAT : s; }
   const NOTA_UNILAT_VECCHIA=/\s*Esercizio unilaterale: registra un lato per serie\.?/i;
@@ -1240,7 +1245,7 @@
     if(!Number.isInteger(reps)||reps<=0 || (set.kg!==''&&set.kg!=null&&(inputKg===null||inputKg<0)) || (inputKg===null&&!serieACorpoLibero(ex,i)&&!!ex.carico) || (set.rir!==''&&set.rir!=null&&(rir===null||rir<0||rir>10)))return null;
     return {kg:inputKg??0,reps,rir};
   }
-  function isDone(ex, st){ return !!st.manual || (nSlot(ex)>0 && st.sets.slice(0,nSlot(ex)).every((s,i)=>!!leggiSerie(ex,s,i))); }
+  function isDone(ex, st){ const n=Math.min(nSlot(ex),slotCount(ex,st)); return !!st.manual || (n>0 && st.sets.slice(0,n).every((s,i)=>!!leggiSerie(ex,s,i))); }
   function countDone(day){ let n=0; giorni[day].esercizi.forEach((ex,idx)=>{ if(isDone(ex, exState(day,idx,nSlot(ex)))) n++; }); return n; }
 
   // ====== GIORNATA: valori del giorno + abitudini ======
@@ -1845,7 +1850,7 @@
     let sets='';
     if(hasSets){
       const typeLabel={warmup:'Riscaldamento',working:'Lavoro',top:'Top set',back_off:'Back-off',drop:'Drop',mini_set:'Mini-set',cluster_group:'Gruppo',failure:'Cedimento'};
-      const setCount=Math.max(nSlot(ex),st.sets.length);
+      const setCount=slotCount(ex,st);
       sets=`<div class="set-labels"><span></span><span>Peso (kg)</span><span>${ex.unita==='sec'?'Secondi':'Ripetizioni'}</span><span>RIR</span></div><div class="sets">`;
       for(let s=1;s<=setCount;s++){
         const i=s-1, k=uni?Math.ceil(s/2):s, prescribed=ex.prescriptions&&ex.prescriptions[i], targetReps=ex.repsSerie?.[i]||ex.reps||'', targetLoad=ex.carichiSerie?.[i]||ex.carico||'';
@@ -1855,7 +1860,7 @@
         const rest=Number(prescribed?.rest_seconds);
         sets+=`<div class="set${uni?' lato-'+LATI[(s-1)%2].toLowerCase():''}"><div class="sl">SERIE ${k}${uni?'<small>'+LATI[(s-1)%2]+'</small>':''}${targetSummary?`<small class="set-prescription">${esc(targetSummary)}</small>`:''}</div><div class="field"><input type="text" inputmode="decimal" aria-label="Peso serie ${label}" placeholder="${esc(targetLoad)}"><span>${ex.perLato?'kg/lato':'kg'}</span></div><div class="field"><input type="number" inputmode="numeric" min="1" aria-label="${ex.unita==='sec'?'Secondi':'Ripetizioni'} serie ${label}" placeholder="${esc(String(targetReps).replace(/s$/i,''))}"><span>${ex.unita==='sec'?'sec':'reps'}</span></div><div class="field f-rir"><input type="number" inputmode="numeric" min="0" max="10" aria-label="RIR serie ${label}" placeholder="${esc(prescribed?.target_rir??ex.rir??'')}"><span>RIR</span></div>${Number.isFinite(rest)&&rest>0?`<button type="button" class="tg tg-timer set-rest" data-sec="${rest}" data-label="Recupero serie ${label}" aria-label="Avvia recupero serie ${label}">${I.play} ${fmtT(rest)}</button>`:''}</div>`;
       }
-      sets+=`</div><button type="button" class="add-set-btn">+ Aggiungi serie</button><div class="workout-save-hint">I carichi inseriti qui saranno aggiunti allo storico al salvataggio dell’allenamento.</div>`;
+      sets+=`</div><div class="set-btns"><button type="button" class="add-set-btn">+ Aggiungi serie</button>${setCount>(uni?2:1)?'<button type="button" class="del-set-btn">− Togli serie</button>':''}</div><div class="workout-save-hint">I carichi inseriti qui saranno aggiunti allo storico al salvataggio dell’allenamento.</div>`;
     }
     const cnote = `<label class="cnote"><span class="cnote-l">Le tue note</span><textarea class="cnote-ta" placeholder="Aggiungi una nota su questo esercizio (la vedrà il coach)…"></textarea></label>`;
     const headSum = (ex.cardio||ex.timed) ? ex.tempo : (ex.repsSerie ? (ex.serie+' serie · var.') : (ex.serie+'×'+ex.reps+(uni&&!RX_REPS_LATO.test(ex.reps)?' per lato':'')));
@@ -1915,7 +1920,9 @@
     };
     const execBtn=c.querySelector('.duo-exec'); if(execBtn) execBtn.onclick=()=>openExec(ex);
     const cta=c.querySelector('.cnote-ta'); if(cta){ cta.value=st.note||''; cta.addEventListener('input',e=>{ st.note=e.target.value; saveState(); }); }
-    const addSet=c.querySelector('.add-set-btn'); if(addSet) addSet.onclick=(e)=>{ e.stopPropagation(); const count=uni?2:1; for(let n=0;n<count;n++) st.sets.push({kg:'',reps:'',rir:''}); const y=view.scrollTop; saveStateNow(); wkRefresh(); view.scrollTop=y; };
+    const addSet=c.querySelector('.add-set-btn'); if(addSet) addSet.onclick=(e)=>{ e.stopPropagation(); const count=uni?2:1, now=slotCount(ex,st); while(st.sets.length<now+count) st.sets.push({kg:'',reps:'',rir:''}); st.nSet=now+count; const y=view.scrollTop; saveStateNow(); wkRefresh(); view.scrollTop=y; };
+    // Togli serie: elimina l'ultima (per gli unilaterali l'ultima coppia DX/SX).
+    const delSet=c.querySelector('.del-set-btn'); if(delSet) delSet.onclick=(e)=>{ e.stopPropagation(); const count=uni?2:1, now=slotCount(ex,st); if(now<=count) return; st.sets.splice(now-count,count); st.nSet=now-count; const y=view.scrollTop; saveStateNow(); wkRefresh(); view.scrollTop=y; };
     return c;
   }
   // ====== SEGNALAZIONE SU SINGOLO ESERCIZIO ======
