@@ -871,11 +871,13 @@
   // ====== ESERCIZI UNILATERALI ======
   // Riconosciuti dal nome (o da ex.unilaterale:true/false, che ha la precedenza): ogni serie prescritta
   // diventa due righe, DX e SX, ciascuna con carico e ripetizioni propri; recupero massimo 60".
-  const RX_UNILAT=/singol|unilater|\buni\b|bulgar|alternat|monolater|un braccio|una gamba|per lato|per gamba|per braccio/i;
+  // «bayesian»: unilaterale di predefinito; a due braccia si scrive nelle ripetizioni o nella nota (RX_BILAT).
+  const RX_UNILAT=/singol|unilater|\buni\b|bulgar|alternat|monolater|un braccio|una gamba|per lato|per gamba|per braccio|bayesian/i;
+  const RX_BILAT=/a due braccia|due braccia insieme|con entrambe le braccia|entrambe le braccia|a due gambe|con entrambe le gambe|bilaterale/i;
   const RX_REPS_LATO=/per (lato|gamba|braccio)/i;
   const RX_NOTA_UNILAT=/(ripetizioni|reps|rip\.?|colpi)\s+per\s+(lato|gamba|braccio)|(prima|tra) (un|una) (braccio|gamba)\b.{0,20}\bl.altr[oa]/i;
   const REC_MAX_UNILAT=60, LATI=['DX','SX'];
-  function isUnilat(ex){ if(!ex) return false; if(ex.unilaterale!=null) return !!ex.unilaterale; if(ex.cardio || ex.perLato) return false; return RX_UNILAT.test(ex.nome||'') || /per (lato|gamba|braccio)/i.test(String(ex.reps||'')) || RX_NOTA_UNILAT.test(ex.note||''); }
+  function isUnilat(ex){ if(!ex) return false; if(ex.unilaterale!=null) return !!ex.unilaterale; if(ex.cardio || ex.perLato) return false; if(RX_BILAT.test(String(ex.reps||''))||RX_BILAT.test(ex.note||'')) return false; return RX_UNILAT.test(ex.nome||'') || /per (lato|gamba|braccio)/i.test(String(ex.reps||'')) || RX_NOTA_UNILAT.test(ex.note||''); }
   function registraSerie(ex){ return !ex.cardio && !ex.timed && Number(ex.serie)>0; }
   function nSlot(ex){ return registraSerie(ex) ? Number(ex.serie)*(isUnilat(ex)?2:1) : 0; }
   // Serie mostrate: quelle della scheda, più quelle aggiunte o meno quelle tolte dal cliente (st.nSet).

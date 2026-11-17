@@ -146,3 +146,13 @@ test("nomi lunghi a capo, Togli serie, Concludi allenamento in fondo", () => {
   assert.match(html, /function slotCount\(ex, st\)/);
   assert.match(html, /\.session-action\{position:static;/);
 });
+
+test("bayesian curl unilaterale di predefinito, a due braccia se scritto nella nota", () => {
+  const html = fs.readFileSync(path.join(__dirname, "../www/athlete.html"), "utf8");
+  const uni = new RegExp(html.match(/const RX_UNILAT=\/(.+?)\/i;/)[1], "i");
+  const bil = new RegExp(html.match(/const RX_BILAT=\/(.+?)\/i;/)[1], "i");
+  assert.ok(uni.test("Bayesian curl"));
+  assert.ok(bil.test("A due braccia, spremi in cima"));
+  assert.ok(!bil.test("tieni le braccia vicine"));
+  assert.match(html, /if\(RX_BILAT\.test\(String\(ex\.reps\|\|''\)\)\|\|RX_BILAT\.test\(ex\.note\|\|''\)\) return false;/);
+});
