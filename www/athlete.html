@@ -1137,6 +1137,7 @@
       const d=document.createElement('div');
       d.className='co-msg '+(m.tipo==='urgenza'?'esc':m.from==='coach'?'coach':m.from==='sistema'?'sys':'atleta');
       if(m.tipo==='urgenza'){const title=document.createElement('b');title.textContent='Urgenza';d.appendChild(title);}
+      if(m.tipo==='assistente'&&m.from==='coach'){const tag=document.createElement('span');tag.className='tag';tag.textContent='Assistente Lippolis PT';d.appendChild(tag);d.appendChild(document.createElement('br'));}
       const text=String(m.testo||'');
       d.append(m.meta?.plainText||m.from==='coach'?text:text.replace(/<br\s*\/?>/gi,'\n').replace(/<\/?b>/gi,'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
       const stamp=document.createElement('span');stamp.className='ts';stamp.textContent=fmtDataOra(m.ts)+(m.from==='atleta'&&m.letto?' · Letto':'');d.appendChild(stamp);
