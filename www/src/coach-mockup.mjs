@@ -570,7 +570,7 @@ async function refreshCoachThread(){
     .order("created_at",{ascending:false}).order("id",{ascending:false}).limit(150)).reverse();
   if(request!==threadRequest||!log.isConnected||chatClient!==client)return;
   const atBottom=!log.dataset.loaded||log.scrollHeight-log.scrollTop-log.clientHeight<64;
-  log.innerHTML=messages.map(m=>`<div class="chat-bubble${m.sender_id===uid?" mine":""}">${m.type==="urgenza"?"<strong>Urgenza</strong><br>":""}${escape(m.text)}<time datetime="${escape(m.created_at)}">${escape(displayDate(m.created_at))} · ${chatTime(m.created_at)}${m.sender_id===uid&&m.read_at?" · Letto":""}</time></div>`).join("")||'<p class="chat-empty">Nessun messaggio. Inizia la conversazione.</p>';
+  log.innerHTML=messages.map(m=>`<div class="chat-bubble${m.sender_id===uid?" mine":""}">${m.type==="urgenza"?"<strong>Urgenza</strong><br>":""}${m.type==="assistente"?"<strong>Assistente Lippolis PT</strong><br>":""}${escape(m.text)}<time datetime="${escape(m.created_at)}">${escape(displayDate(m.created_at))} · ${chatTime(m.created_at)}${m.sender_id===uid&&m.read_at?" · Letto":""}</time></div>`).join("")||'<p class="chat-empty">Nessun messaggio. Inizia la conversazione.</p>';
   log.dataset.loaded="1";
   if(atBottom)log.scrollTop=log.scrollHeight;
   if(!document.hidden&&messages.some(m=>m.sender_id!==uid&&!m.read_at)){
