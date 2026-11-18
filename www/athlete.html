@@ -192,6 +192,8 @@
   .tg-timer b{color:var(--accent-ink);}
   .tg-timer svg{width:13px;height:13px; color:var(--accent-ink); flex:0 0 auto;}
   .tg-timer:active{transform:scale(.97);}
+  /* Serie · Reps · RIR occupano tutta la riga, larghi quanto la barra del recupero sotto */
+  .targets.targets-fill > *{flex:1 1 auto; text-align:center; justify-content:center;}
   .rec-bar{display:flex; width:100%; margin-top:8px; padding:10px 14px; border-radius:11px; font-size:13px; font-weight:700; color:var(--accent-ink);}
   .rec-bar span{flex:1; text-align:left;}
   .rec-bar b{font-family:'Archivo',system-ui,sans-serif; font-weight:800; font-size:15px;}
@@ -1959,7 +1961,7 @@
         <span class="card-caret">${I.chevR}</span>
       </div>
       <div class="card-body">
-        <div class="targets">${targets}</div>
+        <div class="targets${recBar?' targets-fill':''}">${targets}</div>
         ${recBar}
         ${suggHTML}
         ${approvedLoad?`<div class="note">Carico indicato dal PT: <b>${esc(fmtKgS(Number(approvedLoad.kg)))} kg</b></div>`:''}

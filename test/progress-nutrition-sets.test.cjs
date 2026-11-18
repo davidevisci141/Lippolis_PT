@@ -73,5 +73,6 @@ test("consigli alimentari: tutti i giorni a fisarmonica con calorie e macro; rec
   assert.equal(macroGiorno({ proteine: "100", carboidrati: "100", grassi: "10" }).kcal, 890);
   assert.match(page, /class="tg-timer rec-bar"/);
   assert.doesNotMatch(page, /const recChip=/);
+  assert.match(page, /\.targets\.targets-fill > \*\{flex:1 1 auto/);
   assert.match(page, /\.mcard\{[^}]*color-mix\(in srgb,var\(--surface\) 92%/);
 });
