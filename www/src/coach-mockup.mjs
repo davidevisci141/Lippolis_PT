@@ -6,7 +6,7 @@ import { toAthleteProgram } from "./workout-metrics.mjs";
 import { recognizeInBodyPhoto, requiredBiaFields } from "./bia-ocr.mjs";
 import { markChatRead } from "./chat.mjs";
 import { createNotifications } from "./notifications.mjs";
-import { listProgressPhotos, PHOTO_BUCKET } from "./progress-photos.mjs";
+import { listProgressPhotos, PHOTO_BUCKET, groupProgressPhotos, POSE_LABELS } from "./progress-photos.mjs";
 
 const ui = window.CoachMock, $ = (id) => document.getElementById(id);
 const escape = (v) => String(v ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
@@ -480,10 +480,12 @@ async function loadAthleteProgressPhotos(client){
   try{
     const photos=await listProgressPhotos(client.id);
     if(!host.isConnected)return;
-    host.className=photos.length?"progress-grid":"";
-    host.innerHTML=photos.map((photo,index)=>`<article class="progress-photo"><button type="button" class="progress-photo-open${workspace.preferences.blurPhotos?" progress-preview-blur":""}" data-progress-open="${index}" aria-label="Apri foto del ${displayDate(photo.date)}"><img loading="lazy" alt="Foto del ${displayDate(photo.date)}"></button><div class="progress-photo-info">${displayDate(photo.date)}</div></article>`).join("")||'<p class="progress-copy">Il cliente non ha ancora condiviso foto.</p>';
+    // Come nell'app cliente: un blocco per caricamento, con le pose Fronte · Lato · Retro affiancate.
+    const groups=groupProgressPhotos(photos), flat=groups.flatMap(group=>group.photos);
+    host.className=photos.length?"progress-groups":"";
+    host.innerHTML=groups.map(group=>`<article class="progress-group"><div class="pg-head"><h4>${displayDate(group.date)}</h4></div><div class="pg-row">${group.photos.map(photo=>{const index=flat.indexOf(photo), label=photo.pose?POSE_LABELS[photo.pose]:"";return `<button type="button" class="pg-photo${workspace.preferences.blurPhotos?" progress-preview-blur":""}" data-progress-open="${index}" aria-label="Apri foto ${label} del ${displayDate(photo.date)}"><img loading="lazy" alt="Foto ${label} del ${displayDate(photo.date)}">${label?`<span>${label}</span>`:""}</button>`;}).join("")}</div></article>`).join("")||'<p class="progress-copy">Il cliente non ha ancora condiviso foto.</p>';
     host.querySelectorAll("[data-progress-open]").forEach(button=>{
-      const photo=photos[Number(button.dataset.progressOpen)];
+      const photo=flat[Number(button.dataset.progressOpen)];
       const image=button.querySelector("img");
       signed(PHOTO_BUCKET,photo.path).then(url=>{if(button.isConnected)image.src=url;})
         .catch(()=>{image.alt="Anteprima non disponibile";});
@@ -725,7 +727,7 @@ function clientWeightHistory(client){
 const kgText=(kg,perSide)=>kg===null?"—":kg===0?"C.L.":`${weightNumber.format(kg)} ${perSide?"kg/lato":"kg"}`;
 function setsTable(sets,unit,perSide){
   return `<table class="weight-table"><thead><tr><th scope="col">Serie</th><th scope="col">Carico</th><th scope="col">${unit==="sec"?"Tempo":"Rip."}</th><th scope="col">RIR</th></tr></thead><tbody>
-    ${sets.map(set=>`<tr><td>${escape(set.series)}</td><td>${kgText(set.kg,perSide)}</td><td>${set.reps===null?"—":weightNumber.format(set.reps)+(unit==="sec"?" s":"")}</td><td>${set.rir===null?"—":weightNumber.format(set.rir)}</td></tr>`).join("")}</tbody></table>`;
+    ${sets.map(set=>`<tr><td>${escape(set.series)}</td><td>${set.kgText?`${escape(set.kgText)} ${perSide?"kg/lato":"kg"}`:kgText(set.kg,perSide)}</td><td>${set.repsText?escape(set.repsText)+(unit==="sec"?" s":""):set.reps===null?"—":weightNumber.format(set.reps)+(unit==="sec"?" s":"")}</td><td>${set.rir===null?"—":weightNumber.format(set.rir)}</td></tr>`).join("")}</tbody></table>`;
 }
 const bestSet=sets=>sets.filter(x=>x.kg!==null).sort((a,b)=>b.kg-a.kg||(b.reps??0)-(a.reps??0))[0];
 
@@ -894,7 +896,7 @@ function exportProgram(c,item,workouts){
   for(const session of registered){
     lines.push("",`### ${session.titolo} · ${displayDate(session.ts)}`,session.nota||"");
     for(const ex of session.esercizi||[]){
-      lines.push(`- ${ex.nome} · ${(ex.sets||[]).map(s=>`${s.kg} kg × ${s.reps}${s.rir==null?"":" · RIR "+s.rir}`).join(", ")}${ex.note?" · "+ex.note:""}`);
+      lines.push(`- ${ex.nome} · ${(ex.sets||[]).map(s=>`${s.kgTesto||s.kg} kg × ${s.repsTesto||s.reps}${s.rir==null?"":" · RIR "+s.rir}`).join(", ")}${ex.note?" · "+ex.note:""}`);
     }
   }
   const text=lines.join("\n");

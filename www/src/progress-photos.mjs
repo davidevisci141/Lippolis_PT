@@ -1,8 +1,8 @@
 import { supabase } from "./supabase.mjs";
+import { parseProgressFileName, progressFileName } from "./progress-photo-groups.mjs";
+export { groupProgressPhotos, POSES, POSE_LABELS } from "./progress-photo-groups.mjs";
 
 export const PHOTO_BUCKET = "coach-client-files";
-const suffix = "-athlete-progress.jpg";
-const filePattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}-athlete-progress\.jpg$/i;
 const maxFileSize = 15 * 1024 * 1024;
 const pageSize = 100;
 
@@ -14,9 +14,10 @@ export async function listProgressPhotos(athleteId) {
     });
     if (error) throw error;
     for (const file of data) {
-      if (filePattern.test(file.name)) {
+      const parsed = parseProgressFileName(file.name);
+      if (parsed) {
         const date = new Date(file.created_at);
-        photos.set(file.name, { path: `${athleteId}/${file.name}`, date });
+        photos.set(file.name, { path: `${athleteId}/${file.name}`, date, ...parsed });
       }
     }
     if (data.length < pageSize) break;
@@ -70,8 +71,9 @@ export async function prepareProgressPhoto(file) {
   } catch { throw new Error("Foto illeggibile. Prova a scegliere un’altra immagine."); }
 }
 
-export async function saveProgressPhoto(athleteId, name, blob) {
-  const path = `${athleteId}/${name}${suffix}`;
+// Un caricamento = un lotto con fino a tre pose (fronte, lato, retro).
+export async function saveProgressPhoto(athleteId, batch, pose, blob) {
+  const path = `${athleteId}/${progressFileName(batch, pose)}`;
   const bucket = supabase.storage.from(PHOTO_BUCKET);
   const { error } = await bucket.upload(path, blob, { contentType: "image/jpeg", cacheControl: "0" });
   if (!error) return;
@@ -80,7 +82,7 @@ export async function saveProgressPhoto(athleteId, name, blob) {
   if (!data?.signedUrl) throw error;
 }
 
-export async function deleteProgressPhoto(path) {
-  const { error } = await supabase.storage.from(PHOTO_BUCKET).remove([path]);
+export async function deleteProgressPhoto(paths) {
+  const { error } = await supabase.storage.from(PHOTO_BUCKET).remove(Array.isArray(paths) ? paths : [paths]);
   if (error) throw error;
 }

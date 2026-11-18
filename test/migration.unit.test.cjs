@@ -58,13 +58,19 @@ test("le anteprime BIA vengono archiviate e mostrate insieme agli originali", ()
   assert.match(migration, /\(-preview\)\?/);
 });
 
-test("le foto dei progressi usano il caricamento privato e due selettori per il telefono", () => {
+test("le foto dei progressi usano il caricamento privato, la selezione multipla e le tre pose", () => {
   const html = read("www/athlete.html");
   const app = read("www/src/progress-photos.mjs");
+  const names = read("www/src/progress-photo-groups.mjs");
   const rules = read("supabase/migrations/202611130005_athlete_progress_photos.sql");
-  assert.match(html, /id="progressCapture"[^>]*capture="environment"/);
-  assert.match(html, /id="progressFile"[^>]*accept="image\/\*/);
-  assert.match(app, /-athlete-progress\.jpg/);
+  const poses = read("supabase/migrations/202611180001_progress_photo_poses.sql");
+  assert.match(html, /id="progressFile"[^>]*accept="image\/\*[^>]*multiple/);
+  assert.match(html, /id="progressPose"[^>]*accept="image\/\*/);
+  assert.match(html, /id="poseSlots"/);
+  assert.match(names, /-athlete-progress/);
+  assert.match(app, /progressFileName\(batch, pose\)/);
+  assert.match(poses, /security definer/);
+  assert.match(poses, /\(fronte\|lato\|retro\)/);
   assert.match(rules, /private\.can_read_athlete\(\(select auth\.uid\(\)\), private\.athlete_progress_photo_owner\(name\)\)/);
   assert.match(rules, /private\.athlete_progress_photo_owner\(name\) = \(select auth\.uid\(\)\)/);
 });
