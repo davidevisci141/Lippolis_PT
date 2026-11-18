@@ -134,7 +134,10 @@ export function athleteWeightHistory(snapshot = {}) {
         const sideCount = (sides.get(side) || 0) + 1;
         sides.set(side, sideCount);
         const series = side ? `${slot===null ? sideCount : Math.floor(slot / 2) + 1} ${side}` : String((slot??index) + 1);
-        return [{ series, kg, reps, rir }];
+        const row = { series, kg, reps, rir };
+        if (clean(set?.kgTesto)) row.kgText = clean(set.kgTesto);
+        if (clean(set?.repsTesto)) row.repsText = clean(set.repsTesto);
+        return [row];
       });
       if (!sets.length) continue;
       const key = JSON.stringify([name.toLocaleLowerCase("it"), unit, perSide]);
@@ -206,7 +209,10 @@ export function athleteSessions(snapshot = {}) {
       name: clean(e?.nome), unit: e?.unita === "sec" ? "sec" : "reps", note: clean(e?.note),
       sets: (() => { const sides = new Map();
         return list(e?.sets).map((set, i) => { const side = clean(e.lati?.[i]); const n = (sides.get(side) || 0) + 1; sides.set(side, n);
-          return { series: side ? `${n} ${side}` : String(i + 1), kg: num(set?.kg), reps: num(set?.reps), rir: num(set?.rir) }; })
+          const row = { series: side ? `${n} ${side}` : String(i + 1), kg: num(set?.kg), reps: num(set?.reps), rir: num(set?.rir) };
+          if (clean(set?.kgTesto)) row.kgText = clean(set.kgTesto);
+          if (clean(set?.repsTesto)) row.repsText = clean(set.repsTesto);
+          return row; })
           .filter(x => x.kg !== null || x.reps !== null); })()
     })).filter(e => e.name && e.sets.length)
   })).filter(s => s.exercises.length).sort((a, b) => b.ts - a.ts);
