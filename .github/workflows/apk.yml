@@ -21,8 +21,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
+      - name: Modello bokeh (MediaPipe)
+        run: |
+          mkdir -p app/src/main/assets
+          curl -fsSL -o app/src/main/assets/selfie_multiclass_256x256.tflite \
+            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite
       - name: Compila
-        run: gradle assembleDebug --stacktrace
+        run: |
+          set -o pipefail
+          gradle assembleDebug --console=plain 2>&1 | tee build.log
       - uses: actions/upload-artifact@v4
         with:
           name: LIPPOLIS-CAM
@@ -33,6 +40,17 @@ jobs:
           cp app/build/outputs/apk/debug/app-debug.apk apk/LIPPOLIS-CAM.apk
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
+          git rm -q --ignore-unmatch apk/ERRORE.log
           git add apk/LIPPOLIS-CAM.apk
           git commit -m "APK compilato [skip ci]"
+          git push
+      - name: Salva il log in caso di errore
+        if: failure()
+        run: |
+          mkdir -p apk
+          tail -c 60000 build.log > apk/ERRORE.log || echo "nessun log" > apk/ERRORE.log
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add apk/ERRORE.log
+          git commit -m "Log errore [skip ci]"
           git push

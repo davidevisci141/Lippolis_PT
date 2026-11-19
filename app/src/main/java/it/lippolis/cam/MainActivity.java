@@ -4,12 +4,16 @@ import android.Manifest;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.Typeface;
+import android.hardware.camera2.CaptureRequest;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Range;
 import android.util.Size;
@@ -22,19 +26,27 @@ import android.view.WindowManager;
 import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.ComponentActivity;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.annotation.OptIn;
+import androidx.camera.camera2.interop.Camera2CameraControl;
+import androidx.camera.camera2.interop.CaptureRequestOptions;
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop;
 import androidx.camera.core.Camera;
+import androidx.camera.core.CameraEffect;
 import androidx.camera.core.CameraInfo;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.DynamicRange;
+import androidx.camera.core.ExposureState;
 import androidx.camera.core.FocusMeteringAction;
 import androidx.camera.core.MeteringPoint;
 import androidx.camera.core.Preview;
+import androidx.camera.core.UseCaseGroup;
 import androidx.camera.core.ZoomState;
 import androidx.camera.core.resolutionselector.AspectRatioStrategy;
 import androidx.camera.core.resolutionselector.ResolutionSelector;
@@ -76,6 +88,9 @@ public class MainActivity extends ComponentActivity {
     private LinearLayout zoomBar, topRight;
     private View btnRecord;
     private ImageView thumb;
+    private LinearLayout panel;
+    private TextView panelLabel, btnLock, btnExposure, btnBokeh;
+    private SeekBar panelSeek;
 
     private ProcessCameraProvider provider;
     private Camera camera;
@@ -92,6 +107,18 @@ public class MainActivity extends ComponentActivity {
     private final List<Float> zoomStops = new ArrayList<>();
     private Uri lastUri;
     private boolean pinching = false;
+
+    // luminosita' (compensazione esposizione) e bokeh, salvati fra un'apertura e l'altra
+    private SharedPreferences prefs;
+    private int evIndex = 0;
+    private boolean aeLock = false;
+    private int bokeh = 0;              // 0 = spento, 1..100 = intensita'
+    private boolean effectActive = false;
+    private BokehProcessor processor;
+    private CameraEffect effect;
+    private int panelMode = 0;          // 0 nessuno, 1 luminosita', 2 bokeh
+    private final Handler main = new Handler(Looper.getMainLooper());
+    private final Runnable relock = () -> setAeLock(true);
 
     private final ExecutorService bg = Executors.newSingleThreadExecutor();
 
@@ -119,6 +146,50 @@ public class MainActivity extends ComponentActivity {
         btnRecord = findViewById(R.id.btnRecord);
         thumb = findViewById(R.id.thumb);
         thumb.setClipToOutline(true);
+        panel = findViewById(R.id.panel);
+        panelLabel = findViewById(R.id.panelLabel);
+        panelSeek = findViewById(R.id.panelSeek);
+        btnLock = findViewById(R.id.btnLock);
+        btnExposure = findViewById(R.id.btnExposure);
+        btnBokeh = findViewById(R.id.btnBokeh);
+
+        prefs = getSharedPreferences("lippolis_cam", MODE_PRIVATE);
+        evIndex = prefs.getInt("ev", 0);
+        aeLock = prefs.getBoolean("aeLock", false);
+        bokeh = prefs.getInt("bokeh", 0);
+        fps = prefs.getInt("fps", 30);
+        lensFacing = prefs.getInt("lens", CameraSelector.LENS_FACING_BACK);
+        String ql = prefs.getString("quality", "1080");
+        quality = "720".equals(ql) ? Quality.HD : "4K".equals(ql) ? Quality.UHD : Quality.FHD;
+
+        btnExposure.setOnClickListener(v -> togglePanel(1));
+        btnBokeh.setOnClickListener(v -> togglePanel(2));
+        btnLock.setOnClickListener(v -> {
+            aeLock = !aeLock;
+            prefs.edit().putBoolean("aeLock", aeLock).apply();
+            main.removeCallbacks(relock);
+            setAeLock(aeLock);
+            updatePanel();
+            updateSideButtons();
+        });
+        panelSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar sb, int p, boolean fromUser) {
+                if (!fromUser) return;
+                if (panelMode == 1) onEvChanged(p);
+                else if (panelMode == 2) onBokehChanged(p);
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar sb) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar sb) {
+                if (panelMode == 2) applyBokehBinding();
+            }
+        });
+        updateSideButtons();
 
         previewView.setScaleType(PreviewView.ScaleType.FIT_CENTER);
 
@@ -127,6 +198,7 @@ public class MainActivity extends ComponentActivity {
             if (recording != null) return;
             lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
                     ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
+            prefs.edit().putInt("lens", lensFacing).apply();
             bindCamera(1f);
         });
         btnFlash.setOnClickListener(v -> {
@@ -138,11 +210,13 @@ public class MainActivity extends ComponentActivity {
         txtRes.setOnClickListener(v -> {
             if (recording != null || qualities.size() < 2) return;
             quality = qualities.get((qualities.indexOf(quality) + 1) % qualities.size());
+            prefs.edit().putString("quality", qualityLabel(quality)).apply();
             bindCamera(currentZoom());
         });
         txtFps.setOnClickListener(v -> {
             if (recording != null || fpsOptions.size() < 2) return;
             fps = fpsOptions.get((fpsOptions.indexOf(fps) + 1) % fpsOptions.size());
+            prefs.edit().putInt("fps", fps).apply();
             bindCamera(currentZoom());
         });
         thumb.setOnClickListener(v -> openLastVideo());
@@ -225,6 +299,16 @@ public class MainActivity extends ComponentActivity {
             return;
         }
 
+        boolean wantEffect = bokeh > 0;
+        if (wantEffect) {
+            if (processor == null) {
+                processor = new BokehProcessor(this);
+                effect = processor.createEffect();
+            }
+            processor.setRotation(info.getSensorRotationDegrees());
+            processor.setAmount(bokeh / 100f);
+        }
+
         // Risoluzioni realmente supportate
         qualities.clear();
         List<Quality> sup = Recorder.getVideoCapabilities(info).getSupportedQualities(DynamicRange.SDR);
@@ -244,11 +328,18 @@ public class MainActivity extends ComponentActivity {
         }
         if (!fpsOptions.contains(fps)) fps = 30;
 
-        if (!tryBind(selector) && fps != 30) {
+        boolean ok = tryBind(selector, wantEffect);
+        if (!ok && fps != 30) {
             fps = 30;
-            toast("60 fps non disponibili con questa risoluzione: uso 30");
-            tryBind(selector);
+            toast("60 fps non disponibili con queste impostazioni: uso 30");
+            ok = tryBind(selector, wantEffect);
         }
+        if (!ok && wantEffect) {
+            toast("Bokeh non supportato con queste impostazioni");
+            wantEffect = false;
+            tryBind(selector, false);
+        }
+        effectActive = camera != null && wantEffect;
         if (camera == null) {
             toast("Impossibile avviare la fotocamera");
             return;
@@ -268,10 +359,13 @@ public class MainActivity extends ComponentActivity {
         zoomLive.observe(this, this::onZoomChanged);
         if (keepZoom != 1f) camera.getCameraControl().setZoomRatio(keepZoom);
 
+        applyExposure();
         updateTopBar();
+        updateSideButtons();
+        updatePanel();
     }
 
-    private boolean tryBind(CameraSelector selector) {
+    private boolean tryBind(CameraSelector selector, boolean withEffect) {
         try {
             ResolutionSelector rs = new ResolutionSelector.Builder()
                     .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
@@ -287,7 +381,9 @@ public class MainActivity extends ComponentActivity {
                     .setTargetFrameRate(new Range<>(fps, fps))
                     .build();
 
-            camera = provider.bindToLifecycle(this, selector, preview, videoCapture);
+            UseCaseGroup.Builder g = new UseCaseGroup.Builder().addUseCase(preview).addUseCase(videoCapture);
+            if (withEffect && effect != null) g.addEffect(effect);
+            camera = provider.bindToLifecycle(this, selector, g.build());
             return true;
         } catch (Exception e) {
             provider.unbindAll();
@@ -299,7 +395,10 @@ public class MainActivity extends ComponentActivity {
     private void focusAt(float x, float y) {
         if (camera == null) return;
         MeteringPoint p = previewView.getMeteringPointFactory().createPoint(x, y);
-        camera.getCameraControl().startFocusAndMetering(new FocusMeteringAction.Builder(p).build());
+        int flags = (aeLock || evIndex != 0)
+                ? FocusMeteringAction.FLAG_AF
+                : FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE | FocusMeteringAction.FLAG_AWB;
+        camera.getCameraControl().startFocusAndMetering(new FocusMeteringAction.Builder(p, flags).build());
     }
 
     // ---------------------------------------------------------------- barra in alto
@@ -439,6 +538,133 @@ public class MainActivity extends ComponentActivity {
         super.onStop();
     }
 
+    // ---------------------------------------------------------------- luminosita'
+
+    private void applyExposure() {
+        if (camera == null) return;
+        ExposureState es = camera.getCameraInfo().getExposureState();
+        if (!es.isExposureCompensationSupported()) {
+            btnExposure.setVisibility(View.INVISIBLE);
+            return;
+        }
+        btnExposure.setVisibility(View.VISIBLE);
+        Range<Integer> r = es.getExposureCompensationRange();
+        evIndex = Math.max(r.getLower(), Math.min(r.getUpper(), evIndex));
+        camera.getCameraControl().setExposureCompensationIndex(evIndex);
+        main.removeCallbacks(relock);
+        setAeLock(false);
+        // lascio assestare l'esposizione, poi blocco
+        if (aeLock) main.postDelayed(relock, 900);
+    }
+
+    private void onEvChanged(int progress) {
+        if (camera == null) return;
+        ExposureState es = camera.getCameraInfo().getExposureState();
+        Range<Integer> r = es.getExposureCompensationRange();
+        evIndex = r.getLower() + progress;
+        prefs.edit().putInt("ev", evIndex).apply();
+        main.removeCallbacks(relock);
+        if (aeLock) setAeLock(false);
+        camera.getCameraControl().setExposureCompensationIndex(evIndex);
+        if (aeLock) main.postDelayed(relock, 700);
+        updatePanelLabel();
+        updateSideButtons();
+    }
+
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
+    private void setAeLock(boolean on) {
+        if (camera == null) return;
+        try {
+            Camera2CameraControl.from(camera.getCameraControl()).setCaptureRequestOptions(
+                    new CaptureRequestOptions.Builder()
+                            .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, on)
+                            .build());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private String evLabel() {
+        if (camera == null) return "0.0";
+        float step = camera.getCameraInfo().getExposureState().getExposureCompensationStep().floatValue();
+        float ev = evIndex * step;
+        if (Math.abs(ev) < 0.05f) return "0.0";
+        return String.format(Locale.US, "%+.1f", ev);
+    }
+
+    // ---------------------------------------------------------------- bokeh
+
+    private void onBokehChanged(int progress) {
+        if (recording != null && effectActive && progress < 1) {
+            progress = 1;
+            panelSeek.setProgress(1);
+        }
+        if (recording != null && !effectActive) {
+            panelSeek.setProgress(0);
+            toast("Attiva il bokeh prima di registrare");
+            return;
+        }
+        bokeh = progress;
+        prefs.edit().putInt("bokeh", bokeh).apply();
+        if (processor != null) processor.setAmount(bokeh / 100f);
+        updatePanelLabel();
+        updateSideButtons();
+    }
+
+    private void applyBokehBinding() {
+        if (recording != null) return;
+        if ((bokeh > 0) != effectActive) bindCamera(currentZoom());
+        if (bokeh > 0 && processor != null) {
+            main.postDelayed(() -> {
+                if (processor != null && processor.segmenterFailed())
+                    toast("Modello bokeh non caricato: sfondo non sfocato");
+            }, 2500);
+        }
+    }
+
+    private String bokehLabel() {
+        if (bokeh == 0) return "OFF";
+        float f = 16f - (bokeh / 100f) * (16f - 0.95f);
+        return f < 1f ? "f0.95" : String.format(Locale.US, "f%.1f", f);
+    }
+
+    // ---------------------------------------------------------------- pannello
+
+    private void togglePanel(int mode) {
+        panelMode = panelMode == mode ? 0 : mode;
+        updatePanel();
+    }
+
+    private void updatePanel() {
+        if (panelMode == 0 || camera == null) {
+            panel.setVisibility(View.GONE);
+            return;
+        }
+        panel.setVisibility(View.VISIBLE);
+        if (panelMode == 1) {
+            Range<Integer> r = camera.getCameraInfo().getExposureState().getExposureCompensationRange();
+            panelSeek.setMax(r.getUpper() - r.getLower());
+            panelSeek.setProgress(evIndex - r.getLower());
+            btnLock.setVisibility(View.VISIBLE);
+            btnLock.setText(aeLock ? "BLOCCATA" : "BLOCCA");
+            btnLock.setTextColor(aeLock ? ContextCompat.getColor(this, R.color.accent) : 0xFFFFFFFF);
+        } else {
+            panelSeek.setMax(100);
+            panelSeek.setProgress(bokeh);
+            btnLock.setVisibility(View.GONE);
+        }
+        updatePanelLabel();
+    }
+
+    private void updatePanelLabel() {
+        panelLabel.setText(panelMode == 1 ? evLabel() : bokehLabel());
+    }
+
+    private void updateSideButtons() {
+        int accent = ContextCompat.getColor(this, R.color.accent);
+        btnExposure.setTextColor(aeLock || evIndex != 0 ? accent : 0xFFFFFFFF);
+        btnBokeh.setTextColor(bokeh > 0 ? accent : 0xFFFFFFFF);
+    }
+
     // ---------------------------------------------------------------- galleria
 
     private void loadLastVideo() {
@@ -487,6 +713,8 @@ public class MainActivity extends ComponentActivity {
     @Override
     protected void onDestroy() {
         bg.shutdown();
+        main.removeCallbacksAndMessages(null);
+        if (processor != null) processor.release();
         super.onDestroy();
     }
 }
