@@ -3,7 +3,11 @@ name: Lippolis Cam APK
 on:
   push:
     branches: [lippolis-cam]
+    paths-ignore: ['apk/**']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   apk:
@@ -23,3 +27,12 @@ jobs:
         with:
           name: LIPPOLIS-CAM
           path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Salva l'APK nel branch
+        run: |
+          mkdir -p apk
+          cp app/build/outputs/apk/debug/app-debug.apk apk/LIPPOLIS-CAM.apk
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add apk/LIPPOLIS-CAM.apk
+          git commit -m "APK compilato [skip ci]"
+          git push
