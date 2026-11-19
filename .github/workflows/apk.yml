@@ -21,11 +21,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.11.1"
-      - name: Modello bokeh (MediaPipe)
+      - name: Modello profondita' (MiDaS small)
         run: |
           mkdir -p app/src/main/assets
-          curl -fsSL -o app/src/main/assets/selfie_multiclass_256x256.tflite \
-            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite
+          curl -fsSL -o app/src/main/assets/depth.tflite \
+            https://github.com/isl-org/MiDaS/releases/download/v2_1/model_opt.tflite
       - name: Compila
         run: |
           set -o pipefail

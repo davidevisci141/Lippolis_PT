@@ -1,6 +1,7 @@
 package it.lippolis.cam;
 
 import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 import android.graphics.Bitmap;
 import android.graphics.SurfaceTexture;
 import android.opengl.EGL14;
@@ -23,20 +24,17 @@ import androidx.camera.core.SurfaceOutput;
 import androidx.camera.core.SurfaceProcessor;
 import androidx.camera.core.SurfaceRequest;
 
-import com.google.mediapipe.framework.image.BitmapImageBuilder;
-import com.google.mediapipe.framework.image.ByteBufferExtractor;
-import com.google.mediapipe.framework.image.MPImage;
-import com.google.mediapipe.tasks.core.BaseOptions;
-import com.google.mediapipe.tasks.core.Delegate;
-import com.google.mediapipe.tasks.vision.core.RunningMode;
-import com.google.mediapipe.tasks.vision.imagesegmenter.ImageSegmenter;
-import com.google.mediapipe.tasks.vision.imagesegmenter.ImageSegmenterResult;
 
+import org.tensorflow.lite.Interpreter;
+import org.tensorflow.lite.gpu.GpuDelegate;
+
+import java.io.FileInputStream;
 import java.nio.ByteBuffer;
+import java.nio.MappedByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -46,14 +44,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Effetto bokeh in tempo reale per anteprima e video.
  * 1) il fotogramma viene ridotto (lato lungo 320 px) e raddrizzato;
- * 2) MediaPipe (selfie multiclass) stima dove c'e' la persona;
+ * 2) MiDaS stima la profondita' di ogni punto (vale per persone e oggetti);
  * 3) l'immagine ridotta viene sfocata;
- * 4) in uscita: persona nitida + sfondo sfocato, in proporzione all'intensita'.
+ * 4) in uscita: nitido cio' che sta alla distanza del punto di fuoco, sfocato il resto.
  */
 public class BokehProcessor implements SurfaceProcessor {
 
     private static final String TAG = "LippolisBokeh";
-    private static final String MODEL = "selfie_multiclass_256x256.tflite";
+    private static final String MODEL = "depth.tflite";
     private static final int UP_LONG = 320;
 
     private final Context ctx;
@@ -62,8 +60,16 @@ public class BokehProcessor implements SurfaceProcessor {
     final Executor executor;
     private final ExecutorService segExec = Executors.newSingleThreadExecutor();
     private final AtomicBoolean segBusy = new AtomicBoolean(false);
-    private volatile ImageSegmenter segmenter;
+    private volatile Interpreter interp;
+    private GpuDelegate gpu;
     private volatile boolean segmenterFailed = false;
+    private volatile int modelW = 0, modelH = 0;
+    private boolean nchw = false;
+    private ByteBuffer modelIn, modelOut;
+    private float[] depth;                       // profondita' normalizzata 0..1 (1 = vicino), smussata
+    private volatile float focusX = 0.5f, focusY = 0.5f;
+    private volatile float focusD = -1f;          // profondita' del punto a fuoco
+    private volatile boolean locked = false;
 
     private volatile float amount = 0.5f;
     private int rotation = 90;
@@ -80,8 +86,8 @@ public class BokehProcessor implements SurfaceProcessor {
     private final Map<SurfaceOutput, EGLSurface> outputs = new HashMap<>();
 
     private int progUp, progBlur, progFinal;
-    private final int[] fbo = new int[2];
-    private final int[] fboTex = new int[2];
+    private final int[] fbo = new int[3];      // 0,1 = sfocatura; 2 = ingresso del modello
+    private final int[] fboTex = new int[3];
     private int upW = 0, upH = 0;
 
     private final float[] stM = new float[16];
@@ -119,13 +125,13 @@ public class BokehProcessor implements SurfaceProcessor {
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision highp float; varying vec2 vUv;\n" +
             "uniform samplerExternalOES uTex; uniform sampler2D uBlur; uniform sampler2D uMask;\n" +
-            "uniform mat4 uOut; uniform mat4 uA; uniform mat3 uR; uniform float uAmt;\n" +
+            "uniform mat4 uOut; uniform mat4 uA; uniform mat3 uR; uniform float uAmt; uniform float uFocus;\n" +
             "void main(){\n" +
             "  vec4 sharp = texture2D(uTex,(uOut*vec4(vUv,0.0,1.0)).xy);\n" +
             "  vec2 t = (uA*vec4(vUv,0.0,1.0)).xy;\n" +
             "  vec2 m = (uR*vec3(t,1.0)).xy;\n" +
-            "  float p = texture2D(uMask,m).r;\n" +
-            "  float bg = (1.0 - smoothstep(0.3,0.7,p))*uAmt;\n" +
+            "  float d = texture2D(uMask,m).r;\n" +
+            "  float bg = smoothstep(0.06,0.22,abs(d-uFocus))*uAmt;\n" +
             "  vec3 b = texture2D(uBlur,m).rgb;\n" +
             "  gl_FragColor = vec4(mix(sharp.rgb,b,bg),1.0); }";
 
@@ -151,6 +157,18 @@ public class BokehProcessor implements SurfaceProcessor {
             rM = rotMatrix(rotation);
             resizeUp();
         });
+    }
+
+    /** Punto di fuoco in coordinate dell'immagine diritta (0..1, y=0 in alto). */
+    public void setFocusPoint(float x, float y) {
+        focusX = Math.max(0f, Math.min(1f, x));
+        focusY = Math.max(0f, Math.min(1f, y));
+        float[] d = depth;
+        if (d != null) focusD = sampleDepth(d, focusX, focusY);
+    }
+
+    public void setLocked(boolean l) {
+        locked = l;
     }
 
     public boolean segmenterFailed() {
@@ -179,7 +197,8 @@ public class BokehProcessor implements SurfaceProcessor {
             thread.quitSafely();
         });
         segExec.execute(() -> {
-            if (segmenter != null) segmenter.close();
+            if (interp != null) interp.close();
+            if (gpu != null) gpu.close();
         });
         segExec.shutdown();
     }
@@ -250,13 +269,16 @@ public class BokehProcessor implements SurfaceProcessor {
         GLES20.glUniformMatrix3fv(GLES20.glGetUniformLocation(progUp, "uR"), 1, false, rM, 0);
         drawQuad(progUp);
 
-        // 2) segmentazione (quando il modello e' libero)
-        if (segmenter != null && !segBusy.get()) {
-            ByteBuffer buf = ByteBuffer.allocateDirect(upW * upH * 4).order(ByteOrder.nativeOrder());
-            GLES20.glReadPixels(0, 0, upW, upH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf);
+        // 2) profondita' (quando il modello e' libero): immagine diritta alla misura del modello
+        if (interp != null && modelW > 0 && !segBusy.get()) {
+            ensureModelFbo();
+            GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo[2]);
+            GLES20.glViewport(0, 0, modelW, modelH);
+            drawQuad(progUp);
+            ByteBuffer buf = ByteBuffer.allocateDirect(modelW * modelH * 4).order(ByteOrder.nativeOrder());
+            GLES20.glReadPixels(0, 0, modelW, modelH, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, buf);
             segBusy.set(true);
-            final int w = upW, h = upH;
-            segExec.execute(() -> segment(buf, w, h));
+            segExec.execute(() -> estimateDepth(buf));
         }
 
         // 3) sfocatura
@@ -303,7 +325,9 @@ public class BokehProcessor implements SurfaceProcessor {
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(progFinal, "uOut"), 1, false, outM, 0);
             GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(progFinal, "uA"), 1, false, aM, 0);
             GLES20.glUniformMatrix3fv(GLES20.glGetUniformLocation(progFinal, "uR"), 1, false, rM, 0);
-            GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uAmt"), Math.min(1f, a * 1.5f));
+            float fd = focusD;
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uAmt"), fd < 0f ? 0f : Math.min(1f, a * 1.5f));
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uFocus"), Math.max(0f, fd));
             drawQuad(progFinal);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
 
@@ -348,6 +372,7 @@ public class BokehProcessor implements SurfaceProcessor {
         if (fboTex[0] != 0) {
             GLES20.glDeleteFramebuffers(2, fbo, 0);
             GLES20.glDeleteTextures(2, fboTex, 0);
+            fbo[0] = fbo[1] = fboTex[0] = fboTex[1] = 0;
         }
         GLES20.glGenFramebuffers(2, fbo, 0);
         GLES20.glGenTextures(2, fboTex, 0);
@@ -363,62 +388,135 @@ public class BokehProcessor implements SurfaceProcessor {
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0);
     }
 
-    // ------------------------------------------------------------ segmentazione
+    // ------------------------------------------------------------ profondita'
 
-    private void initSegmenter() {
-        ImageSegmenter s = createSegmenter(Delegate.GPU);
-        if (s == null) s = createSegmenter(Delegate.CPU);
-        if (s == null) segmenterFailed = true;
-        segmenter = s;
+    private void ensureModelFbo() {
+        if (fbo[2] != 0) return;
+        int[] f = new int[1], t = new int[1];
+        GLES20.glGenFramebuffers(1, f, 0);
+        GLES20.glGenTextures(1, t, 0);
+        fbo[2] = f[0];
+        fboTex[2] = t[0];
+        GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, fboTex[2]);
+        setTexParams(GLES20.GL_TEXTURE_2D);
+        GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA, modelW, modelH, 0,
+                GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, null);
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, fbo[2]);
+        GLES20.glFramebufferTexture2D(GLES20.GL_FRAMEBUFFER, GLES20.GL_COLOR_ATTACHMENT0,
+                GLES20.GL_TEXTURE_2D, fboTex[2], 0);
     }
 
-    private ImageSegmenter createSegmenter(Delegate d) {
-        try {
-            BaseOptions bo = BaseOptions.builder().setModelAssetPath(MODEL).setDelegate(d).build();
-            ImageSegmenter.ImageSegmenterOptions o = ImageSegmenter.ImageSegmenterOptions.builder()
-                    .setBaseOptions(bo)
-                    .setRunningMode(RunningMode.IMAGE)
-                    .setOutputConfidenceMasks(true)
-                    .setOutputCategoryMask(false)
-                    .build();
-            return ImageSegmenter.createFromOptions(ctx, o);
-        } catch (Throwable t) {
-            Log.e(TAG, "segmenter " + d, t);
-            return null;
+    private MappedByteBuffer loadModel() throws Exception {
+        AssetFileDescriptor fd = ctx.getAssets().openFd(MODEL);
+        try (FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
+            return in.getChannel().map(FileChannel.MapMode.READ_ONLY, fd.getStartOffset(), fd.getDeclaredLength());
         }
     }
 
-    private void segment(ByteBuffer buf, int w, int h) {
+    private void initSegmenter() {
         try {
-            ImageSegmenter s = segmenter;
-            if (s == null) return;
-            Bitmap bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-            buf.rewind();
-            bmp.copyPixelsFromBuffer(buf);
-            MPImage img = new BitmapImageBuilder(bmp).build();
-            ImageSegmenterResult r = s.segment(img);
-            if (!r.confidenceMasks().isPresent()) return;
-            List<MPImage> masks = r.confidenceMasks().get();
-            if (masks.isEmpty()) return;
-            // categoria 0 = sfondo: persona = 1 - sfondo
-            MPImage m = masks.get(0);
-            int mw = m.getWidth(), mh = m.getHeight();
-            FloatBuffer f = ByteBufferExtractor.extract(m).duplicate()
-                    .order(ByteOrder.nativeOrder()).asFloatBuffer();
-            ByteBuffer out = ByteBuffer.allocateDirect(mw * mh);
-            int n = Math.min(mw * mh, f.remaining());
+            MappedByteBuffer model = loadModel();
+            Interpreter it = null;
+            try {
+                gpu = new GpuDelegate();
+                it = new Interpreter(model, new Interpreter.Options().addDelegate(gpu));
+            } catch (Throwable t) {
+                Log.w(TAG, "GPU non disponibile, uso la CPU", t);
+                if (gpu != null) { gpu.close(); gpu = null; }
+                it = new Interpreter(model, new Interpreter.Options().setNumThreads(4));
+            }
+            int[] in = it.getInputTensor(0).shape();     // [1,H,W,3] oppure [1,3,H,W]
+            nchw = in.length == 4 && in[1] == 3 && in[3] != 3;
+            int h = nchw ? in[2] : in[1];
+            int w = nchw ? in[3] : in[2];
+            modelIn = ByteBuffer.allocateDirect(w * h * 3 * 4).order(ByteOrder.nativeOrder());
+            modelOut = ByteBuffer.allocateDirect(it.getOutputTensor(0).numBytes()).order(ByteOrder.nativeOrder());
+            modelH = h;
+            modelW = w;
+            interp = it;
+        } catch (Throwable t) {
+            Log.e(TAG, "modello profondita'", t);
+            segmenterFailed = true;
+        }
+    }
+
+    private void estimateDepth(ByteBuffer rgba) {
+        try {
+            Interpreter it = interp;
+            if (it == null) return;
+            int w = modelW, h = modelH, n = w * h;
+            final float[] mean = {0.485f, 0.456f, 0.406f}, std = {0.229f, 0.224f, 0.225f};
+            modelIn.rewind();
+            rgba.rewind();
+            if (!nchw) {
+                for (int i = 0; i < n; i++) {
+                    for (int c = 0; c < 3; c++) {
+                        float v = (rgba.get(i * 4 + c) & 0xFF) / 255f;
+                        modelIn.putFloat((v - mean[c]) / std[c]);
+                    }
+                }
+            } else {
+                for (int c = 0; c < 3; c++) {
+                    for (int i = 0; i < n; i++) {
+                        float v = (rgba.get(i * 4 + c) & 0xFF) / 255f;
+                        modelIn.putFloat((v - mean[c]) / std[c]);
+                    }
+                }
+            }
+            modelIn.rewind();
+            modelOut.rewind();
+            it.run(modelIn, modelOut);
+            modelOut.rewind();
+            FloatBuffer o = modelOut.asFloatBuffer();
+            int m = Math.min(n, o.remaining());
+
+            // normalizzo 0..1 (1 = vicino) scartando i valori estremi
+            float mn = Float.MAX_VALUE, mx = -Float.MAX_VALUE;
+            float[] raw = new float[n];
+            for (int i = 0; i < m; i++) {
+                float v = o.get(i);
+                raw[i] = v;
+                if (v < mn) mn = v;
+                if (v > mx) mx = v;
+            }
+            float range = Math.max(1e-6f, mx - mn);
+            float[] prev = depth;
+            boolean blend = prev != null && prev.length == n;
+            float[] d = new float[n];
+            ByteBuffer out = ByteBuffer.allocateDirect(n);
             for (int i = 0; i < n; i++) {
-                float p = 1f - f.get(i);
-                int v = (int) (p * 255f);
-                out.put((byte) Math.max(0, Math.min(255, v)));
+                float v = (raw[i] - mn) / range;
+                if (blend) v = v * 0.7f + prev[i] * 0.3f;   // meno sfarfallio
+                d[i] = v;
+                out.put((byte) Math.max(0, Math.min(255, (int) (v * 255f))));
             }
             out.rewind();
-            handler.post(() -> uploadMask(out, mw, mh));
+            depth = d;
+            if (!locked || focusD < 0f) focusD = sampleDepth(d, focusX, focusY);
+            handler.post(() -> uploadMask(out, w, h));
         } catch (Throwable t) {
-            Log.e(TAG, "segment", t);
+            Log.e(TAG, "profondita'", t);
         } finally {
             segBusy.set(false);
         }
+    }
+
+    /** Media della profondita' in una finestra 7x7 attorno al punto. */
+    private float sampleDepth(float[] d, float x, float y) {
+        int w = modelW, h = modelH;
+        if (w == 0 || d.length < w * h) return -1f;
+        int cx = Math.round(x * (w - 1)), cy = Math.round(y * (h - 1));
+        float sum = 0f;
+        int cnt = 0;
+        for (int j = -3; j <= 3; j++) {
+            for (int i = -3; i <= 3; i++) {
+                int px = Math.max(0, Math.min(w - 1, cx + i));
+                int py = Math.max(0, Math.min(h - 1, cy + j));
+                sum += d[py * w + px];
+                cnt++;
+            }
+        }
+        return sum / cnt;
     }
 
     private void uploadMask(ByteBuffer b, int w, int h) {

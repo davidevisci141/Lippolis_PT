@@ -117,6 +117,12 @@ public class MainActivity extends ComponentActivity {
     private BokehProcessor processor;
     private CameraEffect effect;
     private int panelMode = 0;          // 0 nessuno, 1 luminosita', 2 bokeh
+    private boolean bokehLock = false;  // soggetto e distanza di fuoco bloccati
+    private float focusNx = 0.5f, focusNy = 0.5f;
+    private View focusRing;
+    private final Runnable hideRing = () -> {
+        if (!bokehLock) focusRing.animate().alpha(0f).setDuration(300).start();
+    };
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Runnable relock = () -> setAeLock(true);
 
@@ -152,6 +158,7 @@ public class MainActivity extends ComponentActivity {
         btnLock = findViewById(R.id.btnLock);
         btnExposure = findViewById(R.id.btnExposure);
         btnBokeh = findViewById(R.id.btnBokeh);
+        focusRing = findViewById(R.id.focusRing);
 
         prefs = getSharedPreferences("lippolis_cam", MODE_PRIVATE);
         evIndex = prefs.getInt("ev", 0);
@@ -165,6 +172,10 @@ public class MainActivity extends ComponentActivity {
         btnExposure.setOnClickListener(v -> togglePanel(1));
         btnBokeh.setOnClickListener(v -> togglePanel(2));
         btnLock.setOnClickListener(v -> {
+            if (panelMode == 2) {
+                setBokehLock(!bokehLock);
+                return;
+            }
             aeLock = !aeLock;
             prefs.edit().putBoolean("aeLock", aeLock).apply();
             main.removeCallbacks(relock);
@@ -199,6 +210,8 @@ public class MainActivity extends ComponentActivity {
             lensFacing = lensFacing == CameraSelector.LENS_FACING_BACK
                     ? CameraSelector.LENS_FACING_FRONT : CameraSelector.LENS_FACING_BACK;
             prefs.edit().putInt("lens", lensFacing).apply();
+            bokehLock = false;
+            focusNx = focusNy = 0.5f;
             bindCamera(1f);
         });
         btnFlash.setOnClickListener(v -> {
@@ -307,6 +320,8 @@ public class MainActivity extends ComponentActivity {
             }
             processor.setRotation(info.getSensorRotationDegrees());
             processor.setAmount(bokeh / 100f);
+            processor.setLocked(bokehLock);
+            sendFocusToBokeh();
         }
 
         // Risoluzioni realmente supportate
@@ -394,11 +409,62 @@ public class MainActivity extends ComponentActivity {
 
     private void focusAt(float x, float y) {
         if (camera == null) return;
+        if (bokehLock) {
+            toast("Fuoco bloccato: sbloccalo dal tasto f");
+            return;
+        }
+        // coordinate nell'area 9:16 del video
+        float w = previewView.getWidth(), h = previewView.getHeight();
+        float rw = w, rh = w * 16f / 9f;
+        if (rh > h) { rh = h; rw = h * 9f / 16f; }
+        float l = (w - rw) / 2f, t = (h - rh) / 2f;
+        focusNx = Math.max(0f, Math.min(1f, (x - l) / rw));
+        focusNy = Math.max(0f, Math.min(1f, (y - t) / rh));
+        sendFocusToBokeh();
+        showRing(x, y);
         MeteringPoint p = previewView.getMeteringPointFactory().createPoint(x, y);
         int flags = (aeLock || evIndex != 0)
                 ? FocusMeteringAction.FLAG_AF
                 : FocusMeteringAction.FLAG_AF | FocusMeteringAction.FLAG_AE | FocusMeteringAction.FLAG_AWB;
         camera.getCameraControl().startFocusAndMetering(new FocusMeteringAction.Builder(p, flags).build());
+    }
+
+    private void sendFocusToBokeh() {
+        if (processor == null) return;
+        float fx = lensFacing == CameraSelector.LENS_FACING_FRONT ? 1f - focusNx : focusNx;
+        processor.setFocusPoint(fx, focusNy);
+    }
+
+    private void showRing(float x, float y) {
+        focusRing.setX(previewView.getX() + x - focusRing.getWidth() / 2f);
+        focusRing.setY(previewView.getY() + y - focusRing.getHeight() / 2f);
+        focusRing.setAlpha(1f);
+        focusRing.setVisibility(View.VISIBLE);
+        main.removeCallbacks(hideRing);
+        main.postDelayed(hideRing, 1500);
+    }
+
+    private void setBokehLock(boolean on) {
+        bokehLock = on;
+        if (processor != null) processor.setLocked(on);
+        if (camera != null) {
+            if (on) {
+                // blocca anche l'autofocus della fotocamera sul punto scelto
+                float w = previewView.getWidth(), h = previewView.getHeight();
+                float rw = w, rh = w * 16f / 9f;
+                if (rh > h) { rh = h; rw = h * 9f / 16f; }
+                float px = (w - rw) / 2f + focusNx * rw, py = (h - rh) / 2f + focusNy * rh;
+                MeteringPoint p = previewView.getMeteringPointFactory().createPoint(px, py);
+                camera.getCameraControl().startFocusAndMetering(
+                        new FocusMeteringAction.Builder(p, FocusMeteringAction.FLAG_AF)
+                                .disableAutoCancel().build());
+                showRing(px, py);
+            } else {
+                camera.getCameraControl().cancelFocusAndMetering();
+                main.post(hideRing);
+            }
+        }
+        updatePanel();
     }
 
     // ---------------------------------------------------------------- barra in alto
@@ -606,6 +672,8 @@ public class MainActivity extends ComponentActivity {
         bokeh = progress;
         prefs.edit().putInt("bokeh", bokeh).apply();
         if (processor != null) processor.setAmount(bokeh / 100f);
+        if (bokeh == 0 && bokehLock) setBokehLock(false);
+        btnLock.setVisibility(bokeh > 0 ? View.VISIBLE : View.GONE);
         updatePanelLabel();
         updateSideButtons();
     }
@@ -616,7 +684,7 @@ public class MainActivity extends ComponentActivity {
         if (bokeh > 0 && processor != null) {
             main.postDelayed(() -> {
                 if (processor != null && processor.segmenterFailed())
-                    toast("Modello bokeh non caricato: sfondo non sfocato");
+                    toast("Modello di profondita' non caricato: niente bokeh");
             }, 2500);
         }
     }
@@ -650,7 +718,9 @@ public class MainActivity extends ComponentActivity {
         } else {
             panelSeek.setMax(100);
             panelSeek.setProgress(bokeh);
-            btnLock.setVisibility(View.GONE);
+            btnLock.setVisibility(bokeh > 0 ? View.VISIBLE : View.GONE);
+            btnLock.setText(bokehLock ? "BLOCCATO" : "BLOCCA");
+            btnLock.setTextColor(bokehLock ? ContextCompat.getColor(this, R.color.accent) : 0xFFFFFFFF);
         }
         updatePanelLabel();
     }
