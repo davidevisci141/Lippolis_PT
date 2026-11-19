@@ -70,6 +70,8 @@ public class BokehProcessor implements SurfaceProcessor {
     private volatile float focusX = 0.5f, focusY = 0.5f;
     private volatile float focusD = -1f;          // profondita' del punto a fuoco
     private volatile boolean locked = false;
+    private volatile boolean debug = false;
+    private float normMin = Float.NaN, normMax = Float.NaN;
 
     private volatile float amount = 0.5f;
     private int rotation = 90;
@@ -125,15 +127,18 @@ public class BokehProcessor implements SurfaceProcessor {
             "#extension GL_OES_EGL_image_external : require\n" +
             "precision highp float; varying vec2 vUv;\n" +
             "uniform samplerExternalOES uTex; uniform sampler2D uBlur; uniform sampler2D uMask;\n" +
-            "uniform mat4 uOut; uniform mat4 uA; uniform mat3 uR; uniform float uAmt; uniform float uFocus;\n" +
+            "uniform mat4 uOut; uniform mat4 uA; uniform mat3 uR; uniform float uAmt; uniform float uFocus; uniform float uDebug;\n" +
             "void main(){\n" +
             "  vec4 sharp = texture2D(uTex,(uOut*vec4(vUv,0.0,1.0)).xy);\n" +
             "  vec2 t = (uA*vec4(vUv,0.0,1.0)).xy;\n" +
             "  vec2 m = (uR*vec3(t,1.0)).xy;\n" +
             "  float d = texture2D(uMask,m).r;\n" +
-            "  float bg = smoothstep(0.06,0.22,abs(d-uFocus))*uAmt;\n" +
+            "  float k = smoothstep(0.10,0.30,abs(d-uFocus));\n" +
+            "  float bg = k*uAmt;\n" +
             "  vec3 b = texture2D(uBlur,m).rgb;\n" +
-            "  gl_FragColor = vec4(mix(sharp.rgb,b,bg),1.0); }";
+            "  vec3 c = mix(sharp.rgb,b,bg);\n" +
+            "  if (uDebug > 0.5) { c = vec3(d); if (k < 0.5) c = mix(c, vec3(1.0,0.2,0.2), 0.6); }\n" +
+            "  gl_FragColor = vec4(c,1.0); }";
 
     public BokehProcessor(Context c) {
         ctx = c.getApplicationContext();
@@ -165,6 +170,14 @@ public class BokehProcessor implements SurfaceProcessor {
         focusY = Math.max(0f, Math.min(1f, y));
         float[] d = depth;
         if (d != null) focusD = sampleDepth(d, focusX, focusY);
+    }
+
+    public void setDebug(boolean d) {
+        debug = d;
+    }
+
+    public boolean isDebug() {
+        return debug;
     }
 
     public void setLocked(boolean l) {
@@ -283,8 +296,8 @@ public class BokehProcessor implements SurfaceProcessor {
 
         // 3) sfocatura
         float a = amount;
-        int passes = 1 + Math.round(a * 3f);
-        float scale = 1f + a * 2f;
+        int passes = 1 + Math.round(a * 2f);
+        float scale = 1f + a * 1.5f;
         GLES20.glUseProgram(progBlur);
         int uStep = GLES20.glGetUniformLocation(progBlur, "uStep");
         GLES20.glUniform1i(GLES20.glGetUniformLocation(progBlur, "uTex"), 0);
@@ -328,6 +341,7 @@ public class BokehProcessor implements SurfaceProcessor {
             float fd = focusD;
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uAmt"), fd < 0f ? 0f : Math.min(1f, a * 1.5f));
             GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uFocus"), Math.max(0f, fd));
+            GLES20.glUniform1f(GLES20.glGetUniformLocation(progFinal, "uDebug"), debug ? 1f : 0f);
             drawQuad(progFinal);
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0);
 
@@ -470,23 +484,28 @@ public class BokehProcessor implements SurfaceProcessor {
             FloatBuffer o = modelOut.asFloatBuffer();
             int m = Math.min(n, o.remaining());
 
-            // normalizzo 0..1 (1 = vicino) scartando i valori estremi
-            float mn = Float.MAX_VALUE, mx = -Float.MAX_VALUE;
+            // normalizzo 0..1 (1 = vicino) con i percentili 2-98, stabilizzati nel tempo
             float[] raw = new float[n];
-            for (int i = 0; i < m; i++) {
-                float v = o.get(i);
-                raw[i] = v;
-                if (v < mn) mn = v;
-                if (v > mx) mx = v;
-            }
-            float range = Math.max(1e-6f, mx - mn);
+            for (int i = 0; i < m; i++) raw[i] = o.get(i);
+            float[] sample = new float[Math.min(n, 2048)];
+            int stepS = Math.max(1, n / sample.length);
+            for (int i = 0; i < sample.length; i++) sample[i] = raw[Math.min(n - 1, i * stepS)];
+            java.util.Arrays.sort(sample);
+            float lo = sample[(int) (sample.length * 0.02f)];
+            float hi = sample[(int) (sample.length * 0.98f)];
+            if (Float.isNaN(normMin)) { normMin = lo; normMax = hi; }
+            else { normMin = normMin * 0.85f + lo * 0.15f; normMax = normMax * 0.85f + hi * 0.15f; }
+            float mn = normMin;
+            // scena quasi piatta (es. una parete): non esagero differenze minime
+            float range = Math.max(Math.max(1e-6f, normMax - normMin), Math.abs(normMax) * 0.35f);
             float[] prev = depth;
             boolean blend = prev != null && prev.length == n;
             float[] d = new float[n];
             ByteBuffer out = ByteBuffer.allocateDirect(n);
             for (int i = 0; i < n; i++) {
                 float v = (raw[i] - mn) / range;
-                if (blend) v = v * 0.7f + prev[i] * 0.3f;   // meno sfarfallio
+                v = Math.max(0f, Math.min(1f, v));
+                if (blend) v = v * 0.5f + prev[i] * 0.5f;   // meno sfarfallio
                 d[i] = v;
                 out.put((byte) Math.max(0, Math.min(255, (int) (v * 255f))));
             }

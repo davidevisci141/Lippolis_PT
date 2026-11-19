@@ -171,6 +171,16 @@ public class MainActivity extends ComponentActivity {
 
         btnExposure.setOnClickListener(v -> togglePanel(1));
         btnBokeh.setOnClickListener(v -> togglePanel(2));
+        // tenere premuto f = vista di controllo della profondita' (chiaro = vicino, rosso = a fuoco)
+        btnBokeh.setOnLongClickListener(v -> {
+            if (processor == null || !effectActive) {
+                toast("Attiva prima il bokeh");
+                return true;
+            }
+            processor.setDebug(!processor.isDebug());
+            toast(processor.isDebug() ? "Vista profondita': chiaro = vicino, rosso = a fuoco" : "Vista normale");
+            return true;
+        });
         btnLock.setOnClickListener(v -> {
             if (panelMode == 2) {
                 setBokehLock(!bokehLock);
